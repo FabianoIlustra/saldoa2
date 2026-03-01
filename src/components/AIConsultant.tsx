@@ -1,0 +1,7 @@
+import React from 'react';
+
+const AIConsultant: React.FC<any> = () => {
+  return <div className="p-4 bg-white rounded-xl shadow-sm">AI Consultant Placeholder</div>;
+};
+
+export default AIConsultant;
