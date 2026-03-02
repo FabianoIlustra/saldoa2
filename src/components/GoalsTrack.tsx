@@ -28,7 +28,7 @@ const GoalsTrack: React.FC<GoalsTrackProps> = ({ goals, onAddGoal, onUpdateAmoun
     e.preventDefault();
     if (!name || !target) return;
     onAddGoal({
-      title: name,
+      name,
       targetAmount: parseFloat(target),
       currentAmount: parseFloat(initialAmount) || 0,
       color: '#' + Math.floor(Math.random()*16777215).toString(16),
@@ -143,7 +143,7 @@ const GoalsTrack: React.FC<GoalsTrackProps> = ({ goals, onAddGoal, onUpdateAmoun
               </div>
               
               <div>
-                <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1 truncate" title={goal.title}>{goal.title}</h4>
+                <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1 truncate" title={goal.name}>{goal.name}</h4>
                 <p className="text-xs text-slate-400 mb-6 font-medium">Meta final: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(goal.targetAmount)}</p>
 
                 <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full mb-6 overflow-hidden">
@@ -185,8 +185,8 @@ const GoalsTrack: React.FC<GoalsTrackProps> = ({ goals, onAddGoal, onUpdateAmoun
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Nome</label>
                 <input 
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold" 
-                  value={editingGoal.title} 
-                  onChange={e => setEditingGoal({...editingGoal, title: e.target.value})} 
+                  value={editingGoal.name} 
+                  onChange={e => setEditingGoal({...editingGoal, name: e.target.value})} 
                 />
               </div>
               <div>
@@ -224,7 +224,7 @@ const GoalsTrack: React.FC<GoalsTrackProps> = ({ goals, onAddGoal, onUpdateAmoun
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white">Adicionar Valor</h3>
-                <p className="text-xs text-slate-400">{addingValueGoal.title}</p>
+                <p className="text-xs text-slate-400">{addingValueGoal.name}</p>
               </div>
               <button onClick={() => setAddingValueGoal(null)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                 <X className="w-5 h-5" />
@@ -260,7 +260,7 @@ const GoalsTrack: React.FC<GoalsTrackProps> = ({ goals, onAddGoal, onUpdateAmoun
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white">Histórico de Aportes</h3>
-                <p className="text-xs text-slate-400">{viewingHistoryGoal.title}</p>
+                <p className="text-xs text-slate-400">{viewingHistoryGoal.name}</p>
               </div>
               <button onClick={() => setViewingHistoryGoal(null)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                 <X className="w-5 h-5" />

@@ -34,7 +34,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   onDeleteRecurring
 }) => {
   const [newCatName, setNewCatName] = useState('');
-  const [newCatType, setNewCatType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   
   // Estados para nova conta
   const [accName, setAccName] = useState('');
@@ -327,12 +326,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         <form onSubmit={e => {
           e.preventDefault();
           if (newCatName) {
-            onAddCategory({ 
-              id: Math.random().toString(36).substr(2, 9), 
-              name: newCatName, 
-              type: newCatType,
-              color: getRandomColor() 
-            });
+            onAddCategory({ id: Math.random().toString(36).substr(2, 9), name: newCatName, color: getRandomColor() });
             setNewCatName('');
           }
         }} className="flex flex-col md:flex-row gap-4 mb-10">
@@ -343,10 +337,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             onChange={(e) => setNewCatName(e.target.value)}
             className="flex-1 px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
           />
-          <div className="flex bg-slate-50 dark:bg-slate-800 rounded-2xl p-1 shrink-0">
-             <button type="button" onClick={() => setNewCatType('INCOME')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${newCatType === 'INCOME' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400'}`}>Receita</button>
-             <button type="button" onClick={() => setNewCatType('EXPENSE')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${newCatType === 'EXPENSE' ? 'bg-rose-100 text-rose-700' : 'text-slate-400'}`}>Despesa</button>
-          </div>
           <button type="submit" className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-700 transition-all shadow-xl">
             <Plus className="w-5 h-5 mx-auto" />
           </button>
