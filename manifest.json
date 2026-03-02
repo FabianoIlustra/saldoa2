@@ -1,0 +1,19 @@
+
+{
+  "name": "Saldo A2 - Controle de Casal",
+  "short_name": "Saldo A2",
+  "description": "Controle financeiro inteligente para casais com IA.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#4f46e5",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/10149/10149458.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
