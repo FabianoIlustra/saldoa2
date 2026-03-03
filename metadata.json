@@ -1,8 +1,0 @@
-{
-  "name": "Saldo A2",
-  "description": "Uma plataforma moderna de controle financeiro pessoal com insights baseados em IA para ajudar você a economizar e investir melhor.",
-  "requestFramePermissions": [
-    "microphone",
-    "camera"
-  ]
-}
