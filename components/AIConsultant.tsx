@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send, Loader2, BrainCircuit, Mic, MicOff, Volume2, Trash2 } from 'lucide-react';
 import { Transaction, ChatMessage, User } from '../types';
-import { GoogleGenAI, Modality, Type, LiveServerMessage } from "@google/genai";
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface AIConsultantProps {
   transactions: Transaction[];
