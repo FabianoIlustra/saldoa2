@@ -10,22 +10,22 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^1.34.0",
-    "@google/generative-ai": "^0.24.1",
-    "@supabase/supabase-js": "^2.98.0",
-    "date-fns": "^4.1.0",
-    "lucide-react": "^0.562.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "react-router-dom": "^7.13.1",
-    "recharts": "^3.6.0"
+    "@google/generative-ai": "^0.21.0",
+    "@supabase/supabase-js": "^2.49.1",
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.2.0",
+    "recharts": "^2.15.1"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.2.1",
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "tailwindcss": "^4.2.1",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "@tailwindcss/vite": "^4.0.7",
+    "@types/node": "^22.13.4",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.7",
+    "typescript": "~5.7.2",
+    "vite": "^6.1.0"
   }
 }
