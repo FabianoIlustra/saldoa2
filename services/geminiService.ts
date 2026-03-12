@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Transaction, Category } from "../types";
 
 export const getFinancialInsights = async (transactions: Transaction[]): Promise<any> => {
