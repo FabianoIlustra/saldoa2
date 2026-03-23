@@ -20,6 +20,7 @@ interface SettingsViewProps {
   onUpdateAccount: (account: Account) => void;
   onUpdateAccountBalance: (id: string, newBalance: number) => void;
   onAddRecurring: (rec: Omit<RecurringTransaction, 'id' | 'lastGeneratedDate' | 'active'>) => void;
+  onUpdateRecurring: (rec: RecurringTransaction) => void;
   onDeleteRecurring: (id: string) => void;
   spendingCeiling?: number;
   onUpdateSpendingCeiling?: (amount: number) => void;
@@ -43,6 +44,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateAccount,
   onUpdateAccountBalance,
   onAddRecurring,
+  onUpdateRecurring,
   onDeleteRecurring,
   spendingCeiling,
   onUpdateSpendingCeiling,
@@ -79,6 +81,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [editName, setEditName] = useState('');
   const [editType, setEditType] = useState<Account['type']>('Corrente');
   const [editCurrentBalance, setEditCurrentBalance] = useState('');
+
+  const [recurringToEdit, setRecurringToEdit] = useState<RecurringTransaction | null>(null);
+  const [editRecDesc, setEditRecDesc] = useState('');
+  const [editRecAmount, setEditRecAmount] = useState('');
+  const [editRecType, setEditRecType] = useState<TransactionType>('EXPENSE');
+  const [editRecCategory, setEditRecCategory] = useState('');
+  const [editRecDay, setEditRecDay] = useState('');
+  const [editRecAccount, setEditRecAccount] = useState('');
+  const [editRecIsJoint, setEditRecIsJoint] = useState(true);
 
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,6 +141,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     setEditCurrentBalance(account.currentBalance.toString());
   };
 
+  const openEditRecurringModal = (rec: RecurringTransaction) => {
+    setRecurringToEdit(rec);
+    setEditRecDesc(rec.description);
+    setEditRecAmount(rec.amount.toString());
+    setEditRecType(rec.type);
+    setEditRecCategory(rec.category);
+    setEditRecDay(rec.dayOfMonth.toString());
+    setEditRecAccount(rec.accountId);
+    setEditRecIsJoint(rec.isJoint);
+  };
+
   const saveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (accountToEdit && editName && editCurrentBalance) {
@@ -143,6 +165,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       onUpdateAccountBalance(accountToEdit.id, parseFloat(editCurrentBalance));
       
       setAccountToEdit(null);
+    }
+  };
+
+  const saveEditRecurring = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (recurringToEdit && editRecDesc && editRecAmount && editRecAccount) {
+      onUpdateRecurring({
+        ...recurringToEdit,
+        description: editRecDesc,
+        amount: parseFloat(editRecAmount),
+        type: editRecType,
+        category: editRecCategory,
+        dayOfMonth: parseInt(editRecDay),
+        accountId: editRecAccount,
+        isJoint: editRecIsJoint
+      });
+      setRecurringToEdit(null);
     }
   };
 
@@ -517,13 +556,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                             <p className="text-xs text-slate-400">Todo dia {rec.dayOfMonth} • {rec.category} • {rec.isJoint ? 'Conjunto' : 'Individual'}</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
                         <span className={`font-black ${rec.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(rec.amount)}
                         </span>
-                        <button onClick={() => onDeleteRecurring(rec.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex gap-1">
+                          <button onClick={() => openEditRecurringModal(rec)} className="p-2 text-slate-300 hover:text-indigo-500 transition-colors">
+                              <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => onDeleteRecurring(rec.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                     </div>
                 </div>
             ))}
@@ -709,6 +753,95 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setAccountToEdit(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none">Salvar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Recurring Modal */}
+      {recurringToEdit && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">Editar Conta Recorrente</h3>
+              <button onClick={() => setRecurringToEdit(null)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={saveEditRecurring} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Descrição</label>
+                <input 
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold" 
+                  value={editRecDesc} 
+                  onChange={e => setEditRecDesc(e.target.value)} 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Valor (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold" 
+                    value={editRecAmount} 
+                    onChange={e => setEditRecAmount(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Dia do Mês</label>
+                  <select 
+                    value={editRecDay}
+                    onChange={e => setEditRecDay(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold"
+                  >
+                    {Array.from({length: 31}, (_, i) => i + 1).map(d => (
+                        <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Tipo</label>
+                  <div className="flex bg-slate-50 dark:bg-slate-800 rounded-xl p-1">
+                      <button type="button" onClick={() => setEditRecType('INCOME')} className={`flex-1 py-2 rounded-lg text-[10px] font-bold ${editRecType === 'INCOME' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400'}`}>Receita</button>
+                      <button type="button" onClick={() => setEditRecType('EXPENSE')} className={`flex-1 py-2 rounded-lg text-[10px] font-bold ${editRecType === 'EXPENSE' ? 'bg-rose-100 text-rose-700' : 'text-slate-400'}`}>Despesa</button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Categoria</label>
+                  <select 
+                    value={editRecCategory}
+                    onChange={e => setEditRecCategory(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold"
+                  >
+                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Conta</label>
+                <select 
+                  value={editRecAccount}
+                  onChange={e => setEditRecAccount(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold"
+                >
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={editRecIsJoint} onChange={e => setEditRecIsJoint(e.target.checked)} className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500" />
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">Lançamento em Família?</span>
+                  </label>
+              </div>
+              
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => setRecurringToEdit(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
                 <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none">Salvar</button>
               </div>
             </form>
