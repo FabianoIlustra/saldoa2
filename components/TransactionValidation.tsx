@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { RecurringTransaction, Transaction, Category, Account } from '../types';
-import { CheckCircle, XCircle, AlertCircle, Calendar, Edit2, Check, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Calendar, Edit2, Check, X, ArrowUpDown, ArrowUp, ArrowDown, CreditCard } from 'lucide-react';
 import { format, isSameMonth, isSameYear, parseISO, isBefore, isAfter, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import FilterBar, { FilterState } from './FilterBar';
@@ -21,6 +21,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [editAmount, setEditAmount] = useState<string>('');
   const [editDate, setEditDate] = useState<string>('');
+  const [editAccountId, setEditAccountId] = useState<string>('');
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
   const [statusFilters, setStatusFilters] = useState<('PENDING' | 'LATE' | 'PAID')[]>(['PENDING', 'LATE']);
   
@@ -127,6 +128,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
     setSelectedItem(item);
     setEditAmount(item.amount.toString());
     setEditDate(format(item.dueDate, 'yyyy-MM-dd'));
+    setEditAccountId(item.accountId);
   };
 
   const handleConfirm = () => {
@@ -134,7 +136,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
     
     onValidate({
       userId: selectedItem.userId,
-      accountId: selectedItem.accountId,
+      accountId: editAccountId,
       description: selectedItem.description,
       amount: parseFloat(editAmount),
       type: selectedItem.type,
@@ -354,6 +356,24 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
             </div>
 
             <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Vincular a qual conta?</label>
+                <div className="relative">
+                  <select 
+                    value={editAccountId}
+                    onChange={e => setEditAccountId(e.target.value)}
+                    required
+                    className="w-full pl-12 pr-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-500 outline-none appearance-none font-bold transition-all"
+                  >
+                    <option value="" disabled>Selecione uma conta</option>
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>{acc.name} ({acc.type})</option>
+                    ))}
+                  </select>
+                  <CreditCard className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Descrição</label>
                 <input 
