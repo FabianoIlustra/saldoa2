@@ -9,6 +9,7 @@ interface ValidationProps {
   recurringTransactions: RecurringTransaction[];
   transactions: Transaction[]; // To check if already paid
   onValidate: (transaction: Omit<Transaction, 'id' | 'isTemplate'>) => void;
+  onDelete: (id: string) => void;
   currentDate: Date;
   categories: Category[];
   accounts: Account[];
@@ -17,7 +18,7 @@ interface ValidationProps {
 type SortField = 'dueDate' | 'description' | 'category' | 'amount' | 'status';
 type SortDirection = 'asc' | 'desc';
 
-const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransactions, transactions, onValidate, currentDate: initialDate, categories, accounts }) => {
+const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransactions, transactions, onValidate, onDelete, currentDate: initialDate, categories, accounts }) => {
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [editAmount, setEditAmount] = useState<string>('');
   const [editDate, setEditDate] = useState<string>('');
@@ -46,16 +47,19 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
     
     return recurringTransactions.filter(r => r.active).map(rec => {
       // Check if already paid in this month
-      // Prioritize recurringTransactionId, fallback to description match
+      // Use description and amount match since DB column is missing
+      let paidTransactionId: string | undefined;
       const isPaid = transactions.some(t => {
-        if (t.recurringTransactionId === rec.id) {
-            const tDate = parseISO(t.date);
-            return isSameMonth(tDate, targetDate) && isSameYear(tDate, targetDate);
+        const tDate = parseISO(t.date);
+        const matches = t.description === rec.description && 
+               Math.abs(t.amount - rec.amount) < 0.01 && // Handle float precision
+               isSameMonth(tDate, targetDate) &&
+               isSameYear(tDate, targetDate);
+        
+        if (matches) {
+          paidTransactionId = t.id;
         }
-        // Fallback for legacy or manual matches without ID
-        return t.description === rec.description && 
-               isSameMonth(parseISO(t.date), targetDate) &&
-               isSameYear(parseISO(t.date), targetDate);
+        return matches;
       });
 
       // Determine status
@@ -69,7 +73,8 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
       return {
         ...rec,
         dueDate,
-        status
+        status,
+        paidTransactionId
       };
     })
     .filter(item => {
@@ -131,23 +136,29 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
     setEditAccountId(item.accountId);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selectedItem) return;
+    if (!editAccountId) {
+      alert('Por favor, selecione uma conta.');
+      return;
+    }
     
-    onValidate({
-      userId: selectedItem.userId,
-      accountId: editAccountId,
-      description: selectedItem.description,
-      amount: parseFloat(editAmount),
-      type: selectedItem.type,
-      category: selectedItem.category,
-      date: editDate,
-      recurrence: 'NONE', // It becomes a real one-time transaction
-      isJoint: selectedItem.isJoint,
-      recurringTransactionId: selectedItem.id // Link to the recurring rule
-    });
-    
-    setSelectedItem(null);
+    try {
+      await onValidate({
+        userId: selectedItem.userId,
+        accountId: editAccountId,
+        description: selectedItem.description,
+        amount: parseFloat(editAmount),
+        type: selectedItem.type,
+        category: selectedItem.category,
+        date: editDate,
+        recurrence: 'NONE', // It becomes a real one-time transaction
+        isJoint: selectedItem.isJoint
+      });
+      setSelectedItem(null);
+    } catch (error) {
+      console.error('Validation error:', error);
+    }
   };
 
   const toggleStatusFilter = (status: 'PENDING' | 'LATE' | 'PAID') => {
@@ -267,13 +278,25 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
                                 {item.type === 'INCOME' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
                             </td>
                             <td className="p-4 text-center">
-                                {item.status !== 'paid' && (
+                                {item.status !== 'paid' ? (
                                     <button 
                                         onClick={() => handleClick(item)}
                                         className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 dark:shadow-none"
                                         title="Validar Pagamento"
                                     >
                                         <Check className="w-4 h-4" />
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={() => {
+                                            if (item.paidTransactionId && confirm('Deseja estornar este pagamento? O lançamento será removido do extrato.')) {
+                                                onDelete(item.paidTransactionId);
+                                            }
+                                        }}
+                                        className="bg-rose-100 text-rose-600 p-2 rounded-xl hover:bg-rose-200 transition-colors"
+                                        title="Estornar Pagamento"
+                                    >
+                                        <ArrowUpDown className="w-4 h-4" />
                                     </button>
                                 )}
                             </td>
@@ -325,12 +348,23 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
                         </div>
                     </div>
 
-                    {item.status !== 'paid' && (
+                    {item.status !== 'paid' ? (
                         <button 
                             onClick={() => handleClick(item)}
                             className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2"
                         >
                             <Check className="w-4 h-4" /> Validar Pagamento
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={() => {
+                                if (item.paidTransactionId && confirm('Deseja estornar este pagamento? O lançamento será removido do extrato.')) {
+                                    onDelete(item.paidTransactionId);
+                                }
+                            }}
+                            className="w-full mt-4 bg-rose-50 text-rose-600 py-3 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-rose-100 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <ArrowUpDown className="w-4 h-4" /> Estornar Pagamento
                         </button>
                     )}
                 </div>
