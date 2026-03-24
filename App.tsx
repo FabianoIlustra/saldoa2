@@ -246,9 +246,18 @@ const AppContent: React.FC = () => {
           <TransactionValidation 
             recurringTransactions={recurringTransactions}
             transactions={filteredTransactions}
-            onValidate={(t) => {
-              addTransaction(t);
-              showToast('Lançamento confirmado!');
+            onValidate={async (t) => {
+              try {
+                await addTransaction(t);
+                showToast('Lançamento confirmado!');
+              } catch (error: any) {
+                console.error('Erro na validação:', error);
+                showToast(`Erro: ${error.message || 'Falha ao confirmar'}`);
+              }
+            }}
+            onDelete={(id) => {
+              deleteTransaction(id);
+              showToast('Lançamento estornado.');
             }}
             currentDate={new Date()} // Could be state for month navigation
             categories={categories}
