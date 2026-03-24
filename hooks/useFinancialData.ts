@@ -111,8 +111,7 @@ export const useFinancialData = () => {
           createdAt: t.created_at, // Map created_at
           recurrence: t.recurrence as any,
           isJoint: t.is_joint,
-          isTemplate: t.is_template,
-          recurringTransactionId: t.recurring_transaction_id
+          isTemplate: t.is_template
         })));
       }
 
@@ -162,9 +161,13 @@ export const useFinancialData = () => {
   // CRUD Operations
   const addTransaction = async (t: Omit<Transaction, 'id' | 'isTemplate'>) => {
     if (!user) return;
+    
+    // Ensure UUIDs are valid or null (not empty strings)
+    const account_id = t.accountId && t.accountId.trim() !== '' ? t.accountId : null;
+
     const { data, error } = await supabase.from('transactions').insert({
       user_id: user.id,
-      account_id: t.accountId,
+      account_id,
       description: t.description,
       amount: t.amount,
       type: t.type,
@@ -172,19 +175,25 @@ export const useFinancialData = () => {
       date: t.date,
       recurrence: t.recurrence,
       is_joint: t.isJoint,
-      is_template: t.recurrence === 'MONTHLY',
-      recurring_transaction_id: t.recurringTransactionId
+      is_template: t.recurrence === 'MONTHLY'
     }).select().single();
+
+    if (error) {
+      console.error('Error adding transaction:', error);
+      throw error; // Throw so the caller knows it failed
+    }
 
     if (data) {
       const newTrans: Transaction = {
         ...t,
         id: data.id,
         userId: data.user_id,
+        accountId: data.account_id || t.accountId,
         isTemplate: data.is_template,
         createdAt: data.created_at
       };
       setTransactions(prev => [newTrans, ...prev]);
+      return newTrans;
     }
   };
 
