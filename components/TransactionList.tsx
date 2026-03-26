@@ -259,6 +259,9 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                     <th onClick={() => handleSort('date')} className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:text-indigo-500 transition-colors whitespace-nowrap">
                         Data Realizado {sortConfig.key === 'date' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                     </th>
+                    <th onClick={() => handleSort('description')} className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:text-indigo-500 transition-colors whitespace-nowrap">
+                        Descrição {sortConfig.key === 'description' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+                    </th>
                     <th onClick={() => handleSort('category')} className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:text-indigo-500 transition-colors whitespace-nowrap">
                         Categoria {sortConfig.key === 'category' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                     </th>
@@ -279,7 +282,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredTransactions.length === 0 ? (
                     <tr>
-                        <td colSpan={7} className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
+                        <td colSpan={8} className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
                             Nenhum resultado encontrado
                         </td>
                     </tr>
@@ -291,6 +294,9 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                             </td>
                             <td className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                 {format(parseISO(t.date), 'dd/MM/yyyy', { locale: ptBR })}
+                            </td>
+                            <td className="p-4 text-xs font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                                {t.description}
                             </td>
                             <td className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                 <span className="flex items-center gap-2">
