@@ -180,14 +180,14 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
         <head>
           <title>Relatório de Contas a Pagar - ${monthYear}</title>
           <style>
-            body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #1e293b; }
-            .header { margin-bottom: 40px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-            .header h1 { margin: 0; font-size: 24px; font-weight: 900; color: #0f172a; }
-            .header p { margin: 8px 0 0; color: #64748b; font-size: 14px; }
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #1e293b; line-height: 1.2; }
+            .header { margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+            .header h1 { margin: 0; font-size: 20px; font-weight: 900; color: #0f172a; }
+            .header p { margin: 4px 0 0; color: #64748b; font-size: 12px; }
             
-            table { width: 100%; border-collapse: collapse; font-size: 12px; }
-            th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; font-size: 10px; }
-            td { padding: 12px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; font-size: 9px; }
+            td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
             tr:last-child td { border-bottom: none; }
             
             .text-right { text-align: right; }
@@ -199,9 +199,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
             .status-late { color: #e11d48; font-weight: 900; }
             .status-pending { color: #2563eb; font-weight: 900; }
             
-            .totals { margin-top: 40px; border-top: 2px solid #e2e8f0; padding-top: 20px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-            .total-row { display: flex; justify-content: space-between; width: 300px; font-size: 14px; }
-            .total-row.final { font-size: 18px; font-weight: 900; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
+            .totals { margin-top: 20px; border-top: 2px solid #e2e8f0; padding-top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+            .total-row { display: flex; justify-content: space-between; width: 250px; font-size: 12px; }
+            .total-row.final { font-size: 14px; font-weight: 900; margin-top: 5px; padding-top: 5px; border-top: 1px solid #e2e8f0; }
             
             @media print {
               body { padding: 0; }
