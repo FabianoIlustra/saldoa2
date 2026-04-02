@@ -167,6 +167,102 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
       );
   };
 
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=800');
+    if (!printWindow) return;
+
+    const targetDate = currentFilters ? currentFilters.currentDate : initialDate;
+    const monthYear = format(targetDate, 'MMMM yyyy', { locale: ptBR });
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Relatório de Contas a Pagar - ${monthYear}</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #1e293b; }
+            .header { margin-bottom: 40px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+            .header h1 { margin: 0; font-size: 24px; font-weight: 900; color: #0f172a; }
+            .header p { margin: 8px 0 0; color: #64748b; font-size: 14px; }
+            
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; font-size: 10px; }
+            td { padding: 12px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+            tr:last-child td { border-bottom: none; }
+            
+            .text-right { text-align: right; }
+            .font-bold { font-weight: 700; }
+            .text-emerald { color: #059669; }
+            .text-rose { color: #e11d48; }
+            .text-slate { color: #64748b; }
+            .status-paid { color: #059669; font-weight: 900; }
+            .status-late { color: #e11d48; font-weight: 900; }
+            .status-pending { color: #2563eb; font-weight: 900; }
+            
+            .totals { margin-top: 40px; border-top: 2px solid #e2e8f0; padding-top: 20px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+            .total-row { display: flex; justify-content: space-between; width: 300px; font-size: 14px; }
+            .total-row.final { font-size: 18px; font-weight: 900; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
+            
+            @media print {
+              body { padding: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Relatório de Contas a Pagar</h1>
+            <p>Referência: ${monthYear}</p>
+            <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</p>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Vencimento</th>
+                <th>Descrição</th>
+                <th>Categoria</th>
+                <th>Status</th>
+                <th class="text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${expectedTransactions.map(t => `
+                <tr>
+                  <td class="text-slate">${format(t.dueDate, 'dd/MM/yyyy')}</td>
+                  <td class="font-bold">${t.description}</td>
+                  <td class="text-slate">${t.category}</td>
+                  <td class="status-${t.status}">${t.status === 'paid' ? 'PAGO' : t.status === 'late' ? 'VENCIDO' : 'A VENCER'}</td>
+                  <td class="text-right font-bold ${t.type === 'INCOME' ? 'text-emerald' : 'text-rose'}">
+                    ${t.type === 'INCOME' ? '+' : '-'} ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="totals">
+             <div class="total-row final">
+                <span>Total Previsto</span>
+                <span>${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(expectedTransactions.reduce((acc, t) => acc + (t.type === 'INCOME' ? t.amount : -t.amount), 0))}</span>
+             </div>
+          </div>
+
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+              }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-slate-300" />;
     return sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-500" /> : <ArrowDown className="w-3 h-3 text-indigo-500" />;
@@ -179,6 +275,8 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
         categories={categories}
         accounts={accounts}
         onFilterChange={setCurrentFilters}
+        onPrint={handlePrint}
+        showPrint={true}
       />
 
       {/* Status Filters */}
