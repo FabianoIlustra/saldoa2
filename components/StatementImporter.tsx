@@ -27,6 +27,35 @@ const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accou
     }
   });
 
+  const cleanDescription = (desc: string) => {
+    return desc
+      .toUpperCase()
+      .replace(/[0-9]/g, '') // Remove numbers
+      .replace(/[*#-]/g, ' ') // Replace special chars with space
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim();
+  };
+
+  const findLearnedCategory = (description: string) => {
+    const cleanDesc = cleanDescription(description);
+    
+    // 1. Exact match on clean description
+    if (categoryRules[cleanDesc]) return categoryRules[cleanDesc];
+
+    // 2. Substring match (check if any rule key is contained in the description)
+    const ruleKeys = Object.keys(categoryRules);
+    // Sort by length descending to match most specific rules first
+    const sortedKeys = ruleKeys.sort((a, b) => b.length - a.length);
+    
+    for (const key of sortedKeys) {
+        if (cleanDesc.includes(key) || key.includes(cleanDesc)) {
+            return categoryRules[key];
+        }
+    }
+
+    return 'Outros';
+  };
+
   const parseOFX = (content: string) => {
     try {
       const transactions: any[] = [];
@@ -80,15 +109,7 @@ const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accou
         if (!description) description = 'Transação OFX';
 
         // Check for learned category
-        let learnedCategory = 'Outros';
-        if (categoryRules[description]) {
-            learnedCategory = categoryRules[description];
-        } else {
-            const ruleKey = Object.keys(categoryRules).find(key => description.startsWith(key));
-            if (ruleKey) {
-                learnedCategory = categoryRules[ruleKey];
-            }
-        }
+        const learnedCategory = findLearnedCategory(description);
 
         if (!isNaN(amount) && formattedDate) {
           transactions.push({
@@ -120,11 +141,10 @@ const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accou
       } else {
         // Fallback to AI (CSV/Text)
         const result = await parseStatement(rawText, categories);
-        const resultWithRules = result.map(t => {
-            if (t.description && categoryRules[t.description]) return { ...t, category: categoryRules[t.description] };
-            const ruleKey = Object.keys(categoryRules).find(key => t.description?.startsWith(key));
-            return ruleKey ? { ...t, category: categoryRules[ruleKey] } : t;
-        });
+        const resultWithRules = result.map(t => ({
+            ...t,
+            category: t.category === 'Outros' ? findLearnedCategory(t.description || '') : t.category
+        }));
         setPreview(resultWithRules);
       }
     } catch (err) {
@@ -150,11 +170,10 @@ const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accou
             
             try {
                 const result = await parseStatementFile(base64Data, file.type, categories);
-                const resultWithRules = result.map(t => {
-                    if (t.description && categoryRules[t.description]) return { ...t, category: categoryRules[t.description] };
-                    const ruleKey = Object.keys(categoryRules).find(key => t.description?.startsWith(key));
-                    return ruleKey ? { ...t, category: categoryRules[ruleKey] } : t;
-                });
+                const resultWithRules = result.map(t => ({
+                    ...t,
+                    category: t.category === 'Outros' ? findLearnedCategory(t.description || '') : t.category
+                }));
                 setPreview(resultWithRules);
             } catch (err) {
                 setError('Erro ao processar arquivo PDF/Imagem via IA.');
@@ -190,8 +209,11 @@ const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accou
   const handleConfirm = () => {
     const newRules = { ...categoryRules };
     preview.forEach(t => {
-        if (t.category !== 'Outros') {
-            newRules[t.description] = t.category;
+        if (t.category && t.category !== 'Outros') {
+            const cleanDesc = cleanDescription(t.description);
+            if (cleanDesc.length > 2) { // Only learn meaningful descriptions
+                newRules[cleanDesc] = t.category;
+            }
         }
     });
     localStorage.setItem('finan_ai_import_rules', JSON.stringify(newRules));
