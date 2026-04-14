@@ -2,7 +2,7 @@
 // Force sync
 import React, { useState } from 'react';
 import { Category, Account, RecurringTransaction, TransactionType, Transaction, User } from '../types';
-import { Plus, Trash2, Tag, Download, Upload, ShieldCheck, CreditCard, Wallet, Banknote, Pencil, X, AlertTriangle, Calendar, Repeat, Users, Copy, LogOut, CheckCircle, Brain } from 'lucide-react';
+import { Plus, Trash2, Tag, Download, Upload, ShieldCheck, CreditCard, Wallet, Banknote, Pencil, X, AlertTriangle, Calendar, Repeat, Users, Copy, LogOut, CheckCircle, Brain, Heart, Moon, Sun } from 'lucide-react';
 import { getRandomColor } from '../constants';
 
 interface SettingsViewProps {
@@ -28,6 +28,10 @@ interface SettingsViewProps {
   onUpdateProfile?: (updates: { name?: string; spendingCeiling?: number }) => void;
   onLinkUser?: (code: string) => void;
   onUnlinkUser?: (id: string) => void;
+  isCoupleMode?: boolean;
+  onToggleCoupleMode?: (val: boolean) => void;
+  theme?: 'light' | 'dark';
+  onToggleTheme?: () => void;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ 
@@ -52,7 +56,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateSpendingCeiling,
   onUpdateProfile,
   onLinkUser,
-  onUnlinkUser
+  onUnlinkUser,
+  isCoupleMode,
+  onToggleCoupleMode,
+  theme,
+  onToggleTheme
 }) => {
   const [newCatName, setNewCatName] = useState('');
   const [newCatType, setNewCatType] = useState<TransactionType>('EXPENSE');
@@ -313,9 +321,50 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
         <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8 flex items-center gap-3">
             <Users className="w-8 h-8 text-indigo-600" />
-            Gestão de Usuários
+            Gestão de Usuários e Preferências
         </h2>
         
+        {/* Preferências de Visualização */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <button 
+                onClick={() => onToggleCoupleMode?.(!isCoupleMode)}
+                className={`p-6 rounded-[2rem] border flex items-center justify-between transition-all ${
+                    isCoupleMode 
+                    ? 'bg-rose-50 border-rose-100 dark:bg-rose-900/20 dark:border-rose-900/30 text-rose-600' 
+                    : 'bg-slate-50 border-slate-100 dark:bg-slate-800/50 dark:border-slate-800 text-slate-500'
+                }`}
+            >
+                <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-2xl ${isCoupleMode ? 'bg-rose-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
+                        <Heart className={`w-6 h-6 ${isCoupleMode ? 'fill-current' : ''}`} />
+                    </div>
+                    <div className="text-left">
+                        <p className="font-black text-sm uppercase tracking-wider">Modo Família</p>
+                        <p className="text-xs opacity-70">{isCoupleMode ? 'Visualizando todos os lançamentos' : 'Visualizando apenas seus lançamentos'}</p>
+                    </div>
+                </div>
+                <div className={`w-12 h-6 rounded-full relative transition-colors ${isCoupleMode ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isCoupleMode ? 'left-7' : 'left-1'}`} />
+                </div>
+            </button>
+
+            <button 
+                onClick={onToggleTheme}
+                className="p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 transition-all"
+            >
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-slate-200 dark:bg-slate-700 rounded-2xl">
+                        {theme === 'light' ? <Moon className="w-6 h-6" /> : <Sun className="w-6 h-6" />}
+                    </div>
+                    <div className="text-left">
+                        <p className="font-black text-sm uppercase tracking-wider">Tema do Sistema</p>
+                        <p className="text-xs opacity-70">Alternar entre claro e escuro</p>
+                    </div>
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest">{theme === 'light' ? 'Claro' : 'Escuro'}</span>
+            </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Convidar Pessoa</h3>
