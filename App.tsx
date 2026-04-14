@@ -166,11 +166,6 @@ const AppContent: React.FC = () => {
         </div>
         
         <div className="p-6 border-t border-slate-50 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/50">
-          <button onClick={() => setIsCoupleMode(!isCoupleMode)} className={`w-full mb-3 flex items-center justify-center gap-2 py-2.5 rounded-2xl font-bold transition-all border text-sm ${isCoupleMode ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-            <Heart className={`w-4 h-4 ${isCoupleMode ? 'fill-rose-500' : ''}`} />
-            {isCoupleMode ? 'Modo Família' : 'Ativar Família'}
-          </button>
-          
           <button onClick={() => setActiveTab('settings')} className="w-full mb-4 flex items-center justify-center gap-2 py-2.5 rounded-2xl font-bold transition-all border bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-500 hover:text-indigo-600 text-sm">
             <Users className="w-4 h-4" />
             Gerenciar Usuários
@@ -219,6 +214,28 @@ const AppContent: React.FC = () => {
             </h1>
             <p className="text-slate-400 font-medium">Gerencie suas contas e transações em um só lugar.</p>
           </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setIsCoupleMode(!isCoupleMode)} 
+              className={`flex items-center gap-2 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl font-bold transition-all border text-[10px] md:text-sm shadow-sm ${
+                isCoupleMode 
+                ? 'bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-900/20 dark:border-rose-900/30' 
+                : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <Heart className={`w-3 h-3 md:w-4 md:h-4 ${isCoupleMode ? 'fill-rose-500' : ''}`} />
+              <span className="hidden xs:inline">{isCoupleMode ? 'Modo Família Ativo' : 'Ativar Família'}</span>
+              <span className="xs:hidden">{isCoupleMode ? 'Família' : 'Pessoal'}</span>
+            </button>
+            
+            <button 
+              onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
+              className="md:hidden p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 transition-all"
+            >
+              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+            </button>
           </div>
         </header>
 
@@ -364,6 +381,10 @@ const AppContent: React.FC = () => {
             users={users}
             onLinkUser={linkUser}
             onUnlinkUser={unlinkUser}
+            isCoupleMode={isCoupleMode}
+            onToggleCoupleMode={setIsCoupleMode}
+            theme={theme}
+            onToggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
           />
         )}
       </main>
