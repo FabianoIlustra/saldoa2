@@ -317,7 +317,15 @@ export const useFinancialData = () => {
 
   const updateRecurring = async (r: RecurringTransaction) => {
       await supabase.from('recurring_transactions').update({
-          last_generated_date: r.lastGeneratedDate
+          account_id: r.accountId,
+          description: r.description,
+          amount: r.amount,
+          type: r.type,
+          category: r.category,
+          day_of_month: r.dayOfMonth,
+          last_generated_date: r.lastGeneratedDate,
+          active: r.active,
+          is_joint: r.isJoint
       }).eq('id', r.id);
       setRecurringTransactions(prev => prev.map(rec => rec.id === r.id ? r : rec));
   };
@@ -341,6 +349,14 @@ export const useFinancialData = () => {
         color: data.color
       }]);
     }
+  };
+
+  const updateCategory = async (c: Category) => {
+    await supabase.from('categories').update({
+      name: c.name,
+      color: c.color
+    }).eq('id', c.id);
+    setCategories(prev => prev.map(cat => cat.id === c.id ? c : cat));
   };
 
   const deleteCategory = async (id: string) => {
@@ -551,6 +567,7 @@ export const useFinancialData = () => {
     deleteRecurring,
     updateRecurring,
     addCategory,
+    updateCategory,
     deleteCategory,
     importData, // Exported
     setTransactions, 
