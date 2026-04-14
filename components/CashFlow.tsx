@@ -48,8 +48,23 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
       const targetAccounts = currentFilters && currentFilters.accounts.length > 0 
         ? accounts.filter(a => currentFilters.accounts.includes(a.id)) 
         : accounts;
-      return targetAccounts.reduce((sum, acc) => sum + acc.currentBalance, 0);
-  }, [accounts, currentFilters]);
+      
+      const initialSum = targetAccounts.reduce((sum, acc) => sum + acc.initialBalance, 0);
+      
+      // Sum all transactions for these accounts up to the end date of the filter
+      const endDate = currentFilters?.dateRange.end ? parseISO(currentFilters.dateRange.end) : new Date();
+      
+      const transactionsSum = transactions
+        .filter(t => {
+            const isTargetAccount = currentFilters && currentFilters.accounts.length > 0 
+                ? currentFilters.accounts.includes(t.accountId)
+                : true;
+            return isTargetAccount && parseISO(t.date) <= endDate;
+        })
+        .reduce((sum, t) => sum + (t.type === 'INCOME' ? t.amount : -t.amount), 0);
+
+      return initialSum + transactionsSum;
+  }, [accounts, transactions, currentFilters]);
 
   const income = useMemo(() => filteredTransactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0), [filteredTransactions]);
   const expense = useMemo(() => filteredTransactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0), [filteredTransactions]);

@@ -2,7 +2,7 @@
 // Force sync
 import React, { useState } from 'react';
 import { Category, Account, RecurringTransaction, TransactionType, Transaction, User } from '../types';
-import { Plus, Trash2, Tag, Download, Upload, ShieldCheck, CreditCard, Wallet, Banknote, Pencil, X, AlertTriangle, Calendar, Repeat, Users, Copy, LogOut, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Tag, Download, Upload, ShieldCheck, CreditCard, Wallet, Banknote, Pencil, X, AlertTriangle, Calendar, Repeat, Users, Copy, LogOut, CheckCircle, Brain } from 'lucide-react';
 import { getRandomColor } from '../constants';
 
 interface SettingsViewProps {
@@ -13,6 +13,7 @@ interface SettingsViewProps {
   currentUserProfile?: User | null;
   users?: User[];
   onAddCategory: (category: Category) => void;
+  onUpdateCategory: (category: Category) => void;
   onDeleteCategory: (id: string) => void;
   onImportData: (data: string) => void;
   onAddAccount: (acc: Omit<Account, 'id' | 'currentBalance'>) => void;
@@ -37,6 +38,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   currentUserProfile,
   users,
   onAddCategory, 
+  onUpdateCategory,
   onDeleteCategory, 
   onImportData, 
   onAddAccount, 
@@ -56,6 +58,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [newCatType, setNewCatType] = useState<TransactionType>('EXPENSE');
   const [ceilingAmount, setCeilingAmount] = useState(spendingCeiling?.toString() || '');
   const [joinCode, setJoinCode] = useState('');
+  const [importRules, setImportRules] = useState<Record<string, string>>({});
+
+  React.useEffect(() => {
+    const rules = JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
+    setImportRules(rules);
+  }, []);
+
+  const deleteRule = (key: string) => {
+    const newRules = { ...importRules };
+    delete newRules[key];
+    localStorage.setItem('finan_ai_import_rules', JSON.stringify(newRules));
+    setImportRules(newRules);
+  };
+
+  const clearAllRules = () => {
+    if (confirm('Tem certeza que deseja apagar todas as regras de aprendizado?')) {
+      localStorage.removeItem('finan_ai_import_rules');
+      setImportRules({});
+    }
+  };
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState(currentUserProfile?.name || '');
   
@@ -81,6 +103,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [editName, setEditName] = useState('');
   const [editType, setEditType] = useState<Account['type']>('Corrente');
   const [editCurrentBalance, setEditCurrentBalance] = useState('');
+
+  const [categoryToEdit, setCategoryToEdit] = useState<Category | null>(null);
+  const [editCatName, setEditCatName] = useState('');
+  const [editCatColor, setEditCatColor] = useState('');
 
   const [recurringToEdit, setRecurringToEdit] = useState<RecurringTransaction | null>(null);
   const [editRecDesc, setEditRecDesc] = useState('');
@@ -141,6 +167,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     setEditCurrentBalance(account.currentBalance.toString());
   };
 
+  const openEditCategoryModal = (cat: Category) => {
+    setCategoryToEdit(cat);
+    setEditCatName(cat.name);
+    setEditCatColor(cat.color);
+  };
+
   const openEditRecurringModal = (rec: RecurringTransaction) => {
     setRecurringToEdit(rec);
     setEditRecDesc(rec.description);
@@ -165,6 +197,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       onUpdateAccountBalance(accountToEdit.id, parseFloat(editCurrentBalance));
       
       setAccountToEdit(null);
+    }
+  };
+
+  const saveEditCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (categoryToEdit && editCatName) {
+      onUpdateCategory({
+        ...categoryToEdit,
+        name: editCatName,
+        color: editCatColor
+      });
+      setCategoryToEdit(null);
     }
   };
 
@@ -430,9 +474,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         <div className="w-4 h-4 rounded-full" style={{ backgroundColor: cat.color }} />
                         <span className="text-sm font-bold">{cat.name}</span>
                     </div>
-                    <button onClick={() => onDeleteCategory(cat.id)} className="text-slate-300 hover:text-rose-500 p-2 opacity-0 group-hover:opacity-100 transition-all">
-                        <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button onClick={() => openEditCategoryModal(cat)} className="text-slate-300 hover:text-indigo-500 p-2">
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => onDeleteCategory(cat.id)} className="text-slate-300 hover:text-rose-500 p-2">
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    </div>
                     </div>
                 ))}
                 </div>
@@ -447,9 +496,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         <div className="w-4 h-4 rounded-full" style={{ backgroundColor: cat.color }} />
                         <span className="text-sm font-bold">{cat.name}</span>
                     </div>
-                    <button onClick={() => onDeleteCategory(cat.id)} className="text-slate-300 hover:text-rose-500 p-2 opacity-0 group-hover:opacity-100 transition-all">
-                        <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button onClick={() => openEditCategoryModal(cat)} className="text-slate-300 hover:text-indigo-500 p-2">
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => onDeleteCategory(cat.id)} className="text-slate-300 hover:text-rose-500 p-2">
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    </div>
                     </div>
                 ))}
                 </div>
@@ -609,6 +663,53 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         </p>
       </section>
 
+      {/* Inteligência de Importação */}
+      <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+              <Brain className="w-8 h-8 text-indigo-600" />
+              Inteligência de Importação
+          </h2>
+          {Object.keys(importRules).length > 0 && (
+            <button 
+              onClick={clearAllRules}
+              className="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold hover:bg-rose-100 transition-all"
+            >
+              Limpar Tudo
+            </button>
+          )}
+        </div>
+        
+        <p className="text-sm text-slate-500 mb-8">Padrões que o sistema aprendeu para categorizar seus extratos automaticamente. Você pode excluir padrões incorretos aqui.</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Object.entries(importRules).length === 0 && (
+            <div className="col-span-full py-12 text-center bg-slate-50 dark:bg-slate-800/50 rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-700">
+              <AlertTriangle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+              <p className="text-slate-400 font-medium">Nenhuma regra aprendida ainda.<br/>Importe um extrato para começar a ensinar o sistema!</p>
+            </div>
+          )}
+          {Object.entries(importRules).map(([pattern, category]) => (
+            <div key={pattern} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex justify-between items-center group transition-all hover:bg-white dark:hover:bg-slate-800">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Padrão</p>
+                <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{pattern}</p>
+                <div className="flex items-center gap-2 mt-2">
+                    <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">{category}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => deleteRule(pattern)}
+                className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Backup e Dados */}
       <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
         <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8 flex items-center gap-3">
@@ -753,6 +854,48 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setAccountToEdit(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none">Salvar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Category Modal */}
+      {categoryToEdit && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">Editar Categoria</h3>
+              <button onClick={() => setCategoryToEdit(null)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={saveEditCategory} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Nome da Categoria</label>
+                <input 
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold" 
+                  value={editCatName} 
+                  onChange={e => setEditCatName(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Cor</label>
+                <div className="flex gap-2 items-center">
+                    <input 
+                        type="color" 
+                        value={editCatColor}
+                        onChange={e => setEditCatColor(e.target.value)}
+                        className="w-12 h-12 rounded-xl border-none cursor-pointer bg-transparent"
+                    />
+                    <span className="text-xs font-mono text-slate-500">{editCatColor}</span>
+                </div>
+              </div>
+              
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => setCategoryToEdit(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
                 <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none">Salvar</button>
               </div>
             </form>
