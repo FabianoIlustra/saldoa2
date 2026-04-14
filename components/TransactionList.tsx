@@ -237,6 +237,28 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
         />
       </div>
 
+      {/* Totals at the top */}
+      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border border-slate-100 dark:border-slate-800 p-4 md:p-6 rounded-[2rem] shadow-sm print:static print:shadow-none print:border-t-2 print:border-black">
+        <div className="flex justify-between items-center max-w-3xl mx-auto">
+           <div className="text-center">
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Receitas</p>
+              <p className="text-emerald-500 font-black text-sm md:text-lg">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.income)}</p>
+           </div>
+           <div className="h-8 w-px bg-slate-200 dark:bg-slate-700"></div>
+           <div className="text-center">
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Despesas</p>
+              <p className="text-rose-500 font-black text-sm md:text-lg">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.expense)}</p>
+           </div>
+           <div className="h-8 w-px bg-slate-200 dark:bg-slate-700"></div>
+           <div className="text-center">
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Saldo</p>
+              <p className={`font-black text-sm md:text-xl ${totals.total >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-500'}`}>
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.total)}
+              </p>
+           </div>
+        </div>
+      </div>
+
       {/* Import Button (Mobile/Desktop) - Hidden on Print */}
       <div className="flex justify-end print:hidden gap-2">
          <button 
@@ -341,28 +363,6 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                 )}
             </tbody>
         </table>
-      </div>
-
-      {/* Footer Totals */}
-      <div className="sticky bottom-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-100 dark:border-slate-800 p-4 md:p-6 rounded-t-[2rem] shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] print:static print:shadow-none print:border-t-2 print:border-black">
-        <div className="flex justify-between items-center max-w-3xl mx-auto">
-           <div className="text-center">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Receitas</p>
-              <p className="text-emerald-500 font-black text-sm md:text-lg">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.income)}</p>
-           </div>
-           <div className="h-8 w-px bg-slate-200 dark:bg-slate-700"></div>
-           <div className="text-center">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Despesas</p>
-              <p className="text-rose-500 font-black text-sm md:text-lg">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.expense)}</p>
-           </div>
-           <div className="h-8 w-px bg-slate-200 dark:bg-slate-700"></div>
-           <div className="text-center">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Saldo</p>
-              <p className={`font-black text-sm md:text-xl ${totals.total >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-500'}`}>
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.total)}
-              </p>
-           </div>
-        </div>
       </div>
 
       {isPrintModalOpen && createPortal(

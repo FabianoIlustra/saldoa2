@@ -52,7 +52,6 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
       const isPaid = transactions.some(t => {
         const tDate = parseISO(t.date);
         const matches = t.description === rec.description && 
-               Math.abs(t.amount - rec.amount) < 0.01 && // Handle float precision
                isSameMonth(tDate, targetDate) &&
                isSameYear(tDate, targetDate);
         
