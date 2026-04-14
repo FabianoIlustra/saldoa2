@@ -46,6 +46,7 @@ const AppContent: React.FC = () => {
     deleteRecurring,
     updateRecurring,
     addCategory,
+    updateCategory,
     deleteCategory,
     importData,
     setTransactions, // For optimistic updates if needed
@@ -324,6 +325,7 @@ const AppContent: React.FC = () => {
             recurringTransactions={recurringTransactions}
             transactions={transactions}
             onAddCategory={addCategory} 
+            onUpdateCategory={updateCategory}
             onDeleteCategory={deleteCategory} 
             onImportData={async (data) => {
                 const success = await importData(data);
