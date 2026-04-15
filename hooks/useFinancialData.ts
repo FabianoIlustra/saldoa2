@@ -14,6 +14,7 @@ export const useFinancialData = () => {
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
   const [currentUserProfile, setCurrentUserProfile] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [importRules, setImportRules] = useState<Record<string, string>>({});
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -81,6 +82,20 @@ export const useFinancialData = () => {
         // insert them now. Inserting now is better.
         // For simplicity in this turn, I'll just set state.
         setCategories(DEFAULT_CATEGORIES);
+      }
+
+      // Fetch Import Rules
+      try {
+        const { data: rules } = await supabase.from('import_rules').select('*');
+        if (rules) {
+          const rulesMap: Record<string, string> = {};
+          rules.forEach(r => {
+            rulesMap[r.pattern] = r.category;
+          });
+          setImportRules(rulesMap);
+        }
+      } catch (e) {
+        console.warn('import_rules table not found, using localStorage fallback');
       }
 
       // Fetch Accounts
@@ -364,6 +379,59 @@ export const useFinancialData = () => {
     setCategories(prev => prev.filter(c => c.id !== id));
   };
 
+  const saveImportRule = async (pattern: string, category: string) => {
+    if (!user) return;
+    
+    // Save to DB
+    try {
+      await supabase.from('import_rules').upsert({
+        user_id: user.id,
+        couple_id: currentUserProfile?.coupleId || null,
+        pattern,
+        category
+      }, { onConflict: 'user_id,pattern' });
+    } catch (e) {
+      console.warn('Could not save to import_rules table');
+    }
+
+    // Update local state
+    setImportRules(prev => ({ ...prev, [pattern]: category }));
+    
+    // Also update localStorage for redundancy/fallback
+    const localRules = JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
+    localRules[pattern] = category;
+    localStorage.setItem('finan_ai_import_rules', JSON.stringify(localRules));
+  };
+
+  const deleteImportRule = async (pattern: string) => {
+    try {
+      await supabase.from('import_rules').delete().eq('pattern', pattern);
+    } catch (e) {
+      console.warn('Could not delete from import_rules table');
+    }
+
+    setImportRules(prev => {
+      const next = { ...prev };
+      delete next[pattern];
+      return next;
+    });
+
+    const localRules = JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
+    delete localRules[pattern];
+    localStorage.setItem('finan_ai_import_rules', JSON.stringify(localRules));
+  };
+
+  const clearImportRules = async () => {
+    try {
+      await supabase.from('import_rules').delete().not('pattern', 'is', null);
+    } catch (e) {
+      console.warn('Could not clear import_rules table');
+    }
+
+    setImportRules({});
+    localStorage.removeItem('finan_ai_import_rules');
+  };
+
   const importData = async (data: string) => {
     if (!user) return;
     try {
@@ -569,6 +637,10 @@ export const useFinancialData = () => {
     addCategory,
     updateCategory,
     deleteCategory,
+    importRules,
+    saveImportRule,
+    deleteImportRule,
+    clearImportRules,
     importData, // Exported
     setTransactions, 
     setAccounts,
