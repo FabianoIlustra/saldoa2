@@ -32,7 +32,46 @@ interface SettingsViewProps {
   onToggleCoupleMode?: (val: boolean) => void;
   theme?: 'light' | 'dark';
   onToggleTheme?: () => void;
+  importRules?: Record<string, string>;
+  onDeleteImportRule?: (pattern: string) => void;
+  onClearImportRules?: () => void;
 }
+
+const CollapsibleSection: React.FC<{ 
+  title: string; 
+  icon: React.ReactNode; 
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}> = ({ title, icon, children, defaultOpen = false }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <section className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden transition-all">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full p-8 md:p-10 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="text-indigo-600">
+            {icon}
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+            {title}
+          </h2>
+        </div>
+        <div className={`p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+          <Plus className={`w-6 h-6 transition-transform ${isOpen ? 'rotate-45' : ''}`} />
+        </div>
+      </button>
+      
+      <div className={`transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[5000px] opacity-100 p-8 md:p-10 pt-0 md:pt-0' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+        <div className="border-t border-slate-50 dark:border-slate-800 pt-8">
+          {children}
+        </div>
+      </div>
+    </section>
+  );
+};
 
 const SettingsView: React.FC<SettingsViewProps> = ({ 
   categories, 
@@ -60,32 +99,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   isCoupleMode,
   onToggleCoupleMode,
   theme,
-  onToggleTheme
+  onToggleTheme,
+  importRules = {},
+  onDeleteImportRule,
+  onClearImportRules
 }) => {
   const [newCatName, setNewCatName] = useState('');
   const [newCatType, setNewCatType] = useState<TransactionType>('EXPENSE');
   const [ceilingAmount, setCeilingAmount] = useState(spendingCeiling?.toString() || '');
   const [joinCode, setJoinCode] = useState('');
-  const [importRules, setImportRules] = useState<Record<string, string>>({});
-
-  React.useEffect(() => {
-    const rules = JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
-    setImportRules(rules);
-  }, []);
-
-  const deleteRule = (key: string) => {
-    const newRules = { ...importRules };
-    delete newRules[key];
-    localStorage.setItem('finan_ai_import_rules', JSON.stringify(newRules));
-    setImportRules(newRules);
-  };
-
-  const clearAllRules = () => {
-    if (confirm('Tem certeza que deseja apagar todas as regras de aprendizado?')) {
-      localStorage.removeItem('finan_ai_import_rules');
-      setImportRules({});
-    }
-  };
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState(currentUserProfile?.name || '');
   
@@ -238,15 +260,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="space-y-12 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
       {/* Gestão de Contas Bancárias */}
-      <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8 flex items-center gap-3">
-          <CreditCard className="w-8 h-8 text-indigo-600" />
-          Minhas Contas Bancárias
-        </h2>
-
+      <CollapsibleSection 
+        title="Minhas Contas Bancárias" 
+        icon={<CreditCard className="w-8 h-8" />}
+        defaultOpen={true}
+      >
         <form onSubmit={handleAddAccount} className="flex flex-col md:grid md:grid-cols-4 gap-4 mb-10 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800">
           <div className="md:col-span-2">
             <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Nome do Banco/Conta</label>
@@ -315,15 +336,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           ))}
         </div>
-      </section>
+      </CollapsibleSection>
 
       {/* Gestão de Usuários */}
-      <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8 flex items-center gap-3">
-            <Users className="w-8 h-8 text-indigo-600" />
-            Gestão de Usuários e Preferências
-        </h2>
-        
+      <CollapsibleSection 
+        title="Gestão de Usuários e Preferências" 
+        icon={<Users className="w-8 h-8" />}
+      >
         {/* Preferências de Visualização */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             <button 
@@ -470,15 +489,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 ))}
             </div>
         </div>
-      </section>
+      </CollapsibleSection>
 
       {/* Categorias Personalizadas */}
-      <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8 flex items-center gap-3">
-          <Tag className="w-8 h-8 text-indigo-600" />
-          Categorias
-        </h2>
-        
+      <CollapsibleSection 
+        title="Categorias" 
+        icon={<Tag className="w-8 h-8" />}
+      >
         <form onSubmit={e => {
           e.preventDefault();
           if (newCatName) {
@@ -558,14 +575,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
             </div>
         </div>
-      </section>
+      </CollapsibleSection>
 
       {/* Gestão de Recorrências */}
-      <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8 flex items-center gap-3">
-          <Repeat className="w-8 h-8 text-indigo-600" />
-          Contas Recorrentes (Fixas)
-        </h2>
+      <CollapsibleSection 
+        title="Contas Recorrentes (Fixas)" 
+        icon={<Repeat className="w-8 h-8" />}
+      >
         <p className="text-sm text-slate-500 mb-8">Cadastre suas contas fixas para que sejam lançadas automaticamente todo mês.</p>
 
         <form onSubmit={handleAddRecurring} className="flex flex-col gap-4 mb-10 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800">
@@ -675,14 +691,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
             ))}
         </div>
-      </section>
+      </CollapsibleSection>
 
       {/* Teto de Gastos */}
-      <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8 flex items-center gap-3">
-          <AlertTriangle className="w-8 h-8 text-amber-500" />
-          Teto de Gastos Mensal
-        </h2>
+      <CollapsibleSection 
+        title="Teto de Gastos Mensal" 
+        icon={<AlertTriangle className="w-8 h-8 text-amber-500" />}
+      >
         <div className="flex flex-col md:flex-row gap-4 items-end">
           <div className="flex-1 w-full">
             <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Limite Mensal (R$)</label>
@@ -710,18 +725,21 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         <p className="text-sm text-slate-500 mt-4">
           Defina um valor máximo para seus gastos mensais. O painel principal mostrará uma barra de progresso que muda de cor conforme você se aproxima do limite (Azul &lt; 80%, Amarelo &lt; 95%, Vermelho &gt; 95%).
         </p>
-      </section>
+      </CollapsibleSection>
 
       {/* Inteligência de Importação */}
-      <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3">
-              <Brain className="w-8 h-8 text-indigo-600" />
-              Inteligência de Importação
-          </h2>
+      <CollapsibleSection 
+        title="Inteligência de Importação" 
+        icon={<Brain className="w-8 h-8" />}
+      >
+        <div className="flex justify-end mb-4">
           {Object.keys(importRules).length > 0 && (
             <button 
-              onClick={clearAllRules}
+              onClick={() => {
+                if (confirm('Tem certeza que deseja apagar todas as regras de aprendizado?')) {
+                    onClearImportRules?.();
+                }
+              }}
               className="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold hover:bg-rose-100 transition-all"
             >
               Limpar Tudo
@@ -749,7 +767,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
               </div>
               <button 
-                onClick={() => deleteRule(pattern)}
+                onClick={() => onDeleteImportRule?.(pattern)}
                 className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all shrink-0"
               >
                 <Trash2 className="w-4 h-4" />
@@ -757,14 +775,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           ))}
         </div>
-      </section>
+      </CollapsibleSection>
 
       {/* Backup e Dados */}
-      <section className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8 flex items-center gap-3">
-          <ShieldCheck className="w-8 h-8 text-indigo-600" />
-          Backup e Dados
-        </h2>
+      <CollapsibleSection 
+        title="Backup e Dados" 
+        icon={<ShieldCheck className="w-8 h-8" />}
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800">
                 <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
@@ -818,7 +835,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </label>
             </div>
         </div>
-      </section>
+      </CollapsibleSection>
 
       {/* Delete Confirmation Modal */}
       {accountToDelete && (
