@@ -8,24 +8,26 @@ import { parseStatement, parseStatementFile } from '../services/geminiService';
 interface StatementImporterProps {
   categories: Category[];
   accounts: Account[];
+  importRules?: Record<string, string>;
+  onSaveRule?: (pattern: string, category: string) => void;
   onImport: (transactions: any[], accountId: string) => void;
   onClose: () => void;
 }
 
-const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accounts, onImport, onClose }) => {
+const StatementImporter: React.FC<StatementImporterProps> = ({ 
+  categories, 
+  accounts, 
+  importRules = {}, 
+  onSaveRule,
+  onImport, 
+  onClose 
+}) => {
   const [rawText, setRawText] = useState('');
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0]?.id || '');
-
-  const [categoryRules, setCategoryRules] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
-    } catch {
-      return {};
-    }
-  });
+  const [globalDate, setGlobalDate] = useState('');
 
   const cleanDescription = (desc: string) => {
     return desc
@@ -40,16 +42,16 @@ const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accou
     const cleanDesc = cleanDescription(description);
     
     // 1. Exact match on clean description
-    if (categoryRules[cleanDesc]) return categoryRules[cleanDesc];
+    if (importRules[cleanDesc]) return importRules[cleanDesc];
 
     // 2. Substring match (check if any rule key is contained in the description)
-    const ruleKeys = Object.keys(categoryRules);
+    const ruleKeys = Object.keys(importRules);
     // Sort by length descending to match most specific rules first
     const sortedKeys = ruleKeys.sort((a, b) => b.length - a.length);
     
     for (const key of sortedKeys) {
         if (cleanDesc.includes(key) || key.includes(cleanDesc)) {
-            return categoryRules[key];
+            return importRules[key];
         }
     }
 
@@ -206,18 +208,27 @@ const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accou
     reader.readAsText(file);
   };
 
+  const applyGlobalDate = () => {
+    if (!globalDate) return;
+    setPreview(prev => prev.map(item => ({ ...item, date: globalDate })));
+  };
+
   const handleConfirm = () => {
-    const newRules = { ...categoryRules };
     preview.forEach(t => {
         if (t.category && t.category !== 'Outros') {
             const cleanDesc = cleanDescription(t.description);
             if (cleanDesc.length > 2) { // Only learn meaningful descriptions
-                newRules[cleanDesc] = t.category;
+                if (onSaveRule) {
+                    onSaveRule(cleanDesc, t.category);
+                } else {
+                    // Fallback
+                    const localRules = JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
+                    localRules[cleanDesc] = t.category;
+                    localStorage.setItem('finan_ai_import_rules', JSON.stringify(localRules));
+                }
             }
         }
     });
-    localStorage.setItem('finan_ai_import_rules', JSON.stringify(newRules));
-    setCategoryRules(newRules);
 
     onImport(preview, selectedAccountId);
     onClose();
@@ -295,12 +306,29 @@ const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accou
             </div>
           ) : (
             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col md:flex-row justify-between items-end gap-4">
                 <div>
                     <h3 className="font-black text-slate-900 dark:text-white text-lg">Validar Importação ({preview.length})</h3>
                     <p className="text-xs text-slate-400 font-bold mt-1">
                         Conta: {accounts.find(a => a.id === selectedAccountId)?.name}
                     </p>
+                </div>
+                <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <div className="flex flex-col">
+                        <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Data Geral</label>
+                        <input 
+                            type="date" 
+                            value={globalDate}
+                            onChange={(e) => setGlobalDate(e.target.value)}
+                            className="bg-transparent border-none outline-none text-xs font-bold text-slate-700 dark:text-white px-1"
+                        />
+                    </div>
+                    <button 
+                        onClick={applyGlobalDate}
+                        className="bg-indigo-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition-all"
+                    >
+                        Aplicar a Todos
+                    </button>
                 </div>
                 <div className="flex gap-3">
                     <button onClick={() => setPreview([])} className="text-sm text-slate-500 font-bold hover:text-rose-500 transition-all">Cancelar</button>
@@ -321,7 +349,18 @@ const StatementImporter: React.FC<StatementImporterProps> = ({ categories, accou
                   <tbody className="divide-y divide-slate-50 dark:divide-slate-800 transition-colors">
                     {preview.map((item, i) => (
                       <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
-                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">{item.date}</td>
+                        <td className="px-6 py-4">
+                            <input 
+                                type="date" 
+                                value={item.date}
+                                onChange={(e) => {
+                                    const newPreview = [...preview];
+                                    newPreview[i].date = e.target.value;
+                                    setPreview(newPreview);
+                                }}
+                                className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-xl text-[10px] font-bold text-slate-500 dark:text-slate-400 border-none outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </td>
                         <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{item.description}</td>
                         <td className="px-6 py-4">
                           <select 
