@@ -53,7 +53,11 @@ const AppContent: React.FC = () => {
     setRecurringTransactions,
     updateUserProfile,
     linkUser,
-    unlinkUser
+    unlinkUser,
+    importRules,
+    saveImportRule,
+    deleteImportRule,
+    clearImportRules
   } = useFinancialData();
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('finan_ai_theme') as 'light' | 'dark') || 'light');
@@ -385,6 +389,9 @@ const AppContent: React.FC = () => {
             onToggleCoupleMode={setIsCoupleMode}
             theme={theme}
             onToggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
+            importRules={importRules}
+            onDeleteImportRule={deleteImportRule}
+            onClearImportRules={clearImportRules}
           />
         )}
       </main>
@@ -447,6 +454,8 @@ const AppContent: React.FC = () => {
         <StatementImporter
           categories={categories}
           accounts={accounts}
+          importRules={importRules}
+          onSaveRule={saveImportRule}
           onImport={(importedTransactions, targetAccountId) => {
             importedTransactions.forEach(t => addTransaction({
               ...t,
