@@ -234,6 +234,11 @@ export const useFinancialData = () => {
     setTransactions(prev => prev.filter(t => t.id !== id));
   };
 
+  const bulkDeleteTransactions = async (ids: string[]) => {
+    await supabase.from('transactions').delete().in('id', ids);
+    setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+  };
+
   const addAccount = async (a: Omit<Account, 'id' | 'currentBalance'>) => {
     if (!user) return;
     const { data } = await supabase.from('accounts').insert({
@@ -625,6 +630,7 @@ export const useFinancialData = () => {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    bulkDeleteTransactions,
     addAccount,
     updateAccount,
     deleteAccount,
