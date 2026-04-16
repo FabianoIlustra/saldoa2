@@ -36,6 +36,7 @@ const AppContent: React.FC = () => {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    bulkDeleteTransactions,
     addAccount,
     updateAccount,
     deleteAccount,
@@ -303,6 +304,7 @@ const AppContent: React.FC = () => {
             accounts={accounts}
             categories={categories}
             onDelete={deleteTransaction} 
+            onBulkDelete={bulkDeleteTransactions}
             onOpenImporter={() => setIsImporterOpen(true)}
             onEdit={(t) => {
                 setEditingTransaction(t);
