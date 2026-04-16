@@ -15,6 +15,7 @@ interface TransactionListProps {
   onDelete: (id: string) => void;
   onOpenImporter: () => void;
   onEdit?: (transaction: Transaction) => void;
+  onBulkDelete?: (ids: string[]) => void;
 }
 
 const getCategoryIcon = (category: string) => {
@@ -31,10 +32,11 @@ const getCategoryIcon = (category: string) => {
   }
 };
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, accounts, categories, onDelete, onOpenImporter, onEdit }) => {
+const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, accounts, categories, onDelete, onOpenImporter, onEdit, onBulkDelete }) => {
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Transaction | 'createdAt' | 'userName' | 'accountName'; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const handleSort = (key: keyof Transaction | 'createdAt' | 'userName' | 'accountName') => {
     setSortConfig(current => ({
@@ -224,6 +226,33 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
     return accounts.find(a => a.id === accountId)?.name || 'Conta';
   };
 
+  const handleToggleSelectAll = () => {
+    if (selectedIds.size === filteredTransactions.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredTransactions.map(t => t.id)));
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleBulkDelete = () => {
+    if (onBulkDelete && selectedIds.size > 0) {
+      if (confirm(`Deseja excluir ${selectedIds.size} lançamentos selecionados?`)) {
+        onBulkDelete(Array.from(selectedIds));
+        setSelectedIds(new Set());
+      }
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 print:space-y-0">
       
@@ -260,7 +289,23 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
       </div>
 
       {/* Import Button (Mobile/Desktop) - Hidden on Print */}
-      <div className="flex justify-end print:hidden gap-2">
+      <div className="flex justify-between items-center print:hidden">
+         <div className="flex items-center gap-4">
+            {selectedIds.size > 0 && (
+                <div className="flex items-center gap-3 animate-in slide-in-from-left-4 duration-300">
+                    <span className="text-xs font-black uppercase text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full">
+                        {selectedIds.size} selecionados
+                    </span>
+                    <button 
+                        onClick={handleBulkDelete}
+                        className="flex items-center gap-2 px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold hover:bg-rose-100 transition-all"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                        Excluir Selecionados
+                    </button>
+                </div>
+            )}
+         </div>
          <button 
             onClick={onOpenImporter}
             className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 dark:shadow-none flex items-center gap-2"
@@ -275,6 +320,14 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
         <table className="w-full text-left border-collapse">
             <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700">
+                    <th className="p-4 w-10 print:hidden">
+                        <input 
+                            type="checkbox" 
+                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            checked={filteredTransactions.length > 0 && selectedIds.size === filteredTransactions.length}
+                            onChange={handleToggleSelectAll}
+                        />
+                    </th>
                     <th onClick={() => handleSort('createdAt')} className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:text-indigo-500 transition-colors whitespace-nowrap">
                         Data Lançamento {sortConfig.key === 'createdAt' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                     </th>
@@ -310,7 +363,15 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                     </tr>
                 ) : (
                     filteredTransactions.map((t) => (
-                        <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                        <tr key={t.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group ${selectedIds.has(t.id) ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''}`}>
+                            <td className="p-4 print:hidden">
+                                <input 
+                                    type="checkbox" 
+                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                    checked={selectedIds.has(t.id)}
+                                    onChange={() => handleToggleSelect(t.id)}
+                                />
+                            </td>
                             <td className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                 {t.createdAt ? format(parseISO(t.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
                             </td>
