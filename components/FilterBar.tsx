@@ -1,6 +1,6 @@
 // Force sync
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, Calendar, ChevronLeft, ChevronRight, Check, X, Printer } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Filter, Calendar, ChevronLeft, ChevronRight, Check, X, Printer, ChevronDown } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfYear, endOfYear, isSameMonth, isSameYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Category, Account, TransactionType } from '../types';
@@ -28,6 +28,12 @@ interface FilterBarProps {
 
 const FilterBar: React.FC<FilterBarProps> = ({ categories, accounts, onFilterChange, onPrint, showPrint }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [catsOpen, setCatsOpen] = useState(false);
+  const [accsOpen, setAccsOpen] = useState(false);
+  
+  const catRef = useRef<HTMLDivElement>(null);
+  const accRef = useRef<HTMLDivElement>(null);
+
   const [filters, setFilters] = useState<FilterState>({
     searchTerm: '',
     type: 'ALL',
@@ -40,6 +46,20 @@ const FilterBar: React.FC<FilterBarProps> = ({ categories, accounts, onFilterCha
     viewMode: 'MONTH',
     currentDate: new Date()
   });
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (catRef.current && !catRef.current.contains(event.target as Node)) {
+        setCatsOpen(false);
+      }
+      if (accRef.current && !accRef.current.contains(event.target as Node)) {
+        setAccsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Update parent whenever filters change
   useEffect(() => {
@@ -233,72 +253,76 @@ const FilterBar: React.FC<FilterBarProps> = ({ categories, accounts, onFilterCha
           {/* Categories */}
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Categorias</label>
-            <div className="relative group">
+            <div className="relative" ref={catRef}>
                 <button 
                     className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-left flex justify-between items-center"
-                    onClick={(e) => {
-                        const next = e.currentTarget.nextElementSibling;
-                        next?.classList.toggle('hidden');
-                    }}
+                    onClick={() => setCatsOpen(!catsOpen)}
                 >
                     {filters.categories.length === 0 ? 'Todas' : `${filters.categories.length} selecionadas`}
-                    <ChevronRight className="w-4 h-4 rotate-90 text-slate-400" />
+                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${catsOpen ? 'rotate-180' : ''}`} />
                 </button>
-                <div className="hidden absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 p-2 max-h-48 overflow-y-auto">
-                    <div 
-                        className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.categories.length === 0 ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
-                        onClick={() => setFilters(prev => ({ ...prev, categories: [] }))}
-                    >
-                        {filters.categories.length === 0 && <Check className="w-3 h-3" />}
-                        <span className="text-xs">Todas</span>
-                    </div>
-                    {categories.map(cat => (
+                {catsOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 p-2 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
                         <div 
-                            key={cat.id}
-                            className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.categories.includes(cat.name) ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
-                            onClick={() => toggleCategory(cat.name)}
+                            className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.categories.length === 0 ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
+                            onClick={() => {
+                                setFilters(prev => ({ ...prev, categories: [] }));
+                                setCatsOpen(false);
+                            }}
                         >
-                            {filters.categories.includes(cat.name) && <Check className="w-3 h-3" />}
-                            <span className="text-xs">{cat.name}</span>
+                            {filters.categories.length === 0 && <Check className="w-3 h-3" />}
+                            <span className="text-xs">Todas</span>
                         </div>
-                    ))}
-                </div>
+                        {categories.map(cat => (
+                            <div 
+                                key={cat.id}
+                                className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.categories.includes(cat.name) ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
+                                onClick={() => toggleCategory(cat.name)}
+                            >
+                                {filters.categories.includes(cat.name) && <Check className="w-3 h-3" />}
+                                <span className="text-xs">{cat.name}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
           </div>
 
           {/* Accounts */}
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Contas</label>
-            <div className="relative group">
+            <div className="relative" ref={accRef}>
                 <button 
                     className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-left flex justify-between items-center"
-                    onClick={(e) => {
-                        const next = e.currentTarget.nextElementSibling;
-                        next?.classList.toggle('hidden');
-                    }}
+                    onClick={() => setAccsOpen(!accsOpen)}
                 >
                     {filters.accounts.length === 0 ? 'Todas' : `${filters.accounts.length} selecionadas`}
-                    <ChevronRight className="w-4 h-4 rotate-90 text-slate-400" />
+                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${accsOpen ? 'rotate-180' : ''}`} />
                 </button>
-                <div className="hidden absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 p-2 max-h-48 overflow-y-auto">
-                    <div 
-                        className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.accounts.length === 0 ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
-                        onClick={() => setFilters(prev => ({ ...prev, accounts: [] }))}
-                    >
-                        {filters.accounts.length === 0 && <Check className="w-3 h-3" />}
-                        <span className="text-xs">Todas</span>
-                    </div>
-                    {accounts.map(acc => (
+                {accsOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 p-2 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
                         <div 
-                            key={acc.id}
-                            className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.accounts.includes(acc.id) ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
-                            onClick={() => toggleAccount(acc.id)}
+                            className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.accounts.length === 0 ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
+                            onClick={() => {
+                                setFilters(prev => ({ ...prev, accounts: [] }));
+                                setAccsOpen(false);
+                            }}
                         >
-                            {filters.accounts.includes(acc.id) && <Check className="w-3 h-3" />}
-                            <span className="text-xs">{acc.name}</span>
+                            {filters.accounts.length === 0 && <Check className="w-3 h-3" />}
+                            <span className="text-xs">Todas</span>
                         </div>
-                    ))}
-                </div>
+                        {accounts.map(acc => (
+                            <div 
+                                key={acc.id}
+                                className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.accounts.includes(acc.id) ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
+                                onClick={() => toggleAccount(acc.id)}
+                            >
+                                {filters.accounts.includes(acc.id) && <Check className="w-3 h-3" />}
+                                <span className="text-xs">{acc.name}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
           </div>
 
