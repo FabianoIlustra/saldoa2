@@ -206,25 +206,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </section>
 
-      {/* AI Insight Card */}
-      <div 
-        onClick={onViewVisuals}
-        className="relative group mx-1 cursor-pointer"
-      >
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-[2.5rem] opacity-10 blur-sm group-hover:opacity-30 transition duration-1000"></div>
-        <div className="relative bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-5">
-          <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center shrink-0">
-            <Sparkles className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">Dica do Consultor IA</h4>
-            <p className="text-xs font-medium text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-2">
-              {loadingInsights ? "Analisando dados..." : insights?.summary || "Adicione lançamentos para receber insights personalizados sobre seu patrimônio."}
-            </p>
-          </div>
-          <ArrowRight className="w-4 h-4 text-slate-300" />
-        </div>
-      </div>
+      {/* AI Insight Card REMOVED */}
     </div>
   );
 };

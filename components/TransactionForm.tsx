@@ -20,7 +20,8 @@ interface TransactionFormProps {
     userId: string;
     accountId: string;
     isJoint?: boolean;
-    id?: string; // Optional ID for updates
+    id?: string;
+    installments?: number;
   }) => void;
   onClose: () => void;
 }
@@ -35,6 +36,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
   const [selectedUserId, setSelectedUserId] = useState(initialData?.userId || currentUser.id);
   const [selectedAccountId, setSelectedAccountId] = useState(initialData?.accountId || accounts[0]?.id || '');
   const [isJoint, setIsJoint] = useState(initialData?.isJoint ?? true);
+  const [installments, setInstallments] = useState(1);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +52,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
       userId: selectedUserId,
       accountId: selectedAccountId,
       isJoint,
-      id: initialData?.id
+      id: initialData?.id,
+      installments: type === 'EXPENSE' ? installments : 1
     });
     onClose();
   };
@@ -161,6 +164,24 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
                 <option key={cat.id} value={cat.name}>{cat.name}</option>
               ))}
             </select>
+
+            {/* Installments Field */}
+            {!initialData && type === 'EXPENSE' && (
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Parcelar em quantas vezes?</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={installments}
+                    onChange={(e) => setInstallments(parseInt(e.target.value) || 1)}
+                    className="w-24 px-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                  />
+                  <span className="text-xs font-bold text-slate-500">vezes (ex: 1/3, 2/3...)</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <button

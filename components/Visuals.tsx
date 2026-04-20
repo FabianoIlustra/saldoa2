@@ -2,17 +2,18 @@
 // Force sync
 import React, { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, AreaChart, Area, CartesianGrid, LabelList } from 'recharts';
-import { Transaction, Category, User, Account } from '../types';
+import { Transaction, Category, User, Account, RecurringTransaction } from '../types';
 import FilterBar, { FilterState } from './FilterBar';
-import { isWithinInterval, parseISO, format } from 'date-fns';
+import { isWithinInterval, parseISO, format, isBefore, isSameMonth, isSameYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, Clock, CheckCircle, AlertCircle, Calendar } from 'lucide-react';
 
 interface VisualsProps {
   transactions: Transaction[];
   categories: Category[];
   users: User[];
-  accounts: Account[]; // Added prop
+  accounts: Account[];
+  recurringTransactions: RecurringTransaction[];
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -31,12 +32,14 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, accounts }) => {
+const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, accounts, recurringTransactions }) => {
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: 'category' | 'type' | 'value', direction: 'asc' | 'desc' } | null>(null);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 
   const filteredTransactions = useMemo(() => {
     if (!currentFilters) return transactions;
+    // ... filtering logic ...
 
     return transactions.filter(t => {
         // Search
@@ -96,6 +99,48 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
   };
 
   const totalSummaryValue = categorySummary.reduce((sum, item) => sum + (item.type === 'INCOME' ? item.value : -item.value), 0);
+
+  const financialStats = useMemo(() => {
+    const targetDate = currentFilters ? currentFilters.currentDate : new Date();
+    
+    // 1. Current Paid Expenses in the period (filtered)
+    const paidExpenses = filteredTransactions
+      .filter(t => t.type === 'EXPENSE')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // 2. Map recurring transactions for the month to find Pending and Late
+    const monthRecs = recurringTransactions.filter(r => r.active && r.type === 'EXPENSE').map(rec => {
+        const isPaid = transactions.some(t => {
+            const tDate = parseISO(t.date);
+            return t.description === rec.description && 
+                   isSameMonth(tDate, targetDate) &&
+                   isSameYear(tDate, targetDate);
+        });
+
+        const dueDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), rec.dayOfMonth);
+        let status: 'pending' | 'late' | 'paid' = 'pending';
+        
+        if (isPaid) status = 'paid';
+        else if (isBefore(dueDate, new Date())) status = 'late';
+
+        return { ...rec, status, amount: rec.amount };
+    });
+
+    const plannedExpenses = monthRecs
+        .filter(r => r.status === 'pending')
+        .reduce((sum, r) => sum + r.amount, 0);
+    
+    const lateExpenses = monthRecs
+        .filter(r => r.status === 'late')
+        .reduce((sum, r) => sum + r.amount, 0);
+
+    return {
+        paidExpenses,
+        plannedExpenses,
+        lateExpenses,
+        totalCommitment: paidExpenses + plannedExpenses + lateExpenses
+    };
+  }, [filteredTransactions, recurringTransactions, transactions, currentFilters]);
 
   const expenseData = useMemo(() => {
     const data = filteredTransactions
@@ -164,15 +209,83 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
           onFilterChange={setCurrentFilters}
       />
 
-      {/* Summary Table */}
-      <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
-        <header className="mb-8">
-           <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Resumo por Categoria</h3>
-           <p className="text-xs text-slate-500 font-medium">Valores totais agrupados</p>
-        </header>
+      {/* Financial Indicators */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
+              <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl text-emerald-600">
+                      <CheckCircle className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Despesas Pagas</span>
+              </div>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.paidExpenses)}
+              </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
+              <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-xl text-blue-600">
+                      <Clock className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Despesas Previstas</span>
+              </div>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.plannedExpenses)}
+              </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
+              <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-rose-50 dark:bg-rose-900/30 rounded-xl text-rose-600">
+                      <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Despesas Atrasadas</span>
+              </div>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.lateExpenses)}
+              </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <Calendar className="w-12 h-12 text-indigo-500" />
+              </div>
+              <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-indigo-600">
+                      <Calendar className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Comprometimento Total</span>
+              </div>
+              <p className="text-2xl font-black text-slate-900 dark:text-white">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.totalCommitment)}
+              </p>
+          </div>
+      </div>
+
+      {/* Summary Table - Collapsible */}
+      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden transition-all">
+        <button 
+            onClick={() => setIsSummaryOpen(!isSummaryOpen)}
+            className="w-full p-8 md:p-10 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+        >
+            <div className="flex items-center gap-3">
+                <div className="text-indigo-600">
+                    <ArrowUpDown className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5 text-left">Resumo por Categoria</h3>
+                  <p className="text-xs text-slate-500 font-medium">Valores totais agrupados</p>
+                </div>
+            </div>
+            <div className={`p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 transition-transform duration-300 ${isSummaryOpen ? 'rotate-180' : ''}`}>
+                <ChevronDown className="w-5 h-5" />
+            </div>
+        </button>
         
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className={`transition-all duration-300 ease-in-out ${isSummaryOpen ? 'max-h-[2000px] opacity-100 p-8 md:p-10 pt-0 md:pt-0' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+          <div className="border-t border-slate-50 dark:border-slate-800 pt-8 overflow-x-auto">
+            <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800">
                 <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-400 cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => requestSort('category')}>
@@ -215,6 +328,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
           </table>
         </div>
       </div>
+    </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Distribuição de Gastos */}
