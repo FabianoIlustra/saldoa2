@@ -10,6 +10,8 @@ interface ValidationProps {
   transactions: Transaction[]; // To check if already paid
   onValidate: (transaction: Omit<Transaction, 'id' | 'isTemplate'>) => void;
   onDelete: (id: string) => void;
+  onUpdateRecurring: (rec: RecurringTransaction) => void;
+  onDeleteRecurring: (id: string) => void;
   currentDate: Date;
   categories: Category[];
   accounts: Account[];
@@ -18,7 +20,17 @@ interface ValidationProps {
 type SortField = 'dueDate' | 'description' | 'category' | 'amount' | 'status';
 type SortDirection = 'asc' | 'desc';
 
-const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransactions, transactions, onValidate, onDelete, currentDate: initialDate, categories, accounts }) => {
+const TransactionValidation: React.FC<ValidationProps> = ({ 
+  recurringTransactions, 
+  transactions, 
+  onValidate, 
+  onDelete, 
+  onUpdateRecurring,
+  onDeleteRecurring,
+  currentDate: initialDate, 
+  categories, 
+  accounts 
+}) => {
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [editAmount, setEditAmount] = useState<string>('');
   const [editDate, setEditDate] = useState<string>('');
@@ -28,6 +40,46 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
   
   const [sortField, setSortField] = useState<SortField>('dueDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Edit Template Mode
+  const [editingRecurring, setEditingRecurring] = useState<RecurringTransaction | null>(null);
+  const [recEditDesc, setRecEditDesc] = useState('');
+  const [recEditAmount, setRecEditAmount] = useState('');
+  const [recEditCategory, setRecEditCategory] = useState('');
+  const [recEditDay, setRecEditDay] = useState('');
+  const [recEditType, setRecEditType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
+  const [recEditAccount, setRecEditAccount] = useState('');
+  const [recEditIsJoint, setRecEditIsJoint] = useState(true);
+
+  const startEditRecurring = (rec: any) => {
+    // rec is the item from useMemo which has dueDate etc, but we find the original
+    const original = recurringTransactions.find(r => r.id === rec.id);
+    if (!original) return;
+
+    setEditingRecurring(original);
+    setRecEditDesc(original.description);
+    setRecEditAmount(original.amount.toString());
+    setRecEditCategory(original.category);
+    setRecEditDay(original.dayOfMonth.toString());
+    setRecEditType(original.type as 'INCOME' | 'EXPENSE');
+    setRecEditAccount(original.accountId);
+    setRecEditIsJoint(original.isJoint);
+  };
+
+  const handleSaveRecurring = () => {
+    if (!editingRecurring) return;
+    onUpdateRecurring({
+      ...editingRecurring,
+      description: recEditDesc,
+      amount: parseFloat(recEditAmount),
+      category: recEditCategory,
+      dayOfMonth: parseInt(recEditDay),
+      type: recEditType,
+      accountId: recEditAccount,
+      isJoint: recEditIsJoint
+    });
+    setEditingRecurring(null);
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -341,7 +393,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
                             <div className="flex items-center gap-1 justify-end">Valor <SortIcon field="amount" /></div>
                         </th>
                         <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">
-                            Ação
+                            Ações
                         </th>
                     </tr>
                 </thead>
@@ -374,28 +426,50 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
                             <td className={`p-4 font-black text-right ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                 {item.type === 'INCOME' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
                             </td>
-                            <td className="p-4 text-center">
-                                {item.status !== 'paid' ? (
-                                    <button 
-                                        onClick={() => handleClick(item)}
-                                        className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 dark:shadow-none"
-                                        title="Validar Pagamento"
-                                    >
-                                        <Check className="w-4 h-4" />
-                                    </button>
-                                ) : (
-                                    <button 
-                                        onClick={() => {
-                                            if (item.paidTransactionId && confirm('Deseja estornar este pagamento? O lançamento será removido do extrato.')) {
-                                                onDelete(item.paidTransactionId);
-                                            }
-                                        }}
-                                        className="bg-rose-100 text-rose-600 p-2 rounded-xl hover:bg-rose-200 transition-colors"
-                                        title="Estornar Pagamento"
-                                    >
-                                        <ArrowUpDown className="w-4 h-4" />
-                                    </button>
-                                )}
+                            <td className="p-4">
+                                <div className="flex items-center justify-center gap-2">
+                                    {item.status !== 'paid' ? (
+                                        <>
+                                            <button 
+                                                onClick={() => handleClick(item)}
+                                                className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 dark:shadow-none"
+                                                title="Validar Pagamento"
+                                            >
+                                                <Check className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                                onClick={() => startEditRecurring(item)}
+                                                className="p-2 text-slate-400 hover:text-indigo-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-xl"
+                                                title="Editar Regra"
+                                            >
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    if (confirm('Deseja excluir esta conta recorrente? Ela não aparecerá mais nos próximos meses.')) {
+                                                        onDeleteRecurring(item.id);
+                                                    }
+                                                }}
+                                                className="p-2 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-xl"
+                                                title="Excluir Regra"
+                                            >
+                                                <XCircle className="w-4 h-4" />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button 
+                                            onClick={() => {
+                                                if (item.paidTransactionId && confirm('Deseja estornar este pagamento? O lançamento será removido do extrato.')) {
+                                                    onDelete(item.paidTransactionId);
+                                                }
+                                            }}
+                                            className="bg-rose-100 text-rose-600 p-2 rounded-xl hover:bg-rose-200 transition-colors"
+                                            title="Estornar Pagamento"
+                                        >
+                                            <ArrowUpDown className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
                             </td>
                         </tr>
                     ))}
@@ -446,12 +520,32 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
                     </div>
 
                     {item.status !== 'paid' ? (
-                        <button 
-                            onClick={() => handleClick(item)}
-                            className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2"
-                        >
-                            <Check className="w-4 h-4" /> Validar Pagamento
-                        </button>
+                        <div className="flex gap-2 mt-4">
+                            <button 
+                                onClick={() => handleClick(item)}
+                                className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2"
+                            >
+                                <Check className="w-4 h-4" /> Validar
+                            </button>
+                            <button 
+                                onClick={() => startEditRecurring(item)}
+                                className="p-3 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-xl"
+                                title="Editar Regra"
+                            >
+                                <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    if (confirm('Deseja excluir esta conta recorrente? Ela não aparecerá mais nos próximos meses.')) {
+                                        onDeleteRecurring(item.id);
+                                    }
+                                }}
+                                className="p-3 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-xl"
+                                title="Excluir Regra"
+                            >
+                                <XCircle className="w-4 h-4" />
+                            </button>
+                        </div>
                     ) : (
                         <button 
                             onClick={() => {
@@ -543,6 +637,114 @@ const TransactionValidation: React.FC<ValidationProps> = ({ recurringTransaction
               >
                 <Check className="w-5 h-5" /> Confirmar Pagamento
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Recurring Modal */}
+      {editingRecurring && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2rem] shadow-2xl p-6 animate-in zoom-in-95 duration-200 overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">Editar Regra Recorrente</h3>
+              <button onClick={() => setEditingRecurring(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Descrição</label>
+                <input 
+                  type="text" 
+                  value={recEditDesc}
+                  onChange={e => setRecEditDesc(e.target.value)}
+                  className="w-full px-5 py-3 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Valor (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={recEditAmount}
+                    onChange={e => setRecEditAmount(e.target.value)}
+                    className="w-full px-5 py-3 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Dia do Mês</label>
+                  <select 
+                    value={recEditDay}
+                    onChange={e => setRecEditDay(e.target.value)}
+                    className="w-full px-5 py-3 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                  >
+                    {Array.from({length: 31}, (_, i) => i + 1).map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Categoria</label>
+                <select 
+                  value={recEditCategory}
+                  onChange={e => setRecEditCategory(e.target.value)}
+                  className="w-full px-5 py-3 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                >
+                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Tipo</label>
+                  <div className="flex bg-slate-50 dark:bg-slate-800 rounded-xl p-1">
+                    <button type="button" onClick={() => setRecEditType('INCOME')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${recEditType === 'INCOME' ? 'bg-white dark:bg-slate-600 text-emerald-600 shadow-sm' : 'text-slate-400'}`}>Receita</button>
+                    <button type="button" onClick={() => setRecEditType('EXPENSE')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${recEditType === 'EXPENSE' ? 'bg-white dark:bg-slate-600 text-rose-600 shadow-sm' : 'text-slate-400'}`}>Despesa</button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Conta</label>
+                  <select 
+                    value={recEditAccount}
+                    onChange={e => setRecEditAccount(e.target.value)}
+                    className="w-full px-5 py-3 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                  >
+                    {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 py-2">
+                <input 
+                  type="checkbox" 
+                  id="recEditIsJoint"
+                  checked={recEditIsJoint} 
+                  onChange={e => setRecEditIsJoint(e.target.checked)} 
+                  className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500" 
+                />
+                <label htmlFor="recEditIsJoint" className="font-bold text-slate-700 dark:text-slate-300 text-sm cursor-pointer">Lançamento Conjunto?</label>
+              </div>
+
+              <div className="pt-4 flex flex-col gap-3">
+                <button 
+                  onClick={handleSaveRecurring}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-indigo-100 dark:shadow-none transition-all flex items-center justify-center gap-2"
+                >
+                  <Check className="w-5 h-5" /> Salvar Alterações
+                </button>
+                <button 
+                  onClick={() => setEditingRecurring(null)}
+                  className="w-full bg-slate-100 dark:bg-slate-800 text-slate-500 py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
           </div>
         </div>
