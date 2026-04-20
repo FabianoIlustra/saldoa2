@@ -282,6 +282,8 @@ const AppContent: React.FC = () => {
               deleteTransaction(id);
               showToast('Lançamento estornado.');
             }}
+            onUpdateRecurring={updateRecurring}
+            onDeleteRecurring={deleteRecurring}
             currentDate={new Date()} // Could be state for month navigation
             categories={categories}
             accounts={accounts}
@@ -399,12 +401,14 @@ const AppContent: React.FC = () => {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-2 py-3 grid grid-cols-5 gap-1 z-50 safe-area-bottom">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-1 py-3 grid grid-cols-7 gap-0.5 z-50 safe-area-bottom">
         {[
           { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
           { id: 'transactions', icon: History, label: 'Extrato' },
+          { id: 'visuals', icon: CreditCard, label: 'Gráficos' },
           { id: 'cashflow', icon: TrendingUp, label: 'Fluxo' },
           { id: 'validation', icon: CalendarCheck, label: 'Validar' },
+          { id: 'ai', icon: MessageSquareCode, label: 'IA' },
           { id: 'settings', icon: Settings, label: 'Ajustes' },
         ].map(item => (
           <button 
