@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users } from 'lucide-react';
+import { LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users, ArrowUpCircle } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TransactionList from './components/TransactionList';
 import TransactionForm from './components/TransactionForm';
@@ -16,6 +16,7 @@ import Auth from './components/Auth';
 import CashFlow from './components/CashFlow';
 import TransactionValidation from './components/TransactionValidation';
 import { Transaction } from './types';
+import { addMonths, format, parseISO } from 'date-fns';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useFinancialData } from './hooks/useFinancialData';
 
@@ -149,7 +150,7 @@ const AppContent: React.FC = () => {
               { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
               { id: 'transactions', icon: History, label: 'Meu Extrato' },
               { id: 'cashflow', icon: TrendingUp, label: 'Fluxo de Caixa' },
-              { id: 'validation', icon: CalendarCheck, label: 'Validar' },
+              { id: 'validation', icon: CalendarCheck, label: 'Recorrentes' },
               { id: 'visuals', icon: CreditCard, label: 'Gráficos' },
               { id: 'goals', icon: Target, label: 'Metas' },
               { id: 'ai', icon: MessageSquareCode, label: 'Consultor IA' },
@@ -211,7 +212,7 @@ const AppContent: React.FC = () => {
               {activeTab === 'dashboard' ? 'Lançamentos' : 
                activeTab === 'transactions' ? 'Meu Extrato' :
                activeTab === 'cashflow' ? 'Fluxo de Caixa' :
-               activeTab === 'validation' ? 'Validar' :
+               activeTab === 'validation' ? 'Recorrentes' :
                activeTab === 'visuals' ? 'Gráficos' :
                activeTab === 'goals' ? 'Metas' :
                activeTab === 'settings' ? 'Configurações' :
@@ -296,6 +297,7 @@ const AppContent: React.FC = () => {
             categories={categories} 
             users={usersList} 
             accounts={accounts}
+            recurringTransactions={recurringTransactions}
           />
         )}
 
@@ -401,25 +403,25 @@ const AppContent: React.FC = () => {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-1 py-3 grid grid-cols-7 gap-0.5 z-50 safe-area-bottom">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-1 py-1 flex overflow-x-auto z-50 safe-area-bottom no-scrollbar">
         {[
           { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
           { id: 'transactions', icon: History, label: 'Extrato' },
-          { id: 'visuals', icon: CreditCard, label: 'Gráficos' },
-          { id: 'cashflow', icon: TrendingUp, label: 'Fluxo' },
-          { id: 'validation', icon: CalendarCheck, label: 'Validar' },
+          { id: 'visuals', icon: TrendingUp, label: 'Gráficos' },
+          { id: 'cashflow', icon: ArrowUpCircle, label: 'Fluxo' },
+          { id: 'validation', icon: CalendarCheck, label: 'Contas' },
           { id: 'ai', icon: MessageSquareCode, label: 'IA' },
           { id: 'settings', icon: Settings, label: 'Ajustes' },
         ].map(item => (
           <button 
             key={item.id}
             onClick={() => setActiveTab(item.id as TabType)}
-            className={`flex flex-col items-center justify-center gap-1 transition-all rounded-xl py-1 ${
+            className={`flex flex-col items-center justify-center gap-1 transition-all rounded-xl py-2 px-1 min-w-[56px] ${
               activeTab === item.id ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
             <item.icon className={`w-5 h-5 ${activeTab === item.id ? 'fill-current' : ''}`} />
-            <span className="text-[9px] font-bold truncate w-full text-center">{item.label}</span>
+            <span className="text-[8px] font-bold truncate w-full text-center">{item.label}</span>
           </button>
         ))}
       </nav>
@@ -436,8 +438,21 @@ const AppContent: React.FC = () => {
                   updateTransaction({ ...t, id: t.id } as Transaction);
                   showToast('Lançamento atualizado!');
               } else {
-                  addTransaction(t);
-                  showToast('Lançamento adicionado!');
+                  if (t.installments && t.installments > 1) {
+                      const baseDate = parseISO(t.date);
+                      for (let i = 0; i < t.installments; i++) {
+                          const newDate = addMonths(baseDate, i);
+                          addTransaction({
+                              ...t,
+                              description: `${t.description} (${i + 1}/${t.installments})`,
+                              date: format(newDate, 'yyyy-MM-dd')
+                          });
+                      }
+                      showToast(`${t.installments} parcelas adicionadas!`);
+                  } else {
+                      addTransaction(t);
+                      showToast('Lançamento adicionado!');
+                  }
               }
           }} 
           onClose={() => {
