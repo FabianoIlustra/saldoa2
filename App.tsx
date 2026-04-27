@@ -86,9 +86,15 @@ const AppContent: React.FC = () => {
   // Calculate Account Balances dynamically
   const accounts = useMemo(() => {
     return rawAccounts.map(account => {
-      const accountTransactions = transactions.filter(t => t.accountId === account.id);
-      const totalAmount = accountTransactions.reduce((sum, t) => {
-        return sum + (t.type === 'INCOME' ? t.amount : -t.amount);
+      const totalAmount = transactions.reduce((sum, t) => {
+        if (t.accountId === account.id) {
+          if (t.type === 'INCOME') return sum + t.amount;
+          return sum - t.amount; // EXPENSE or TRANSFER (source)
+        }
+        if (t.toAccountId === account.id && t.type === 'TRANSFER') {
+          return sum + t.amount; // TRANSFER (destination)
+        }
+        return sum;
       }, 0);
       return {
         ...account,

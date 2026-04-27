@@ -1,5 +1,5 @@
 
-export type TransactionType = 'INCOME' | 'EXPENSE';
+export type TransactionType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 export type RecurrenceType = 'NONE' | 'MONTHLY';
 
 export interface User {
@@ -58,12 +58,14 @@ export interface Transaction {
   isTemplate?: boolean;
   isJoint?: boolean;
   recurringTransactionId?: string; // Link to the recurring rule
+  toAccountId?: string; // Account ID for transfers
 }
 
 export interface RecurringTransaction {
   id: string;
   userId: string;
   accountId: string;
+  toAccountId?: string; // Account ID for transfers
   description: string;
   amount: number;
   type: TransactionType;
