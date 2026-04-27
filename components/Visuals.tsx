@@ -93,7 +93,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
            end: parseISO(currentFilters.dateRange.end)
         });
 
-        return matchesSearch && matchesType && matchesAccount && matchesCategory && matchesDate;
+        return matchesSearch && matchesType && matchesAccount && matchesCategory && matchesDate && t.type !== 'TRANSFER';
     });
   }, [transactions, currentFilters]);
 

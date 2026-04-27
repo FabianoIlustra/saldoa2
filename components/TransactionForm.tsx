@@ -2,7 +2,7 @@
 // Force sync
 import React, { useState } from 'react';
 import { Category, TransactionType, RecurrenceType, User, Account, Transaction } from '../types';
-import { X, Plus, Repeat, User as UserIcon, Check, CreditCard } from 'lucide-react';
+import { X, Plus, Repeat, User as UserIcon, Check, CreditCard, ArrowRightLeft } from 'lucide-react';
 
 interface TransactionFormProps {
   categories: Category[];
@@ -19,6 +19,7 @@ interface TransactionFormProps {
     recurrence: RecurrenceType;
     userId: string;
     accountId: string;
+    toAccountId?: string;
     isJoint?: boolean;
     id?: string;
     installments?: number;
@@ -35,6 +36,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
   const [recurrence, setRecurrence] = useState<RecurrenceType>(initialData?.recurrence || 'NONE');
   const [selectedUserId, setSelectedUserId] = useState(initialData?.userId || currentUser.id);
   const [selectedAccountId, setSelectedAccountId] = useState(initialData?.accountId || accounts[0]?.id || '');
+  const [toAccountId, setToAccountId] = useState(initialData?.toAccountId || '');
   const [isJoint, setIsJoint] = useState(initialData?.isJoint ?? true);
   const [installments, setInstallments] = useState(1);
 
@@ -51,6 +53,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
       recurrence,
       userId: selectedUserId,
       accountId: selectedAccountId,
+      toAccountId: type === 'TRANSFER' ? toAccountId : undefined,
       isJoint,
       id: initialData?.id,
       installments: type === 'EXPENSE' ? installments : 1
@@ -72,23 +75,78 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
         </div>
         
         <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
-          {/* Seletor de Conta - NOVIDADE */}
-          <div className="space-y-3">
-            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Vincular a qual conta?</label>
-            <div className="relative">
-              <select 
-                value={selectedAccountId}
-                onChange={e => setSelectedAccountId(e.target.value)}
-                required
-                className="w-full pl-12 pr-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none appearance-none font-bold transition-all"
-              >
-                <option value="" disabled>Selecione uma conta</option>
-                {accounts.map(acc => (
-                  <option key={acc.id} value={acc.id}>{acc.name} ({acc.type})</option>
-                ))}
-              </select>
-              <CreditCard className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="flex p-1.5 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => setType('INCOME')}
+              className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${type === 'INCOME' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}
+            >
+              Receita
+            </button>
+            <button
+              type="button"
+              onClick={() => setType('EXPENSE')}
+              className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${type === 'EXPENSE' ? 'bg-white shadow-sm text-rose-600' : 'text-slate-400'}`}
+            >
+              Despesa
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setType('TRANSFER');
+                setCategory('Transferência');
+              }}
+              className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${type === 'TRANSFER' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
+            >
+              Transf.
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-3">
+              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">
+                {type === 'TRANSFER' ? 'Conta de Origem' : 'Vincular a qual conta?'}
+              </label>
+              <div className="relative">
+                <select 
+                  value={selectedAccountId}
+                  onChange={e => setSelectedAccountId(e.target.value)}
+                  required
+                  className="w-full pl-12 pr-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none appearance-none font-bold transition-all"
+                >
+                  <option value="" disabled>Selecione uma conta</option>
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id} disabled={type === 'TRANSFER' && acc.id === toAccountId}>{acc.name} ({acc.type})</option>
+                  ))}
+                </select>
+                <CreditCard className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              </div>
             </div>
+
+            {type === 'TRANSFER' && (
+              <div className="space-y-3 pt-2 animate-in slide-in-from-top-2 duration-300">
+                <div className="flex justify-center -mb-6">
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 z-10 border-4 border-white dark:border-slate-900">
+                    <ArrowRightLeft className="w-4 h-4 rotate-90" />
+                  </div>
+                </div>
+                <label className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest ml-1 mt-1">Conta de Destino</label>
+                <div className="relative">
+                  <select 
+                    value={toAccountId}
+                    onChange={e => setToAccountId(e.target.value)}
+                    required={type === 'TRANSFER'}
+                    className="w-full pl-12 pr-5 py-4 bg-indigo-50/50 dark:bg-indigo-900/20 dark:text-white border-2 border-indigo-100 dark:border-indigo-800 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none appearance-none font-bold transition-all"
+                  >
+                    <option value="" disabled>Selecione o destino</option>
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id} disabled={acc.id === selectedAccountId}>{acc.name} ({acc.type})</option>
+                    ))}
+                  </select>
+                  <CreditCard className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400" />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
@@ -105,23 +163,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
              <label htmlFor="isJoint" className="cursor-pointer select-none text-sm font-bold text-slate-700 dark:text-slate-300">
                 Lançamento Conjunto
              </label>
-          </div>
-
-          <div className="flex p-1.5 bg-slate-100 dark:bg-slate-800 rounded-2xl">
-            <button
-              type="button"
-              onClick={() => setType('INCOME')}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${type === 'INCOME' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}
-            >
-              Receita
-            </button>
-            <button
-              type="button"
-              onClick={() => setType('EXPENSE')}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${type === 'EXPENSE' ? 'bg-white shadow-sm text-rose-600' : 'text-slate-400'}`}
-            >
-              Despesa
-            </button>
           </div>
 
           <div className="space-y-4">

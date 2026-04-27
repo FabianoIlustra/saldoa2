@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Transaction, User, Account, Category } from '../types';
-import { Trash2, Search, ShoppingCart, Home, Car, Utensils, Heart, Briefcase, GraduationCap, Repeat, User as UserIcon, Filter, ArrowUpCircle, ArrowDownCircle, Wallet, Printer, Upload, Edit2, Tag } from 'lucide-react';
+import { Trash2, Search, ShoppingCart, Home, Car, Utensils, Heart, Briefcase, GraduationCap, Repeat, User as UserIcon, Filter, ArrowUpCircle, ArrowDownCircle, Wallet, Printer, Upload, Edit2, Tag, ArrowRightLeft, ArrowRight as ArrowRightIcon } from 'lucide-react';
 import { format, isWithinInterval, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import FilterBar, { FilterState } from './FilterBar';
@@ -18,7 +18,8 @@ interface TransactionListProps {
   onBulkDelete?: (ids: string[]) => void;
 }
 
-const getCategoryIcon = (category: string) => {
+const getCategoryIcon = (category: string, type?: string) => {
+  if (type === 'TRANSFER') return <ArrowRightLeft className="w-4 h-4" />;
   switch (category) {
     case 'Alimentação': return <Utensils className="w-4 h-4" />;
     case 'Moradia': return <Home className="w-4 h-4" />;
@@ -343,10 +344,10 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                     <th onClick={() => handleSort('accountName')} className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:text-indigo-500 transition-colors whitespace-nowrap">
                         Banco {sortConfig.key === 'accountName' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                     </th>
-                    <th onClick={() => handleSort('amount')} className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:text-indigo-500 transition-colors whitespace-nowrap text-right pr-6">
+                    <th onClick={() => handleSort('amount')} className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:text-indigo-500 transition-colors whitespace-nowrap text-right pr-14">
                         Valor {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                     </th>
-                    <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right print:hidden">
+                    <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right pr-6 print:hidden">
                         Ações
                     </th>
                 </tr>
@@ -377,7 +378,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                             </td>
                             <td className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300">
                                 <span className="flex items-center gap-2">
-                                    {getCategoryIcon(t.category)}
+                                    {getCategoryIcon(t.category, t.type)}
                                     {t.category}
                                 </span>
                             </td>
@@ -388,12 +389,20 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                                 </div>
                             </td>
                             <td className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                {getAccountName(t.accountId)}
+                                {t.type === 'TRANSFER' ? (
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="max-w-[70px] truncate">{getAccountName(t.accountId)}</span>
+                                        <ArrowRightIcon className="w-3 h-3 text-slate-400" />
+                                        <span className="max-w-[70px] truncate">{getAccountName(t.toAccountId || '')}</span>
+                                    </div>
+                                ) : (
+                                    getAccountName(t.accountId)
+                                )}
                             </td>
-                            <td className={`p-4 text-xs font-black text-right whitespace-nowrap pr-6 ${t.type === 'INCOME' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                {t.type === 'INCOME' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                            <td className={`p-4 text-xs font-black text-right whitespace-nowrap pr-14 ${t.type === 'INCOME' ? 'text-emerald-500' : t.type === 'TRANSFER' ? 'text-blue-500' : 'text-rose-500'}`}>
+                                {t.type === 'INCOME' ? '+' : t.type === 'TRANSFER' ? '' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
                             </td>
-                            <td className="p-4 text-right print:hidden">
+                            <td className="p-4 text-right pr-6 print:hidden">
                                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     {onEdit && (
                                         <button 
@@ -422,6 +431,20 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
 
       {/* Mobile Cards View */}
       <div className="md:hidden space-y-4 print:hidden">
+        <div className="flex items-center justify-between px-2 mb-2">
+            <div className="flex items-center gap-2">
+                <input 
+                    type="checkbox" 
+                    id="mobile-select-all"
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    checked={filteredTransactions.length > 0 && selectedIds.size === filteredTransactions.length}
+                    onChange={handleToggleSelectAll}
+                />
+                <label htmlFor="mobile-select-all" className="text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer">
+                    Selecionar Todos
+                </label>
+            </div>
+        </div>
         {filteredTransactions.length === 0 ? (
           <div className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
             Nenhum resultado encontrado
@@ -435,8 +458,8 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
             >
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-xl ${t.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                    {getCategoryIcon(t.category)}
+                  <div className={`p-2 rounded-xl ${t.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : t.type === 'TRANSFER' ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-600'}`}>
+                    {getCategoryIcon(t.category, t.type)}
                   </div>
                   <div>
                     <h4 className="font-black text-slate-900 dark:text-white line-clamp-1 text-sm">{t.description}</h4>
@@ -461,11 +484,19 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
               <div className="flex justify-between items-end">
                 <div className="flex items-center gap-2">
                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getUserColor(t.userId) }} />
-                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{getAccountName(t.accountId)}</span>
+                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                     {t.type === 'TRANSFER' ? (
+                        <span className="flex items-center gap-1">
+                           {getAccountName(t.accountId)} <ArrowRightIcon className="w-2 h-2" /> {getAccountName(t.toAccountId || '')}
+                        </span>
+                     ) : (
+                        getAccountName(t.accountId)
+                     )}
+                   </span>
                 </div>
                 <div className="flex flex-col items-end">
-                   <p className={`text-lg font-black ${t.type === 'INCOME' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                      {t.type === 'INCOME' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                   <p className={`text-lg font-black ${t.type === 'INCOME' ? 'text-emerald-500' : t.type === 'TRANSFER' ? 'text-blue-500' : 'text-rose-500'}`}>
+                      {t.type === 'INCOME' ? '+' : t.type === 'TRANSFER' ? '' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
                    </p>
                    <div className="flex gap-4 mt-2">
                       {onEdit && (
