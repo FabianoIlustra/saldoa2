@@ -25,6 +25,9 @@ export interface Category {
   name: string;
   color: string;
   type?: 'INCOME' | 'EXPENSE';
+  limit?: number;
+  monitored?: boolean;
+  isEssential?: boolean;
 }
 
 export interface Goal {
