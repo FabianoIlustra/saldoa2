@@ -2,7 +2,7 @@
 // Force sync
 import React, { useState } from 'react';
 import { Category, Account, RecurringTransaction, TransactionType, Transaction, User } from '../types';
-import { Plus, Trash2, Tag, Download, Upload, ShieldCheck, CreditCard, Wallet, Banknote, Pencil, X, AlertTriangle, Calendar, Repeat, Users, Copy, LogOut, CheckCircle, Brain, Heart, Moon, Sun } from 'lucide-react';
+import { Plus, Trash2, Tag, Download, Upload, ShieldCheck, CreditCard, Wallet, Banknote, Pencil, X, AlertTriangle, Calendar, Repeat, Users, Copy, LogOut, CheckCircle, Brain, Heart, Moon, Sun, Target, ChevronDown } from 'lucide-react';
 import { getRandomColor } from '../constants';
 
 interface SettingsViewProps {
@@ -137,6 +137,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [categoryToEdit, setCategoryToEdit] = useState<Category | null>(null);
   const [editCatName, setEditCatName] = useState('');
   const [editCatColor, setEditCatColor] = useState('');
+  const [editCatLimit, setEditCatLimit] = useState('');
+  const [editCatMonitored, setEditCatMonitored] = useState(false);
+  const [editCatIsEssential, setEditCatIsEssential] = useState(false);
 
   const [recurringToEdit, setRecurringToEdit] = useState<RecurringTransaction | null>(null);
   const [editRecDesc, setEditRecDesc] = useState('');
@@ -201,6 +204,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     setCategoryToEdit(cat);
     setEditCatName(cat.name);
     setEditCatColor(cat.color);
+    setEditCatLimit(cat.limit?.toString() || '');
+    setEditCatMonitored(!!cat.monitored);
+    setEditCatIsEssential(!!cat.isEssential);
   };
 
   const openEditRecurringModal = (rec: RecurringTransaction) => {
@@ -236,7 +242,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       onUpdateCategory({
         ...categoryToEdit,
         name: editCatName,
-        color: editCatColor
+        color: editCatColor,
+        limit: editCatLimit ? parseFloat(editCatLimit) : undefined,
+        monitored: editCatMonitored,
+        isEssential: editCatIsEssential
       });
       setCategoryToEdit(null);
     }
@@ -493,7 +502,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
       {/* Categorias Personalizadas */}
       <CollapsibleSection 
-        title="Categorias" 
+        title="Categorias e Metas" 
         icon={<Tag className="w-8 h-8" />}
       >
         <form onSubmit={e => {
@@ -957,6 +966,60 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         className="w-12 h-12 rounded-xl border-none cursor-pointer bg-transparent"
                     />
                     <span className="text-xs font-mono text-slate-500">{editCatColor}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-lg">
+                            <Target className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Monitorar Limite?</p>
+                            <p className="text-[10px] text-slate-500">Exibir progresso na aba Gráficos</p>
+                        </div>
+                    </div>
+                    <button 
+                        type="button"
+                        onClick={() => setEditCatMonitored(!editCatMonitored)}
+                        className={`w-10 h-5 rounded-full relative transition-colors ${editCatMonitored ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                    >
+                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${editCatMonitored ? 'left-6' : 'left-1'}`} />
+                    </button>
+                </div>
+
+                {editCatMonitored && (
+                    <div className="animate-in slide-in-from-top-2 duration-200">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Limite Mensal (R$)</label>
+                        <input 
+                            type="number"
+                            step="0.01"
+                            placeholder="Ex: 500.00"
+                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold" 
+                            value={editCatLimit} 
+                            onChange={e => setEditCatLimit(e.target.value)} 
+                        />
+                    </div>
+                )}
+
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-lg">
+                            <ShieldCheck className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Gasto Essencial?</p>
+                            <p className="text-[10px] text-slate-500">Ex: Aluguel, Luz, Comida</p>
+                        </div>
+                    </div>
+                    <button 
+                        type="button"
+                        onClick={() => setEditCatIsEssential(!editCatIsEssential)}
+                        className={`w-10 h-5 rounded-full relative transition-colors ${editCatIsEssential ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                    >
+                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${editCatIsEssential ? 'left-6' : 'left-1'}`} />
+                    </button>
                 </div>
               </div>
               
