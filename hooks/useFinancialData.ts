@@ -86,7 +86,14 @@ export const useFinancialData = () => {
 
       // Fetch Import Rules
       try {
-        const { data: rules } = await supabase.from('import_rules').select('*');
+        let rulesQuery = supabase.from('import_rules').select('*');
+        if (profile.couple_id) {
+            rulesQuery = rulesQuery.or(`user_id.eq.${user.id},couple_id.eq.${profile.couple_id}`);
+        } else {
+            rulesQuery = rulesQuery.eq('user_id', user.id);
+        }
+
+        const { data: rules } = await rulesQuery;
         if (rules) {
           const rulesMap: Record<string, string> = {};
           rules.forEach(r => {
@@ -95,7 +102,7 @@ export const useFinancialData = () => {
           setImportRules(rulesMap);
         }
       } catch (e) {
-        console.warn('import_rules table not found, using localStorage fallback');
+        console.warn('import_rules table not found or query failed, using localStorage fallback');
       }
 
       // Fetch Accounts
@@ -126,7 +133,8 @@ export const useFinancialData = () => {
           createdAt: t.created_at, // Map created_at
           recurrence: t.recurrence as any,
           isJoint: t.is_joint,
-          isTemplate: t.is_template
+          isTemplate: t.is_template,
+          toAccountId: t.to_account_id
         })));
       }
 
@@ -190,7 +198,8 @@ export const useFinancialData = () => {
       date: t.date,
       recurrence: t.recurrence,
       is_joint: t.isJoint,
-      is_template: t.recurrence === 'MONTHLY'
+      is_template: t.recurrence === 'MONTHLY',
+      to_account_id: t.toAccountId
     }).select().single();
 
     if (error) {
@@ -221,6 +230,7 @@ export const useFinancialData = () => {
       date: t.date,
       recurrence: t.recurrence,
       account_id: t.accountId,
+      to_account_id: t.toAccountId,
       is_joint: t.isJoint
     }).eq('id', t.id);
 
@@ -317,6 +327,7 @@ export const useFinancialData = () => {
       category: r.category,
       day_of_month: r.dayOfMonth,
       is_joint: r.isJoint,
+      to_account_id: r.toAccountId,
       active: true
     }).select().single();
 
@@ -344,6 +355,7 @@ export const useFinancialData = () => {
           category: r.category,
           day_of_month: r.dayOfMonth,
           last_generated_date: r.lastGeneratedDate,
+          to_account_id: r.toAccountId,
           active: r.active,
           is_joint: r.isJoint
       }).eq('id', r.id);
