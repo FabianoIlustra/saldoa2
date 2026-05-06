@@ -439,26 +439,31 @@ const AppContent: React.FC = () => {
           accounts={accounts}
           currentUser={displayUser}
           initialData={editingTransaction || undefined}
-          onAdd={(t) => {
-              if (t.id) {
-                  updateTransaction({ ...t, id: t.id } as Transaction);
-                  showToast('Lançamento atualizado!');
-              } else {
-                  if (t.installments && t.installments > 1) {
-                      const baseDate = parseISO(t.date);
-                      for (let i = 0; i < t.installments; i++) {
-                          const newDate = addMonths(baseDate, i);
-                          addTransaction({
-                              ...t,
-                              description: `${t.description} (${i + 1}/${t.installments})`,
-                              date: format(newDate, 'yyyy-MM-dd')
-                          });
-                      }
-                      showToast(`${t.installments} parcelas adicionadas!`);
-                  } else {
-                      addTransaction(t);
-                      showToast('Lançamento adicionado!');
-                  }
+          onAdd={async (t) => {
+              try {
+                if (t.id) {
+                    await updateTransaction({ ...t, id: t.id } as Transaction);
+                    showToast('Lançamento atualizado!');
+                } else {
+                    if (t.installments && t.installments > 1) {
+                        const baseDate = parseISO(t.date);
+                        for (let i = 0; i < t.installments; i++) {
+                            const newDate = addMonths(baseDate, i);
+                            await addTransaction({
+                                ...t,
+                                description: `${t.description} (${i + 1}/${t.installments})`,
+                                date: format(newDate, 'yyyy-MM-dd')
+                            });
+                        }
+                        showToast(`${t.installments} parcelas adicionadas!`);
+                    } else {
+                        await addTransaction(t);
+                        showToast('Lançamento adicionado!');
+                    }
+                }
+              } catch (error: any) {
+                console.error('Erro ao salvar:', error);
+                showToast(`Erro ao salvar: ${error.message || 'Verifique sua conexão ou banco de dados'}`, 'info');
               }
           }} 
           onClose={() => {
