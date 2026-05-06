@@ -15,12 +15,13 @@ import LandingPage from './components/LandingPage';
 import Auth from './components/Auth';
 import CashFlow from './components/CashFlow';
 import TransactionValidation from './components/TransactionValidation';
+import InstallmentsView from './components/InstallmentsView';
 import { Transaction } from './types';
 import { addMonths, format, parseISO } from 'date-fns';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useFinancialData } from './hooks/useFinancialData';
 
-type TabType = 'dashboard' | 'transactions' | 'cashflow' | 'validation' | 'goals' | 'ai' | 'settings' | 'scanner' | 'visuals';
+type TabType = 'dashboard' | 'transactions' | 'cashflow' | 'validation' | 'parcelados' | 'goals' | 'ai' | 'settings' | 'scanner' | 'visuals';
 
 const AppContent: React.FC = () => {
   const { user, signOut, loading: authLoading } = useAuth();
@@ -32,6 +33,7 @@ const AppContent: React.FC = () => {
     accounts: rawAccounts, 
     goals, 
     recurringTransactions, 
+    installmentGroups,
     currentUserProfile,
     users,
     addTransaction,
@@ -47,6 +49,8 @@ const AppContent: React.FC = () => {
     addRecurring,
     deleteRecurring,
     updateRecurring,
+    addInstallmentGroup,
+    deleteInstallmentGroup,
     addCategory,
     updateCategory,
     deleteCategory,
@@ -157,6 +161,7 @@ const AppContent: React.FC = () => {
               { id: 'transactions', icon: History, label: 'Meu Extrato' },
               { id: 'cashflow', icon: TrendingUp, label: 'Fluxo de Caixa' },
               { id: 'validation', icon: CalendarCheck, label: 'Recorrentes' },
+              { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
               { id: 'visuals', icon: CreditCard, label: 'Gráficos' },
               { id: 'goals', icon: Target, label: 'Metas' },
               { id: 'ai', icon: MessageSquareCode, label: 'Consultor IA' },
@@ -219,6 +224,7 @@ const AppContent: React.FC = () => {
                activeTab === 'transactions' ? 'Meu Extrato' :
                activeTab === 'cashflow' ? 'Fluxo de Caixa' :
                activeTab === 'validation' ? 'Recorrentes' :
+               activeTab === 'parcelados' ? 'Parcelamentos' :
                activeTab === 'visuals' ? 'Gráficos' :
                activeTab === 'goals' ? 'Metas' :
                activeTab === 'settings' ? 'Configurações' :
@@ -294,6 +300,25 @@ const AppContent: React.FC = () => {
             currentDate={new Date()} // Could be state for month navigation
             categories={categories}
             accounts={accounts}
+          />
+        )}
+
+        {activeTab === 'parcelados' && (
+          <InstallmentsView 
+            installmentGroups={installmentGroups}
+            transactions={filteredTransactions}
+            onAdd={async (g) => {
+                await addInstallmentGroup(g);
+                showToast('Parcelamento criado e lançamentos gerados!');
+            }}
+            onDelete={async (id, deleteTrans) => {
+                await deleteInstallmentGroup(id, deleteTrans);
+                showToast(deleteTrans ? 'Parcelamento e lançamentos excluídos.' : 'Contrato de parcelamento excluído.');
+            }}
+            onValidate={addTransaction}
+            onDeleteTransaction={deleteTransaction}
+            accounts={accounts}
+            categories={categories}
           />
         )}
 
@@ -414,6 +439,7 @@ const AppContent: React.FC = () => {
         {[
           { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
           { id: 'transactions', icon: History, label: 'Extrato' },
+          { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
           { id: 'visuals', icon: TrendingUp, label: 'Gráficos' },
           { id: 'cashflow', icon: ArrowUpCircle, label: 'Fluxo' },
           { id: 'validation', icon: CalendarCheck, label: 'Contas' },
