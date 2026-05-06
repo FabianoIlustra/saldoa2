@@ -68,11 +68,10 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                                (t.type === 'TRANSFER' && t.toAccountId && currentFilters.accounts.includes(t.toAccountId));
         
         // Date Range
-        const tDate = parseISO(t.date);
-        const matchesDate = !currentFilters.dateRange.start || !currentFilters.dateRange.end || (
-            tDate >= parseISO(currentFilters.dateRange.start) && 
-            tDate <= parseISO(currentFilters.dateRange.end)
-        );
+        const tDate = t.date;
+        const start = currentFilters.dateRange.start.split('T')[0];
+        const end = currentFilters.dateRange.end.split('T')[0];
+        const matchesDate = tDate >= start && tDate <= end;
 
         return matchesSearch && matchesType && matchesAccount && matchesCategory && matchesDate;
     });

@@ -88,13 +88,11 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
         
         // Date Range
         if (!t.date) return false;
-        const tDate = parseISO(t.date);
-        if (isNaN(tDate.getTime())) return false;
+        const tDate = t.date;
+        const start = currentFilters.dateRange.start.split('T')[0];
+        const end = currentFilters.dateRange.end.split('T')[0];
         
-        const matchesDate = isWithinInterval(tDate, {
-           start: parseISO(currentFilters.dateRange.start),
-           end: parseISO(currentFilters.dateRange.end)
-        });
+        const matchesDate = tDate >= start && tDate <= end;
 
         return matchesSearch && matchesType && matchesAccount && matchesCategory && matchesDate;
     });
@@ -195,11 +193,17 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     const startOfThisWeek = startOfWeek(today, { locale: ptBR });
     
     const daySpent = transactions
-        .filter(t => t.type === 'EXPENSE' && isSameDay(parseISO(t.date), today))
+        .filter(t => t.type === 'EXPENSE' && t.date === format(today, 'yyyy-MM-dd'))
         .reduce((sum, t) => sum + t.amount, 0);
 
     const weekSpent = transactions
-        .filter(t => t.type === 'EXPENSE' && isWithinInterval(parseISO(t.date), { start: startOfThisWeek, end: today }))
+        .filter(t => {
+            if (t.type !== 'EXPENSE') return false;
+            const tDate = t.date;
+            const startStr = format(startOfThisWeek, 'yyyy-MM-dd');
+            const endStr = format(today, 'yyyy-MM-dd'); // week until today
+            return tDate >= startStr && tDate <= endStr;
+        })
         .reduce((sum, t) => sum + t.amount, 0);
 
     const monthSpent = normalizedTransactions

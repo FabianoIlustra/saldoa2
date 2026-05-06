@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Transaction, Account, Category } from '../types';
 import { Wallet, ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign, Calendar } from 'lucide-react';
 import FilterBar, { FilterState } from './FilterBar';
-import { parseISO } from 'date-fns';
+import { parseISO, format } from 'date-fns';
 
 interface CashFlowProps {
   transactions: Transaction[];
@@ -34,11 +34,11 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
                                (t.type === 'TRANSFER' && t.toAccountId && currentFilters.accounts.includes(t.toAccountId));
         
         // Date Range
-        const tDate = parseISO(t.date);
-        const matchesDate = !currentFilters.dateRange.start || !currentFilters.dateRange.end || (
-            tDate >= parseISO(currentFilters.dateRange.start) && 
-            tDate <= parseISO(currentFilters.dateRange.end)
-        );
+        const tDate = t.date; // already YYYY-MM-DD
+        const start = currentFilters.dateRange.start.split('T')[0];
+        const end = currentFilters.dateRange.end.split('T')[0];
+        
+        const matchesDate = tDate >= start && tDate <= end;
 
         return matchesSearch && matchesType && matchesAccount && matchesCategory && matchesDate;
     });
@@ -72,11 +72,11 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
       const initialSum = targetAccounts.reduce((sum, acc) => sum + acc.initialBalance, 0);
       
       // Sum all transactions for these accounts up to the end date of the filter
-      const endDate = currentFilters?.dateRange.end ? parseISO(currentFilters.dateRange.end) : new Date();
+      const endDateStr = currentFilters?.dateRange.end ? currentFilters.dateRange.end.split('T')[0] : format(new Date(), 'yyyy-MM-dd');
       
       const transactionsSum = transactions
         .filter(t => {
-            const dateMatch = parseISO(t.date) <= endDate;
+            const dateMatch = t.date <= endDateStr;
             const affectsTarget = targetAccountIds.includes(t.accountId) || 
                                  (t.type === 'TRANSFER' && t.toAccountId && targetAccountIds.includes(t.toAccountId));
             return dateMatch && affectsTarget;
@@ -269,9 +269,10 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
                             })
                             .filter(t => {
                                 if (!currentFilters) return true;
-                                const tDate = parseISO(t.date);
-                                return (!currentFilters.dateRange.start || tDate >= parseISO(currentFilters.dateRange.start)) &&
-                                       (!currentFilters.dateRange.end || tDate <= parseISO(currentFilters.dateRange.end));
+                                const tDate = t.date;
+                                const start = currentFilters.dateRange.start.split('T')[0];
+                                const end = currentFilters.dateRange.end.split('T')[0];
+                                return tDate >= start && tDate <= end;
                             })
                             .reduce((s, t) => s + t.amount, 0);
 
@@ -279,9 +280,10 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
                             .filter(t => t.accountId === acc.id && (t.type === 'EXPENSE' || t.type === 'TRANSFER'))
                             .filter(t => {
                                 if (!currentFilters) return true;
-                                const tDate = parseISO(t.date);
-                                return (!currentFilters.dateRange.start || tDate >= parseISO(currentFilters.dateRange.start)) &&
-                                       (!currentFilters.dateRange.end || tDate <= parseISO(currentFilters.dateRange.end));
+                                const tDate = t.date;
+                                const start = currentFilters.dateRange.start.split('T')[0];
+                                const end = currentFilters.dateRange.end.split('T')[0];
+                                return tDate >= start && tDate <= end;
                             })
                             .reduce((s, t) => s + t.amount, 0);
 

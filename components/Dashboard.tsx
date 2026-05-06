@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, FinancialAnalysis, Account } from '../types';
 import { ArrowUpRight, ArrowDownRight, Sparkles, CreditCard, Plus, Camera, Mic, ArrowRight, TrendingUp } from 'lucide-react';
 import { getFinancialInsights } from '../services/geminiService';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from 'date-fns';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -41,8 +41,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     const end = endOfMonth(now);
 
     const monthlyTransactions = transactions.filter(t => {
-      const date = parseISO(t.date);
-      return isWithinInterval(date, { start, end });
+      const tDate = t.date;
+      const startStr = format(start, 'yyyy-MM-dd');
+      const endStr = format(end, 'yyyy-MM-dd');
+      return tDate >= startStr && tDate <= endStr;
     });
 
     const income = monthlyTransactions

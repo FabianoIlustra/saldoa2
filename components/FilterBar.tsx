@@ -48,17 +48,22 @@ const FilterBar: React.FC<FilterBarProps> = ({ categories, accounts, onFilterCha
   });
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (catRef.current && !catRef.current.contains(event.target as Node)) {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (catRef.current && !catRef.current.contains(target)) {
         setCatsOpen(false);
       }
-      if (accRef.current && !accRef.current.contains(event.target as Node)) {
+      if (accRef.current && !accRef.current.contains(target)) {
         setAccsOpen(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   // Update parent whenever filters change
@@ -217,7 +222,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ categories, accounts, onFilterCha
                   <input 
                     type="date" 
                     value={filters.dateRange.start.split('T')[0]}
-                    onChange={(e) => setFilters(prev => ({ ...prev, dateRange: { ...prev.dateRange, start: new Date(e.target.value).toISOString() } }))}
+                    onChange={(e) => setFilters(prev => ({ ...prev, dateRange: { ...prev.dateRange, start: new Date(e.target.value + 'T00:00:00').toISOString() } }))}
                     className="bg-white dark:bg-slate-900 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500"
                   />
               </div>
@@ -226,7 +231,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ categories, accounts, onFilterCha
                   <input 
                     type="date" 
                     value={filters.dateRange.end.split('T')[0]}
-                    onChange={(e) => setFilters(prev => ({ ...prev, dateRange: { ...prev.dateRange, end: new Date(e.target.value).toISOString() } }))}
+                    onChange={(e) => setFilters(prev => ({ ...prev, dateRange: { ...prev.dateRange, end: new Date(e.target.value + 'T00:00:00').toISOString() } }))}
                     className="bg-white dark:bg-slate-900 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500"
                   />
               </div>
