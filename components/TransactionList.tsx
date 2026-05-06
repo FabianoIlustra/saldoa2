@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Transaction, User, Account, Category } from '../types';
-import { Trash2, Search, ShoppingCart, Home, Car, Utensils, Heart, Briefcase, GraduationCap, Repeat, User as UserIcon, Filter, ArrowUpCircle, ArrowDownCircle, Wallet, Printer, Upload, Edit2, Tag, ArrowRightLeft, ArrowRight as ArrowRightIcon } from 'lucide-react';
+import { Trash2, Search, ShoppingCart, Home, Car, Utensils, Heart, Briefcase, GraduationCap, Repeat, User as UserIcon, Filter, ArrowUpCircle, ArrowDownCircle, Wallet, Printer, Upload, Edit2, Tag, ArrowRightLeft, ArrowRight as ArrowRightIcon, AlertCircle, X } from 'lucide-react';
 import { format, isWithinInterval, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import FilterBar, { FilterState } from './FilterBar';
@@ -38,6 +38,8 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
   const [sortConfig, setSortConfig] = useState<{ key: keyof Transaction | 'createdAt' | 'userName' | 'accountName'; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
   const handleSort = (key: keyof Transaction | 'createdAt' | 'userName' | 'accountName') => {
     setSortConfig(current => ({
@@ -262,10 +264,15 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
 
   const handleBulkDelete = () => {
     if (onBulkDelete && selectedIds.size > 0) {
-      if (confirm(`Deseja excluir ${selectedIds.size} lançamentos selecionados?`)) {
-        onBulkDelete(Array.from(selectedIds));
-        setSelectedIds(new Set());
-      }
+      setBulkDeleteConfirm(true);
+    }
+  };
+
+  const confirmBulkDelete = () => {
+    if (onBulkDelete && selectedIds.size > 0) {
+      onBulkDelete(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      setBulkDeleteConfirm(false);
     }
   };
 
@@ -433,7 +440,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                                         </button>
                                     )}
                                     <button 
-                                        onClick={() => onDelete(t.id)}
+                                        onClick={() => setDeleteConfirmId(t.id)}
                                         className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
                                         title="Excluir"
                                     >
@@ -536,7 +543,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                       <button 
                           onClick={(e) => {
                             e.stopPropagation();
-                            onDelete(t.id);
+                            setDeleteConfirmId(t.id);
                           }}
                           className="text-[10px] font-black uppercase tracking-widest text-rose-500"
                       >
@@ -646,6 +653,67 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Delete Confirmation Modal (Single) */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 border border-slate-100 dark:border-slate-800 overflow-hidden text-center">
+            <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-2xl flex items-center justify-center mx-auto mb-6 text-rose-500">
+                <AlertCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Excluir Lançamento?</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-8">
+              Esta ação não pode ser desfeita. O saldo da conta será ajustado automaticamente.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => setDeleteConfirmId(null)}
+                className="w-full py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => {
+                   if (deleteConfirmId) onDelete(deleteConfirmId);
+                   setDeleteConfirmId(null);
+                }}
+                className="w-full py-4 bg-rose-500 text-white rounded-2xl font-bold hover:bg-rose-600 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {bulkDeleteConfirm && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 border border-slate-100 dark:border-slate-800 overflow-hidden text-center">
+            <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-2xl flex items-center justify-center mx-auto mb-6 text-rose-500">
+                <AlertCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Excluir {selectedIds.size} itens?</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-8">
+              Você selecionou múltiplos lançamentos. Deseja realmente excluir todos eles?
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => setBulkDeleteConfirm(false)}
+                className="w-full py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmBulkDelete}
+                className="w-full py-4 bg-rose-500 text-white rounded-2xl font-bold hover:bg-rose-600 transition-all active:scale-95"
+              >
+                Excluir Tudo
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
