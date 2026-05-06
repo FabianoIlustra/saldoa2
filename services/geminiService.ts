@@ -3,7 +3,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Transaction, Category } from "../types";
 
 export const getFinancialInsights = async (transactions: Transaction[]): Promise<any> => {
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+  const ai = new GoogleGenAI({ apiKey });
   const prompt = `
     Analise as seguintes transações financeiras e forneça insights inteligentes para o usuário.
     Transações: ${JSON.stringify(transactions)}
@@ -16,7 +17,7 @@ export const getFinancialInsights = async (transactions: Transaction[]): Promise
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -30,7 +31,8 @@ export const getFinancialInsights = async (transactions: Transaction[]): Promise
 };
 
 export const parseStatement = async (rawText: string, categories: Category[]): Promise<Partial<Transaction>[]> => {
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+  const ai = new GoogleGenAI({ apiKey });
   const categoryNames = categories.map(c => c.name).join(", ");
   
   const prompt = `
@@ -44,7 +46,7 @@ export const parseStatement = async (rawText: string, categories: Category[]): P
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -73,7 +75,8 @@ export const parseStatement = async (rawText: string, categories: Category[]): P
 };
 
 export const analyzeReceiptImage = async (base64Image: string, categories: Category[]): Promise<Partial<Transaction>> => {
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+  const ai = new GoogleGenAI({ apiKey });
   const categoryNames = categories.map(c => c.name).join(", ");
 
   const prompt = `Analise este recibo/nota fiscal e extraia os dados financeiros.
@@ -83,7 +86,7 @@ export const analyzeReceiptImage = async (base64Image: string, categories: Categ
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
+      model: "gemini-3-flash-preview",
       contents: [
         {
           inlineData: {
@@ -117,7 +120,8 @@ export const analyzeReceiptImage = async (base64Image: string, categories: Categ
 };
 
 export const parseStatementFile = async (base64Data: string, mimeType: string, categories: Category[]): Promise<Partial<Transaction>[]> => {
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+  const ai = new GoogleGenAI({ apiKey });
   const categoryNames = categories.map(c => c.name).join(", ");
   
   const prompt = `
@@ -138,7 +142,7 @@ export const parseStatementFile = async (base64Data: string, mimeType: string, c
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
+      model: "gemini-3-flash-preview",
       contents: [
         {
           inlineData: {
