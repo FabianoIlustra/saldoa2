@@ -81,7 +81,9 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
         const matchesCategory = currentFilters.categories.length === 0 || currentFilters.categories.includes(t.category);
         
         // Accounts
-        const matchesAccount = currentFilters.accounts.length === 0 || currentFilters.accounts.includes(t.accountId);
+        const matchesAccount = currentFilters.accounts.length === 0 || 
+                               currentFilters.accounts.includes(t.accountId) ||
+                               (t.type === 'TRANSFER' && t.toAccountId && currentFilters.accounts.includes(t.toAccountId));
         
         // Date Range
         if (!t.date) return false;
@@ -271,7 +273,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     let currentBalance = 0;
     const history = sorted.reduce((acc: any[], t) => {
       const date = parseISO(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-      const change = t.type === 'INCOME' ? t.amount : -t.amount;
+      const change = t.type === 'INCOME' ? t.amount : (t.type === 'EXPENSE' ? -t.amount : 0);
       currentBalance += change;
       
       const existing = acc.find(item => item.name === date);
@@ -295,7 +297,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
          if (!acc[key]) acc[key] = { name: key, receitas: 0, despesas: 0 };
          
          if (t.type === 'INCOME') acc[key].receitas += t.amount;
-         else acc[key].despesas += t.amount;
+         else if (t.type === 'EXPENSE') acc[key].despesas += t.amount;
          
          return acc;
      }, {});
