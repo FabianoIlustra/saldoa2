@@ -1,12 +1,13 @@
 
 // Force sync
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, Loader2, BrainCircuit, Mic, MicOff, Volume2, Trash2 } from 'lucide-react';
-import { Transaction, ChatMessage, User } from '../types';
+import { Sparkles, Send, Loader2, BrainCircuit, Mic, MicOff, Volume2, Trash2, AlertCircle } from 'lucide-react';
+import { Transaction, ChatMessage, User, Account } from '../types';
 import { GoogleGenAI, Modality, Type, LiveServerMessage } from "@google/genai";
 
 interface AIConsultantProps {
   transactions: Transaction[];
+  accounts: Account[];
   currentUser: User;
   onAddTransaction: (data: any) => void;
   autoStartVoice?: boolean;
@@ -35,17 +36,20 @@ function createBlob(data: Float32Array): any {
   };
 }
 
-const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, onAddTransaction, autoStartVoice, onVoiceHandled }) => {
+const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, currentUser, onAddTransaction, autoStartVoice, onVoiceHandled }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   
   // Refs para sessão de voz
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioQueueRef = useRef<Int16Array[]>([]);
+  const isPlayingRef = useRef(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -65,12 +69,42 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
       stopVoice();
       return;
     }
+    setVoiceError(null);
     startVoice();
+  };
+
+  const playAudioQueue = async () => {
+    if (isPlayingRef.current || audioQueueRef.current.length === 0 || !audioContextRef.current) return;
+    
+    isPlayingRef.current = true;
+    const audioCtx = audioContextRef.current;
+
+    while (audioQueueRef.current.length > 0 && audioCtx.state !== 'closed') {
+      const data = audioQueueRef.current.shift()!;
+      const float32 = new Float32Array(data.length);
+      for (let i = 0; i < data.length; i++) {
+        float32[i] = data[i] / 32768;
+      }
+
+      const buffer = audioCtx.createBuffer(1, float32.length, 16000);
+      buffer.getChannelData(0).set(float32);
+      
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      
+      await new Promise<void>((resolve) => {
+        source.onended = () => resolve();
+        source.start();
+      });
+    }
+    
+    isPlayingRef.current = false;
   };
 
   const startVoice = async () => {
     try {
-      setIsVoiceActive(true);
+      setVoiceError(null);
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
@@ -78,8 +112,10 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
         await audioCtx.resume();
       }
       audioContextRef.current = audioCtx;
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      setIsVoiceActive(true);
 
       const registrarTransacaoTool = {
         name: 'registrar_transacao',
@@ -130,20 +166,40 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createBlob(inputData);
-              sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
+              sessionPromise.then(session => session.sendRealtimeInput({
+                audio: { 
+                  mimeType: 'audio/pcm;rate=16000',
+                  data: pcmBlob.data
+                }
+              }));
             };
             source.connect(scriptProcessor);
             scriptProcessor.connect(audioCtx.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
+            // Audio response from AI
+            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            if (base64Audio) {
+              const binary = atob(base64Audio);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+              }
+              const int16 = new Int16Array(bytes.buffer);
+              audioQueueRef.current.push(int16);
+              playAudioQueue();
+            }
+
             if (message.toolCall) {
               for (const fc of message.toolCall.functionCalls) {
                 if (fc.name === 'registrar_transacao') {
                   const data = fc.args as any;
+                  const targetAccount = accounts[0]?.id || 'default';
+                  
                   onAddTransaction({
                     ...data,
                     userId: currentUser.id,
-                    accountId: 'default',
+                    accountId: targetAccount,
                     date: new Date().toISOString().split('T')[0],
                     recurrence: 'NONE'
                   });
@@ -155,13 +211,11 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
 
                   sessionPromise.then(session => {
                     session.sendToolResponse({
-                      functionResponses: { id: fc.id, name: fc.name, response: { result: "Transação registrada!" } }
+                      functionResponses: [{ id: fc.id, name: fc.name, response: { result: "Transação registrada!" } }]
                     });
                   });
                 } else if (fc.name === 'registrar_transferencia') {
                    const data = fc.args as any;
-                   // Em um cenário real, buscaríamos os IDs das contas pelo nome.
-                   // Aqui simplificamos ou abrimos o formulário para completar.
                    onAddTransaction({
                      description: data.description,
                      amount: data.amount,
@@ -179,7 +233,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
 
                   sessionPromise.then(session => {
                     session.sendToolResponse({
-                      functionResponses: { id: fc.id, name: fc.name, response: { result: "Transferência preparada!" } }
+                      functionResponses: [{ id: fc.id, name: fc.name, response: { result: "Transferência preparada!" } }]
                     });
                   });
                 }
@@ -188,6 +242,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
           },
           onerror: (e) => {
             console.error("Erro voz:", e);
+            setVoiceError("Ocorreu um erro na conexão de voz.");
             stopVoice();
           },
           onclose: () => stopVoice()
@@ -195,8 +250,9 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
       });
 
       sessionRef.current = await sessionPromise;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Falha ao iniciar voz:", err);
+      setVoiceError(err.message || "Não foi possível acessar o microfone.");
       setIsVoiceActive(false);
     }
   };
@@ -204,7 +260,9 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
   const stopVoice = () => {
     setIsVoiceActive(false);
     if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-    if (audioContextRef.current) audioContextRef.current.close();
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(e => console.error("Erro ao fechar AudioContext:", e));
+    }
     if (sessionRef.current) sessionRef.current.close();
   };
 
@@ -251,6 +309,11 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
           </div>
         </div>
         <div className="flex gap-2">
+          {voiceError && (
+            <div className="bg-rose-500/20 text-rose-300 text-[10px] px-3 py-1 rounded-full flex items-center gap-1 border border-rose-500/30">
+              <AlertCircle className="w-3 h-3" /> {voiceError}
+            </div>
+          )}
           <button onClick={() => setMessages([])} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
             <Trash2 className="w-5 h-5 text-slate-400" />
           </button>
@@ -264,9 +327,16 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
               <Sparkles className="w-10 h-10 text-indigo-600 dark:text-indigo-400" />
             </div>
             <h4 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Olá, {currentUser.name.split(' ')[0]}!</h4>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
               Diga: "Registrar gasto de 20 reais com mercado" ou pergunte sobre seu saldo atual.
             </p>
+            
+            <button 
+              onClick={toggleVoice}
+              className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 dark:shadow-none"
+            >
+              <Mic className="w-5 h-5" /> Ativar Microfone
+            </button>
           </div>
         )}
 
