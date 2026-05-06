@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
-import { Transaction, Category, Account, Goal, RecurringTransaction, User } from '../types';
+import { Transaction, Category, Account, Goal, RecurringTransaction, User, InstallmentGroup } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { DEFAULT_CATEGORIES } from '../constants';
 
@@ -12,6 +12,7 @@ export const useFinancialData = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
+  const [installmentGroups, setInstallmentGroups] = useState<InstallmentGroup[]>([]);
   const [currentUserProfile, setCurrentUserProfile] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [importRules, setImportRules] = useState<Record<string, string>>({});
@@ -105,23 +106,11 @@ export const useFinancialData = () => {
         console.warn('import_rules table not found or query failed, using localStorage fallback');
       }
 
-      // Fetch Accounts
-      const { data: accs } = await supabase.from('accounts').select('*');
-      if (accs) {
-        setAccounts(accs.map(a => ({
-          id: a.id,
-          name: a.name,
-          type: a.type as any,
-          initialBalance: Number(a.initial_balance),
-          currentBalance: 0, // Calculated later
-          color: a.color || '#6366f1'
-        })));
-      }
-
       // Fetch Transactions
       const { data: trans } = await supabase.from('transactions').select('*');
+      let mappedTransactions: Transaction[] = [];
       if (trans) {
-        setTransactions(trans.map(t => ({
+        mappedTransactions = trans.map(t => ({
           id: t.id,
           userId: t.user_id,
           accountId: t.account_id,
@@ -130,12 +119,43 @@ export const useFinancialData = () => {
           type: t.type as any,
           category: t.category,
           date: t.date,
-          createdAt: t.created_at, // Map created_at
+          createdAt: t.created_at,
           recurrence: t.recurrence as any,
           isJoint: t.is_joint,
           isTemplate: t.is_template,
+          installmentGroupId: t.installment_group_id || undefined,
+          installmentNumber: t.installment_number || undefined,
+          totalInstallments: t.total_installments || undefined,
           toAccountId: t.to_account_id || undefined
-        })));
+        }));
+        setTransactions(mappedTransactions);
+      }
+
+      // Fetch Accounts
+      const { data: accs } = await supabase.from('accounts').select('*');
+      if (accs) {
+        setAccounts(accs.map(a => {
+          const accountTransactions = mappedTransactions.filter(t => t.accountId === a.id || (t.type === 'TRANSFER' && t.toAccountId === a.id));
+          let currentBalance = Number(a.initial_balance);
+          
+          mappedTransactions.forEach(t => {
+            if (t.accountId === a.id) {
+              if (t.type === 'INCOME') currentBalance += Number(t.amount);
+              else if (t.type === 'EXPENSE' || t.type === 'TRANSFER') currentBalance -= Number(t.amount);
+            } else if (t.type === 'TRANSFER' && t.toAccountId === a.id) {
+              currentBalance += Number(t.amount);
+            }
+          });
+
+          return {
+            id: a.id,
+            name: a.name,
+            type: a.type as any,
+            initialBalance: Number(a.initial_balance),
+            currentBalance,
+            color: a.color || '#6366f1'
+          };
+        }));
       }
 
       // Fetch Goals
@@ -169,6 +189,31 @@ export const useFinancialData = () => {
           toAccountId: r.to_account_id || undefined,
           isJoint: r.is_joint
         })));
+      }
+
+      // Fetch Installments
+      try {
+        const { data: inst, error: instError } = await supabase.from('installment_groups').select('*');
+        if (!instError && inst) {
+          setInstallmentGroups(inst.map(i => ({
+            id: i.id,
+            userId: i.user_id,
+            accountId: i.account_id,
+            description: i.description,
+            totalAmount: Number(i.total_amount),
+            installmentAmount: Number(i.installment_amount),
+            totalInstallments: i.total_installments,
+            startDate: i.start_date,
+            interval_days: i.interval_days,
+            intervalDays: i.interval_days,
+            category: i.category,
+            type: i.type as any,
+            active: i.active,
+            isJoint: i.is_joint
+          })));
+        }
+      } catch (e) {
+        console.warn('installment_groups table not found');
       }
 
     } catch (error) {
@@ -205,6 +250,10 @@ export const useFinancialData = () => {
     if (t.type === 'TRANSFER' && t.toAccountId && t.toAccountId.trim() !== '') {
       payload.to_account_id = t.toAccountId;
     }
+
+    if (t.installmentGroupId) payload.installment_group_id = t.installmentGroupId;
+    if (t.installmentNumber) payload.installment_number = t.installmentNumber;
+    if (t.totalInstallments) payload.total_installments = t.totalInstallments;
 
     const { data, error } = await supabase.from('transactions').insert(payload).select().single();
 
@@ -244,6 +293,19 @@ export const useFinancialData = () => {
         createdAt: data.created_at
       };
       setTransactions(prev => [newTrans, ...prev]);
+      
+      // Update account balance locally
+      setAccounts(prev => prev.map(acc => {
+        if (acc.id === newTrans.accountId) {
+          const balanceDiff = newTrans.type === 'INCOME' ? newTrans.amount : (newTrans.type === 'EXPENSE' || newTrans.type === 'TRANSFER' ? -newTrans.amount : 0);
+          return { ...acc, currentBalance: (acc.currentBalance || 0) + balanceDiff };
+        }
+        if (newTrans.type === 'TRANSFER' && acc.id === newTrans.toAccountId) {
+          return { ...acc, currentBalance: (acc.currentBalance || 0) + newTrans.amount };
+        }
+        return acc;
+      }));
+
       return newTrans;
     }
   };
@@ -264,6 +326,10 @@ export const useFinancialData = () => {
       payload.to_account_id = t.toAccountId;
     }
 
+    if (t.installmentGroupId) payload.installment_group_id = t.installmentGroupId;
+    if (t.installmentNumber) payload.installment_number = t.installmentNumber;
+    if (t.totalInstallments) payload.total_installments = t.totalInstallments;
+
     const { error } = await supabase.from('transactions').update(payload).eq('id', t.id);
 
     if (error) {
@@ -280,13 +346,50 @@ export const useFinancialData = () => {
   };
 
   const deleteTransaction = async (id: string) => {
-    await supabase.from('transactions').delete().eq('id', id);
-    setTransactions(prev => prev.filter(t => t.id !== id));
+    const transToDelete = transactions.find(t => t.id === id);
+    const { error } = await supabase.from('transactions').delete().eq('id', id);
+    if (!error) {
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      
+      // Update account balance locally
+      if (transToDelete && transToDelete.accountId) {
+        setAccounts(prev => prev.map(acc => {
+          if (acc.id === transToDelete.accountId) {
+            const amount = transToDelete.amount;
+            // If it was an expense or transfer, adding back increases balance. If income, decreases.
+            const balanceDiff = transToDelete.type === 'INCOME' ? -amount : (transToDelete.type === 'EXPENSE' || transToDelete.type === 'TRANSFER' ? amount : 0);
+            return { ...acc, currentBalance: (acc.currentBalance || 0) + balanceDiff };
+          }
+          // Handle transfer destination account
+          if (transToDelete.type === 'TRANSFER' && acc.id === transToDelete.toAccountId) {
+            return { ...acc, currentBalance: (acc.currentBalance || 0) - transToDelete.amount };
+          }
+          return acc;
+        }));
+      }
+    }
   };
 
   const bulkDeleteTransactions = async (ids: string[]) => {
-    await supabase.from('transactions').delete().in('id', ids);
-    setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+    const transactionsToDelete = transactions.filter(t => ids.includes(t.id));
+    const { error } = await supabase.from('transactions').delete().in('id', ids);
+    if (!error) {
+      setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+      
+      // Update account balances locally
+      setAccounts(prev => prev.map(acc => {
+        let newBalance = acc.currentBalance || 0;
+        transactionsToDelete.forEach(t => {
+          if (t.accountId === acc.id) {
+            newBalance += (t.type === 'INCOME' ? -t.amount : (t.type === 'EXPENSE' ? t.amount : 0));
+          }
+          if (t.type === 'TRANSFER' && t.toAccountId === acc.id) {
+            newBalance -= t.amount;
+          }
+        });
+        return { ...acc, currentBalance: newBalance };
+      }));
+    }
   };
 
   const addAccount = async (a: Omit<Account, 'id' | 'currentBalance'>) => {
@@ -433,6 +536,102 @@ export const useFinancialData = () => {
         throw error;
       }
       setRecurringTransactions(prev => prev.map(rec => rec.id === r.id ? r : rec));
+  };
+
+  const addInstallmentGroup = async (g: Omit<InstallmentGroup, 'id' | 'active'>) => {
+    if (!user) return;
+    
+    // First, save the group/contract
+    const payload: any = {
+      user_id: user.id,
+      account_id: g.accountId,
+      description: g.description,
+      total_amount: g.totalAmount,
+      installment_amount: g.installmentAmount,
+      total_installments: g.totalInstallments,
+      start_date: g.startDate,
+      interval_days: g.intervalDays,
+      category: g.category,
+      type: g.type,
+      is_joint: g.isJoint,
+      active: true
+    };
+
+    const { data: groupData, error: groupError } = await supabase
+      .from('installment_groups')
+      .insert(payload)
+      .select()
+      .single();
+
+    if (groupError) throw groupError;
+
+    if (groupData) {
+      const newGroup: InstallmentGroup = {
+        ...g,
+        id: groupData.id,
+        active: true
+      };
+      setInstallmentGroups(prev => [...prev, newGroup]);
+
+      // Generate the transactions automatically
+      const transactionsToCreate = [];
+      const baseDate = new Date(g.startDate);
+      
+      for (let i = 0; i < g.totalInstallments; i++) {
+        const transDate = new Date(baseDate);
+        transDate.setDate(baseDate.getDate() + (i * g.intervalDays));
+        
+        const transPayload: any = {
+          user_id: user.id,
+          account_id: g.accountId,
+          description: `${g.description} (${i + 1}/${g.totalInstallments})`,
+          amount: g.installmentAmount,
+          type: g.type,
+          category: g.category,
+          date: transDate.toISOString().split('T')[0],
+          installment_group_id: groupData.id,
+          installment_number: i + 1,
+          total_installments: g.totalInstallments,
+          is_joint: g.isJoint
+        };
+        transactionsToCreate.push(transPayload);
+      }
+
+      const { data: transData, error: transError } = await supabase
+        .from('transactions')
+        .insert(transactionsToCreate)
+        .select();
+
+      if (!transError && transData) {
+        const mappedTransactions: Transaction[] = transData.map(t => ({
+          id: t.id,
+          userId: t.user_id,
+          accountId: t.account_id,
+          description: t.description,
+          amount: Number(t.amount),
+          type: t.type as any,
+          category: t.category,
+          date: t.date,
+          createdAt: t.created_at,
+          installmentGroupId: t.installment_group_id,
+          installmentNumber: t.installment_number,
+          totalInstallments: t.total_installments,
+          isJoint: t.is_joint
+        }));
+        setTransactions(prev => [...mappedTransactions, ...prev]);
+      }
+      
+      return newGroup;
+    }
+  };
+
+  const deleteInstallmentGroup = async (id: string, deleteTransactions: boolean = false) => {
+    if (deleteTransactions) {
+      await supabase.from('transactions').delete().eq('installment_group_id', id);
+      setTransactions(prev => prev.filter(t => t.installmentGroupId !== id));
+    }
+    await supabase.from('installment_groups').delete().eq('id', id);
+    setInstallmentGroups(prev => prev.filter(g => g.id !== id));
   };
 
   const addCategory = async (c: Omit<Category, 'id'> | Category) => {
@@ -710,6 +909,7 @@ export const useFinancialData = () => {
     accounts,
     goals,
     recurringTransactions,
+    installmentGroups,
     currentUserProfile,
     users,
     addTransaction,
@@ -725,6 +925,8 @@ export const useFinancialData = () => {
     addRecurring,
     deleteRecurring,
     updateRecurring,
+    addInstallmentGroup,
+    deleteInstallmentGroup,
     addCategory,
     updateCategory,
     deleteCategory,
