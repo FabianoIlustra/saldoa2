@@ -81,28 +81,33 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ categories, accounts, o
                 
                 <div className="grid grid-cols-2 gap-4 w-full">
                   <button 
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'image/*';
+                        input.capture = 'environment';
+                        input.onchange = (e) => handleFileChange(e as any);
+                        input.click();
+                    }}
                     className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 hover:border-indigo-500 transition-all shadow-sm"
                   >
                     <Camera className="w-6 h-6 text-indigo-600" />
                     <span className="text-xs font-bold uppercase tracking-widest">Câmera</span>
                   </button>
                   <button 
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'image/*';
+                        input.onchange = (e) => handleFileChange(e as any);
+                        input.click();
+                    }}
                     className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 hover:border-indigo-500 transition-all shadow-sm"
                   >
                     <Upload className="w-6 h-6 text-indigo-600" />
                     <span className="text-xs font-bold uppercase tracking-widest">Galeria</span>
                   </button>
                 </div>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  className="hidden" 
-                  accept="image/*" 
-                  capture="environment" 
-                  onChange={handleFileChange} 
-                />
               </div>
             </div>
           ) : (
