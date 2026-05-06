@@ -401,8 +401,22 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                                     getAccountName(t.accountId)
                                 )}
                             </td>
-                            <td className={`p-4 text-xs font-black text-right whitespace-nowrap pr-14 ${t.type === 'INCOME' ? 'text-emerald-500' : t.type === 'TRANSFER' ? 'text-blue-500' : 'text-rose-500'}`}>
-                                {t.type === 'INCOME' ? '+' : t.type === 'TRANSFER' ? '' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                            <td className={`p-4 text-xs font-black text-right whitespace-nowrap pr-14 ${
+                                t.type === 'INCOME' ? 'text-emerald-500' : 
+                                t.type === 'TRANSFER' ? (
+                                    currentFilters?.accounts.length === 1 ? (
+                                        currentFilters.accounts.includes(t.accountId) ? 'text-rose-500' : 
+                                        currentFilters.accounts.includes(t.toAccountId || '') ? 'text-emerald-500' : 'text-blue-500'
+                                    ) : 'text-blue-500'
+                                ) : 'text-rose-500'
+                            }`}>
+                                {t.type === 'INCOME' ? '+' : 
+                                 t.type === 'TRANSFER' ? (
+                                    currentFilters?.accounts.length === 1 ? (
+                                        currentFilters.accounts.includes(t.accountId) ? '-' : 
+                                        currentFilters.accounts.includes(t.toAccountId || '') ? '+' : ''
+                                    ) : ''
+                                 ) : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
                             </td>
                             <td className="p-4 text-right pr-6 print:hidden">
                                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -497,8 +511,22 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                    </span>
                 </div>
                 <div className="flex flex-col items-end">
-                   <p className={`text-lg font-black ${t.type === 'INCOME' ? 'text-emerald-500' : t.type === 'TRANSFER' ? 'text-blue-500' : 'text-rose-500'}`}>
-                      {t.type === 'INCOME' ? '+' : t.type === 'TRANSFER' ? '' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                   <p className={`text-lg font-black ${
+                      t.type === 'INCOME' ? 'text-emerald-500' : 
+                      t.type === 'TRANSFER' ? (
+                        currentFilters?.accounts.length === 1 ? (
+                            currentFilters.accounts.includes(t.accountId) ? 'text-rose-500' : 
+                            currentFilters.accounts.includes(t.toAccountId || '') ? 'text-emerald-500' : 'text-blue-500'
+                        ) : 'text-blue-500'
+                      ) : 'text-rose-500'
+                   }`}>
+                      {t.type === 'INCOME' ? '+' : 
+                       t.type === 'TRANSFER' ? (
+                        currentFilters?.accounts.length === 1 ? (
+                            currentFilters.accounts.includes(t.accountId) ? '-' : 
+                            currentFilters.accounts.includes(t.toAccountId || '') ? '+' : ''
+                        ) : ''
+                       ) : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
                    </p>
                    <div className="flex gap-4 mt-2">
                       {onEdit && (
