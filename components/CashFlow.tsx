@@ -29,7 +29,9 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
         const matchesCategory = currentFilters.categories.length === 0 || currentFilters.categories.includes(t.category);
         
         // Accounts (Multi-select)
-        const matchesAccount = currentFilters.accounts.length === 0 || currentFilters.accounts.includes(t.accountId);
+        const matchesAccount = currentFilters.accounts.length === 0 || 
+                               currentFilters.accounts.includes(t.accountId) ||
+                               (t.type === 'TRANSFER' && t.toAccountId && currentFilters.accounts.includes(t.toAccountId));
         
         // Date Range
         const tDate = parseISO(t.date);
@@ -42,6 +44,23 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
     });
   }, [transactions, currentFilters]);
 
+  // Normalize transactions for display (treat transfers as income/expense when filtering 1 account)
+  const normalizedTransactions = useMemo(() => {
+    if (!currentFilters || currentFilters.accounts.length !== 1) return filteredTransactions;
+    
+    const accId = currentFilters.accounts[0];
+    return filteredTransactions.map(t => {
+        if (t.type === 'TRANSFER') {
+            if (t.accountId === accId) {
+                return { ...t, type: 'EXPENSE' as const };
+            } else if (t.toAccountId === accId) {
+                return { ...t, type: 'INCOME' as const };
+            }
+        }
+        return t;
+    });
+  }, [filteredTransactions, currentFilters]);
+
   // Calculate totals
   const totalBalance = useMemo(() => {
       // Balance should reflect selected accounts if any, otherwise all
@@ -49,6 +68,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
         ? accounts.filter(a => currentFilters.accounts.includes(a.id)) 
         : accounts;
       
+      const targetAccountIds = targetAccounts.map(a => a.id);
       const initialSum = targetAccounts.reduce((sum, acc) => sum + acc.initialBalance, 0);
       
       // Sum all transactions for these accounts up to the end date of the filter
@@ -56,35 +76,47 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
       
       const transactionsSum = transactions
         .filter(t => {
-            const isTargetAccount = currentFilters && currentFilters.accounts.length > 0 
-                ? currentFilters.accounts.includes(t.accountId)
-                : true;
-            return isTargetAccount && parseISO(t.date) <= endDate;
+            const dateMatch = parseISO(t.date) <= endDate;
+            const affectsTarget = targetAccountIds.includes(t.accountId) || 
+                                 (t.type === 'TRANSFER' && t.toAccountId && targetAccountIds.includes(t.toAccountId));
+            return dateMatch && affectsTarget;
         })
-        .reduce((sum, t) => sum + (t.type === 'INCOME' ? t.amount : -t.amount), 0);
+        .reduce((sum, t) => {
+            let change = 0;
+            const isSource = targetAccountIds.includes(t.accountId);
+            const isDest = t.type === 'TRANSFER' && t.toAccountId && targetAccountIds.includes(t.toAccountId);
+            
+            if (t.type === 'INCOME' && isSource) change += t.amount;
+            else if (t.type === 'EXPENSE' && isSource) change -= t.amount;
+            else if (t.type === 'TRANSFER') {
+                if (isSource) change -= t.amount;
+                if (isDest) change += t.amount;
+            }
+            return sum + change;
+        }, 0);
 
       return initialSum + transactionsSum;
   }, [accounts, transactions, currentFilters]);
 
-  const income = useMemo(() => filteredTransactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0), [filteredTransactions]);
-  const expense = useMemo(() => filteredTransactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0), [filteredTransactions]);
+  const income = useMemo(() => normalizedTransactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0), [normalizedTransactions]);
+  const expense = useMemo(() => normalizedTransactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0), [normalizedTransactions]);
 
   // Group by category for DRE view
   const incomeByCategory = useMemo(() => {
     const groups: Record<string, number> = {};
-    filteredTransactions.filter(t => t.type === 'INCOME').forEach(t => {
+    normalizedTransactions.filter(t => t.type === 'INCOME').forEach(t => {
       groups[t.category] = (groups[t.category] || 0) + t.amount;
     });
     return Object.entries(groups).sort((a, b) => b[1] - a[1]);
-  }, [filteredTransactions]);
+  }, [normalizedTransactions]);
 
   const expenseByCategory = useMemo(() => {
     const groups: Record<string, number> = {};
-    filteredTransactions.filter(t => t.type === 'EXPENSE').forEach(t => {
+    normalizedTransactions.filter(t => t.type === 'EXPENSE').forEach(t => {
       groups[t.category] = (groups[t.category] || 0) + t.amount;
     });
     return Object.entries(groups).sort((a, b) => b[1] - a[1]);
-  }, [filteredTransactions]);
+  }, [normalizedTransactions]);
 
   const [activeView, setActiveView] = useState<'DEMONSTRATIVO' | 'RESUMIDO' | 'DRE'>('DEMONSTRATIVO');
 
@@ -229,8 +261,30 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
                 <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-4 uppercase tracking-wider">Resumo por Conta</h3>
                 <div className="space-y-3">
                     {accounts.map(acc => {
-                        const accIncome = filteredTransactions.filter(t => t.accountId === acc.id && t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
-                        const accExpense = filteredTransactions.filter(t => t.accountId === acc.id && t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
+                        const accIncome = transactions
+                            .filter(t => {
+                                const isDest = t.type === 'TRANSFER' && t.toAccountId === acc.id;
+                                const isDirect = t.accountId === acc.id && t.type === 'INCOME';
+                                return isDest || isDirect;
+                            })
+                            .filter(t => {
+                                if (!currentFilters) return true;
+                                const tDate = parseISO(t.date);
+                                return (!currentFilters.dateRange.start || tDate >= parseISO(currentFilters.dateRange.start)) &&
+                                       (!currentFilters.dateRange.end || tDate <= parseISO(currentFilters.dateRange.end));
+                            })
+                            .reduce((s, t) => s + t.amount, 0);
+
+                        const accExpense = transactions
+                            .filter(t => t.accountId === acc.id && (t.type === 'EXPENSE' || t.type === 'TRANSFER'))
+                            .filter(t => {
+                                if (!currentFilters) return true;
+                                const tDate = parseISO(t.date);
+                                return (!currentFilters.dateRange.start || tDate >= parseISO(currentFilters.dateRange.start)) &&
+                                       (!currentFilters.dateRange.end || tDate <= parseISO(currentFilters.dateRange.end));
+                            })
+                            .reduce((s, t) => s + t.amount, 0);
+
                         return (
                             <div key={acc.id} className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
                                 <span className="font-bold text-slate-700 dark:text-slate-200">{acc.name}</span>
