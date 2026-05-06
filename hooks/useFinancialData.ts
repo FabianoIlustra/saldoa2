@@ -572,55 +572,6 @@ export const useFinancialData = () => {
         active: true
       };
       setInstallmentGroups(prev => [...prev, newGroup]);
-
-      // Generate the transactions automatically
-      const transactionsToCreate = [];
-      const baseDate = new Date(g.startDate);
-      
-      for (let i = 0; i < g.totalInstallments; i++) {
-        const transDate = new Date(baseDate);
-        transDate.setDate(baseDate.getDate() + (i * g.intervalDays));
-        
-        const transPayload: any = {
-          user_id: user.id,
-          account_id: g.accountId,
-          description: `${g.description} (${i + 1}/${g.totalInstallments})`,
-          amount: g.installmentAmount,
-          type: g.type,
-          category: g.category,
-          date: transDate.toISOString().split('T')[0],
-          installment_group_id: groupData.id,
-          installment_number: i + 1,
-          total_installments: g.totalInstallments,
-          is_joint: g.isJoint
-        };
-        transactionsToCreate.push(transPayload);
-      }
-
-      const { data: transData, error: transError } = await supabase
-        .from('transactions')
-        .insert(transactionsToCreate)
-        .select();
-
-      if (!transError && transData) {
-        const mappedTransactions: Transaction[] = transData.map(t => ({
-          id: t.id,
-          userId: t.user_id,
-          accountId: t.account_id,
-          description: t.description,
-          amount: Number(t.amount),
-          type: t.type as any,
-          category: t.category,
-          date: t.date,
-          createdAt: t.created_at,
-          installmentGroupId: t.installment_group_id,
-          installmentNumber: t.installment_number,
-          totalInstallments: t.total_installments,
-          isJoint: t.is_joint
-        }));
-        setTransactions(prev => [...mappedTransactions, ...prev]);
-      }
-      
       return newGroup;
     }
   };
