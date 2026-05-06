@@ -76,7 +76,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
     });
 
     // Sorting
-    return result.sort((a, b) => {
+    const sorted = result.sort((a, b) => {
         let aValue: any = a[sortConfig.key as keyof Transaction];
         let bValue: any = b[sortConfig.key as keyof Transaction];
 
@@ -94,6 +94,19 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
         if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
+    });
+
+    // Normalize for summary and list display (e.g. Transfers become In/Out when filtering 1 account)
+    return sorted.map(t => {
+        if (t.type === 'TRANSFER' && currentFilters?.accounts.length === 1) {
+            const accId = currentFilters.accounts[0];
+            if (t.accountId === accId) {
+                return { ...t, type: 'EXPENSE' as const };
+            } else if (t.toAccountId === accId) {
+                return { ...t, type: 'INCOME' as const };
+            }
+        }
+        return t;
     });
   }, [transactions, currentFilters, sortConfig, users, accounts]);
 
@@ -403,20 +416,10 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                             </td>
                             <td className={`p-4 text-xs font-black text-right whitespace-nowrap pr-14 ${
                                 t.type === 'INCOME' ? 'text-emerald-500' : 
-                                t.type === 'TRANSFER' ? (
-                                    currentFilters?.accounts.length === 1 ? (
-                                        currentFilters.accounts.includes(t.accountId) ? 'text-rose-500' : 
-                                        currentFilters.accounts.includes(t.toAccountId || '') ? 'text-emerald-500' : 'text-blue-500'
-                                    ) : 'text-blue-500'
-                                ) : 'text-rose-500'
+                                t.type === 'EXPENSE' ? 'text-rose-500' : 'text-blue-500'
                             }`}>
                                 {t.type === 'INCOME' ? '+' : 
-                                 t.type === 'TRANSFER' ? (
-                                    currentFilters?.accounts.length === 1 ? (
-                                        currentFilters.accounts.includes(t.accountId) ? '-' : 
-                                        currentFilters.accounts.includes(t.toAccountId || '') ? '+' : ''
-                                    ) : ''
-                                 ) : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                                 t.type === 'EXPENSE' ? '-' : ''} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
                             </td>
                             <td className="p-4 text-right pr-6 print:hidden">
                                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -513,20 +516,10 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                 <div className="flex flex-col items-end">
                    <p className={`text-lg font-black ${
                       t.type === 'INCOME' ? 'text-emerald-500' : 
-                      t.type === 'TRANSFER' ? (
-                        currentFilters?.accounts.length === 1 ? (
-                            currentFilters.accounts.includes(t.accountId) ? 'text-rose-500' : 
-                            currentFilters.accounts.includes(t.toAccountId || '') ? 'text-emerald-500' : 'text-blue-500'
-                        ) : 'text-blue-500'
-                      ) : 'text-rose-500'
+                      t.type === 'EXPENSE' ? 'text-rose-500' : 'text-blue-500'
                    }`}>
                       {t.type === 'INCOME' ? '+' : 
-                       t.type === 'TRANSFER' ? (
-                        currentFilters?.accounts.length === 1 ? (
-                            currentFilters.accounts.includes(t.accountId) ? '-' : 
-                            currentFilters.accounts.includes(t.toAccountId || '') ? '+' : ''
-                        ) : ''
-                       ) : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                       t.type === 'EXPENSE' ? '-' : ''} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
                    </p>
                    <div className="flex gap-4 mt-2">
                       {onEdit && (
