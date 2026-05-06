@@ -344,6 +344,7 @@ const AppContent: React.FC = () => {
         {activeTab === 'ai' && (
           <AIConsultant 
             transactions={filteredTransactions} 
+            accounts={accounts}
             currentUser={displayUser} 
             onAddTransaction={addTransaction}
             autoStartVoice={shouldAutoStartVoice}
