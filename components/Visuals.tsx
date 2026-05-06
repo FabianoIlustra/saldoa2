@@ -97,10 +97,24 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     });
   }, [transactions, currentFilters]);
 
+  const normalizedTransactions = useMemo(() => {
+    return filteredTransactions.map(t => {
+        if (t.type === 'TRANSFER' && currentFilters?.accounts.length === 1) {
+            const accId = currentFilters.accounts[0];
+            if (t.accountId === accId) {
+                return { ...t, type: 'EXPENSE' as const };
+            } else if (t.toAccountId === accId) {
+                return { ...t, type: 'INCOME' as const };
+            }
+        }
+        return t;
+    });
+  }, [filteredTransactions, currentFilters]);
+
   const categorySummary = useMemo(() => {
     const summary: Record<string, { category: string, type: string, value: number }> = {};
     
-    filteredTransactions.forEach(t => {
+    normalizedTransactions.forEach(t => {
       const key = `${t.category}-${t.type}`;
       if (!summary[key]) {
         summary[key] = { category: t.category, type: t.type, value: 0 };
@@ -135,7 +149,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     const targetDate = currentFilters ? currentFilters.currentDate : new Date();
     
     // 1. Current Paid Expenses in the period (filtered)
-    const paidExpenses = filteredTransactions
+    const paidExpenses = normalizedTransactions
       .filter(t => t.type === 'EXPENSE')
       .reduce((sum, t) => sum + t.amount, 0);
 
@@ -185,11 +199,11 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
         .filter(t => t.type === 'EXPENSE' && isWithinInterval(parseISO(t.date), { start: startOfThisWeek, end: today }))
         .reduce((sum, t) => sum + t.amount, 0);
 
-    const monthSpent = filteredTransactions
+    const monthSpent = normalizedTransactions
         .filter(t => t.type === 'EXPENSE')
         .reduce((sum, t) => sum + t.amount, 0);
 
-    const monthIncome = filteredTransactions
+    const monthIncome = normalizedTransactions
         .filter(t => t.type === 'INCOME')
         .reduce((sum, t) => sum + t.amount, 0);
 
@@ -199,7 +213,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     let essentialSpent = 0;
     let lifestyleSpent = 0;
     
-    filteredTransactions.filter(t => t.type === 'EXPENSE').forEach(t => {
+    normalizedTransactions.filter(t => t.type === 'EXPENSE').forEach(t => {
         const cat = categories.find(c => c.name === t.category);
         if (cat?.isEssential) essentialSpent += t.amount;
         else lifestyleSpent += t.amount;
@@ -207,7 +221,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
 
     const monitoredCategories = categories.filter(c => c.monitored && (c.type === 'EXPENSE' || !c.type));
     const budgetProgress = monitoredCategories.map(cat => {
-        const spent = filteredTransactions
+        const spent = normalizedTransactions
             .filter(t => t.category === cat.name && t.type === 'EXPENSE')
             .reduce((sum, t) => sum + t.amount, 0);
         return {
@@ -236,7 +250,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
   }, [transactions, filteredTransactions, categories]);
 
   const expenseData = useMemo(() => {
-    const data = filteredTransactions
+    const data = normalizedTransactions
       .filter(t => t.type === 'EXPENSE')
       .reduce((acc: any[], t) => {
         const existing = acc.find(item => item.name === t.category);
@@ -250,10 +264,10 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       .sort((a, b) => b.value - a.value);
     
     return data.slice(0, 5);
-  }, [filteredTransactions]);
+  }, [normalizedTransactions]);
 
   const dailyFlow = useMemo(() => {
-    const sorted = [...filteredTransactions].sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
+    const sorted = [...normalizedTransactions].sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
     let currentBalance = 0;
     const history = sorted.reduce((acc: any[], t) => {
       const date = parseISO(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
@@ -270,11 +284,11 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     }, []);
 
     return history.slice(-15); // Show last 15 data points of the filtered range
-  }, [filteredTransactions]);
+  }, [normalizedTransactions]);
 
   const monthlyHistory = useMemo(() => {
      // Group by Month/Year
-     const grouped = filteredTransactions.reduce((acc: any, t) => {
+     const grouped = normalizedTransactions.reduce((acc: any, t) => {
          const date = parseISO(t.date);
          const key = format(date, 'MMM/yy', { locale: ptBR });
          
@@ -287,7 +301,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
      }, {});
 
      return Object.values(grouped); // No sorting needed if we assume chronological input or sort keys
-  }, [filteredTransactions]);
+  }, [normalizedTransactions]);
 
   const getCategoryColor = (name: string) => {
     return categories.find(c => c.name === name)?.color || '#6366f1';
