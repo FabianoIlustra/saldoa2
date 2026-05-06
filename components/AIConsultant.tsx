@@ -50,6 +50,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
   const streamRef = useRef<MediaStream | null>(null);
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
+  const isHoldingRef = useRef(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -63,15 +64,6 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
       onVoiceHandled?.();
     }
   }, [autoStartVoice]);
-
-  const toggleVoice = async () => {
-    if (isVoiceActive) {
-      stopVoice();
-      return;
-    }
-    setVoiceError(null);
-    startVoice();
-  };
 
   const playAudioQueue = async () => {
     if (isPlayingRef.current || audioQueueRef.current.length === 0 || !audioContextRef.current) return;
@@ -103,6 +95,8 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
   };
 
   const startVoice = async () => {
+    if (isHoldingRef.current) return;
+    isHoldingRef.current = true;
     try {
       setVoiceError(null);
       const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
@@ -118,6 +112,11 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
       audioContextRef.current = audioCtx;
       
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!isHoldingRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        if (audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
+        return;
+      }
       streamRef.current = stream;
       setIsVoiceActive(true);
 
@@ -262,8 +261,12 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
   };
 
   const stopVoice = () => {
+    isHoldingRef.current = false;
     setIsVoiceActive(false);
-    if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close().catch(e => console.error("Erro ao fechar AudioContext:", e));
     }
@@ -332,21 +335,14 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30 dark:bg-slate-900/50 transition-colors">
         {messages.length === 0 && !isVoiceActive && (
-          <div className="flex flex-col items-center justify-center h-full text-center max-w-sm mx-auto">
-            <div className="w-20 h-20 bg-indigo-50 dark:bg-indigo-900/20 rounded-[2rem] flex items-center justify-center mb-6 transition-colors">
-              <Sparkles className="w-10 h-10 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex flex-col items-center justify-center p-8 text-center max-w-sm mx-auto">
+            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl flex items-center justify-center mb-4 transition-colors">
+              <Sparkles className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
             </div>
-            <h4 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Olá, {currentUser.name.split(' ')[0]}!</h4>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-              Diga: "Registrar gasto de 20 reais com mercado" ou pergunte sobre seu saldo atual.
+            <h4 className="text-lg font-bold text-slate-800 dark:text-white mb-1">Olá, {currentUser.name.split(' ')[0]}!</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Segure o microfone para registrar gastos ou digite sua dúvida.
             </p>
-            
-            <button 
-              onClick={toggleVoice}
-              className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 dark:shadow-none"
-            >
-              <Mic className="w-5 h-5" /> Ativar Microfone
-            </button>
           </div>
         )}
 
@@ -377,12 +373,15 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
       <div className="p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 transition-colors">
         <div className="flex gap-3">
           <button 
-            onClick={toggleVoice}
-            className={`p-4 rounded-[1.5rem] transition-all shadow-lg flex-shrink-0 ${
-              isVoiceActive ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+            onPointerDown={(e) => { e.preventDefault(); startVoice(); }}
+            onPointerUp={(e) => { e.preventDefault(); stopVoice(); }}
+            onPointerLeave={(e) => { e.preventDefault(); if (isVoiceActive) stopVoice(); }}
+            onContextMenu={(e) => e.preventDefault()}
+            className={`p-4 rounded-[1.5rem] transition-all shadow-lg flex-shrink-0 touch-none ${
+              isVoiceActive ? 'bg-rose-500 text-white scale-110 shadow-rose-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'
             }`}
           >
-            {isVoiceActive ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+            {isVoiceActive ? <Mic className="w-6 h-6 animate-pulse" /> : <Mic className="w-6 h-6" />}
           </button>
           <form onSubmit={handleSend} className="flex-1 flex gap-3">
             <input 
