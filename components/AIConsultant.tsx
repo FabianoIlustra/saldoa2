@@ -97,8 +97,10 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
   const startVoice = async () => {
     if (isHoldingRef.current) return;
     isHoldingRef.current = true;
+    setIsVoiceActive(true);
+    setVoiceError(null);
+
     try {
-      setVoiceError(null);
       const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
         throw new Error("Chave de API não configurada. Adicione GEMINI_API_KEY nas Configurações.");
@@ -111,14 +113,19 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
       }
       audioContextRef.current = audioCtx;
       
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(err => {
+        if (err.name === 'NotAllowedError') throw new Error("Permissão de microfone negada.");
+        throw err;
+      });
+
       if (!isHoldingRef.current) {
+        console.log("Soltou o botão antes de obter stream");
         stream.getTracks().forEach(track => track.stop());
         if (audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
+        setIsVoiceActive(false);
         return;
       }
       streamRef.current = stream;
-      setIsVoiceActive(true);
 
       const registrarTransacaoTool = {
         name: 'registrar_transacao',
@@ -375,13 +382,13 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
           <button 
             onPointerDown={(e) => { e.preventDefault(); startVoice(); }}
             onPointerUp={(e) => { e.preventDefault(); stopVoice(); }}
-            onPointerLeave={(e) => { e.preventDefault(); if (isVoiceActive) stopVoice(); }}
+            onPointerCancel={(e) => { e.preventDefault(); stopVoice(); }}
             onContextMenu={(e) => e.preventDefault()}
-            className={`p-4 rounded-[1.5rem] transition-all shadow-lg flex-shrink-0 touch-none ${
+            className={`p-4 rounded-[1.5rem] transition-all shadow-lg flex-shrink-0 touch-none active:scale-95 ${
               isVoiceActive ? 'bg-rose-500 text-white scale-110 shadow-rose-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'
             }`}
           >
-            {isVoiceActive ? <Mic className="w-6 h-6 animate-pulse" /> : <Mic className="w-6 h-6" />}
+            <Mic className={`w-6 h-6 ${isVoiceActive ? 'animate-pulse' : ''}`} />
           </button>
           <form onSubmit={handleSend} className="flex-1 flex gap-3">
             <input 
