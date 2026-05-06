@@ -105,7 +105,11 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
   const startVoice = async () => {
     try {
       setVoiceError(null);
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Chave de API não configurada. Adicione VITE_GEMINI_API_KEY nas Configurações.");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       if (audioCtx.state === 'suspended') {
@@ -276,7 +280,13 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
     setLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        setMessages(prev => [...prev, { role: 'model', text: "Chave de API não configurada no ambiente." }]);
+        setLoading(false);
+        return;
+      }
+      const ai = new GoogleGenAI({ apiKey });
       const context = `Você está ajudando ${currentUser.name}. Contexto financeiro (últimas 20 transações): ${JSON.stringify(transactions.slice(0, 20))}. Pergunta: ${userMessage}`;
       const response = await ai.models.generateContent({
         model: "gemini-flash-latest",
