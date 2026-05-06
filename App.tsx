@@ -329,6 +329,7 @@ const AppContent: React.FC = () => {
             users={usersList} 
             accounts={accounts}
             recurringTransactions={recurringTransactions}
+            installmentGroups={installmentGroups}
           />
         )}
 
