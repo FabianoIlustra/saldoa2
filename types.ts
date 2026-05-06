@@ -58,6 +58,9 @@ export interface Transaction {
   isTemplate?: boolean;
   isJoint?: boolean;
   recurringTransactionId?: string; // Link to the recurring rule
+  installmentGroupId?: string; // Link to the installment group
+  installmentNumber?: number; // Current installment number
+  totalInstallments?: number; // Total number of installments
   toAccountId?: string; // Account ID for transfers
 }
 
@@ -72,6 +75,22 @@ export interface RecurringTransaction {
   category: string;
   dayOfMonth: number; // 1-31
   lastGeneratedDate?: string;
+  active: boolean;
+  isJoint?: boolean;
+}
+
+export interface InstallmentGroup {
+  id: string;
+  userId: string;
+  accountId: string;
+  description: string;
+  totalAmount: number;
+  installmentAmount: number;
+  totalInstallments: number;
+  startDate: string;
+  intervalDays: number;
+  category: string;
+  type: TransactionType;
   active: boolean;
   isJoint?: boolean;
 }
