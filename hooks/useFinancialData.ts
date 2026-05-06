@@ -134,7 +134,7 @@ export const useFinancialData = () => {
           recurrence: t.recurrence as any,
           isJoint: t.is_joint,
           isTemplate: t.is_template,
-          toAccountId: t.to_account_id
+          toAccountId: t.to_account_id || undefined
         })));
       }
 
@@ -166,6 +166,7 @@ export const useFinancialData = () => {
           dayOfMonth: r.day_of_month,
           lastGeneratedDate: r.last_generated_date,
           active: r.active,
+          toAccountId: r.to_account_id || undefined,
           isJoint: r.is_joint
         })));
       }
@@ -188,7 +189,7 @@ export const useFinancialData = () => {
     // Ensure UUIDs are valid or null (not empty strings)
     const account_id = t.accountId && t.accountId.trim() !== '' ? t.accountId : null;
 
-    const { data, error } = await supabase.from('transactions').insert({
+    const payload: any = {
       user_id: user.id,
       account_id,
       description: t.description,
@@ -198,13 +199,39 @@ export const useFinancialData = () => {
       date: t.date,
       recurrence: t.recurrence,
       is_joint: t.isJoint,
-      is_template: t.recurrence === 'MONTHLY',
-      to_account_id: t.toAccountId
-    }).select().single();
+      is_template: t.recurrence === 'MONTHLY'
+    };
+
+    if (t.type === 'TRANSFER' && t.toAccountId && t.toAccountId.trim() !== '') {
+      payload.to_account_id = t.toAccountId;
+    }
+
+    const { data, error } = await supabase.from('transactions').insert(payload).select().single();
 
     if (error) {
+      if (error.message.includes('to_account_id') || error.code === '42703') {
+        console.warn('Coluna to_account_id ausente. Tentando salvar sem ela.');
+        delete payload.to_account_id;
+        const fallback = await supabase.from('transactions').insert(payload).select().single();
+        if (fallback.error) throw fallback.error;
+        
+        // Se chegamos aqui, salvou mas sem a transferência vinculada
+        if (fallback.data) {
+           const newTrans: Transaction = {
+            ...t,
+            id: fallback.data.id,
+            userId: fallback.data.user_id,
+            accountId: fallback.data.account_id || t.accountId,
+            isTemplate: fallback.data.is_template,
+            createdAt: fallback.data.created_at,
+            toAccountId: undefined // Limpa pois o banco não suporta
+          };
+          setTransactions(prev => [newTrans, ...prev]);
+          throw new Error('A transferência foi salva como um lançamento comum porque a coluna "to_account_id" ainda não existe no seu banco de dados. Por favor, execute o comando SQL enviado no chat.');
+        }
+      }
       console.error('Error adding transaction:', error);
-      throw error; // Throw so the caller knows it failed
+      throw error;
     }
 
     if (data) {
@@ -222,7 +249,7 @@ export const useFinancialData = () => {
   };
 
   const updateTransaction = async (t: Transaction) => {
-    const { error } = await supabase.from('transactions').update({
+    const payload: any = {
       description: t.description,
       amount: t.amount,
       type: t.type,
@@ -230,13 +257,26 @@ export const useFinancialData = () => {
       date: t.date,
       recurrence: t.recurrence,
       account_id: t.accountId,
-      to_account_id: t.toAccountId,
       is_joint: t.isJoint
-    }).eq('id', t.id);
+    };
 
-    if (!error) {
-      setTransactions(prev => prev.map(tr => tr.id === t.id ? t : tr));
+    if (t.type === 'TRANSFER' && t.toAccountId && t.toAccountId.trim() !== '') {
+      payload.to_account_id = t.toAccountId;
     }
+
+    const { error } = await supabase.from('transactions').update(payload).eq('id', t.id);
+
+    if (error) {
+      if (error.message.includes('to_account_id') || error.code === '42703') {
+        delete payload.to_account_id;
+        const fallback = await supabase.from('transactions').update(payload).eq('id', t.id);
+        if (fallback.error) throw fallback.error;
+        throw new Error('Atualizado, mas o vínculo de transferência foi perdido pois a coluna "to_account_id" está ausente no banco.');
+      }
+      throw error;
+    }
+    
+    setTransactions(prev => prev.map(tr => tr.id === t.id ? t : tr));
   };
 
   const deleteTransaction = async (id: string) => {
@@ -318,7 +358,7 @@ export const useFinancialData = () => {
 
   const addRecurring = async (r: Omit<RecurringTransaction, 'id' | 'active'>) => {
     if (!user) return;
-    const { data } = await supabase.from('recurring_transactions').insert({
+    const payload: any = {
       user_id: user.id,
       account_id: r.accountId,
       description: r.description,
@@ -327,9 +367,27 @@ export const useFinancialData = () => {
       category: r.category,
       day_of_month: r.dayOfMonth,
       is_joint: r.isJoint,
-      to_account_id: r.toAccountId,
       active: true
-    }).select().single();
+    };
+
+    if (r.type === 'TRANSFER' && r.toAccountId) {
+      payload.to_account_id = r.toAccountId;
+    }
+
+    const { data, error } = await supabase.from('recurring_transactions').insert(payload).select().single();
+
+    if (error) {
+       if (error.message.includes('to_account_id') || error.code === '42703') {
+          delete payload.to_account_id;
+          const fallback = await supabase.from('recurring_transactions').insert(payload).select().single();
+          if (fallback.error) throw fallback.error;
+          if (fallback.data) {
+             setRecurringTransactions(prev => [...prev, { ...r, id: fallback.data.id, userId: user.id, active: true, toAccountId: undefined }]);
+             throw new Error('Agendamento criado, mas sem vínculo de conta destino (adicione a coluna no banco).');
+          }
+       }
+       throw error;
+    }
 
     if (data) {
       setRecurringTransactions(prev => [...prev, {
@@ -347,7 +405,7 @@ export const useFinancialData = () => {
   };
 
   const updateRecurring = async (r: RecurringTransaction) => {
-      await supabase.from('recurring_transactions').update({
+      const payload: any = {
           account_id: r.accountId,
           description: r.description,
           amount: r.amount,
@@ -355,10 +413,25 @@ export const useFinancialData = () => {
           category: r.category,
           day_of_month: r.dayOfMonth,
           last_generated_date: r.lastGeneratedDate,
-          to_account_id: r.toAccountId,
           active: r.active,
           is_joint: r.isJoint
-      }).eq('id', r.id);
+      };
+
+      if (r.type === 'TRANSFER' && r.toAccountId) {
+        payload.to_account_id = r.toAccountId;
+      }
+
+      const { error } = await supabase.from('recurring_transactions').update(payload).eq('id', r.id);
+
+      if (error) {
+        if (error.message.includes('to_account_id') || error.code === '42703') {
+           delete payload.to_account_id;
+           const fallback = await supabase.from('recurring_transactions').update(payload).eq('id', r.id);
+           if (fallback.error) throw fallback.error;
+           throw new Error('Atualizado, mas sem vínculo de conta destino (adicione a coluna no banco).');
+        }
+        throw error;
+      }
       setRecurringTransactions(prev => prev.map(rec => rec.id === r.id ? r : rec));
   };
 
