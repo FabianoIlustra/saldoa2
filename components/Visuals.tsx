@@ -2,11 +2,11 @@
 // Force sync
 import React, { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, AreaChart, Area, CartesianGrid, LabelList } from 'recharts';
-import { Transaction, Category, User, Account, RecurringTransaction } from '../types';
+import { Transaction, Category, User, Account, RecurringTransaction, InstallmentGroup } from '../types';
 import FilterBar, { FilterState } from './FilterBar';
-import { isWithinInterval, parseISO, format, isBefore, isSameMonth, isSameYear, startOfDay, startOfWeek, endOfMonth, differenceInDays, isSameDay } from 'date-fns';
+import { isWithinInterval, parseISO, format, isBefore, isSameMonth, isSameYear, startOfDay, startOfWeek, endOfMonth, differenceInDays, isSameDay, addMonths as addMonthsDate } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ArrowUpDown, ChevronDown, Clock, CheckCircle, AlertCircle, Calendar, Target, Zap, TrendingDown, Pill, ShoppingBag, History, HelpCircle, X } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, Clock, CheckCircle, AlertCircle, Calendar, Target, Zap, TrendingDown, Pill, ShoppingBag, History, HelpCircle, X, CreditCard } from 'lucide-react';
 
 interface VisualsProps {
   transactions: Transaction[];
@@ -14,6 +14,7 @@ interface VisualsProps {
   users: User[];
   accounts: Account[];
   recurringTransactions: RecurringTransaction[];
+  installmentGroups: InstallmentGroup[];
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -32,7 +33,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, accounts, recurringTransactions }) => {
+const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, accounts, recurringTransactions, installmentGroups }) => {
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: 'category' | 'type' | 'value', direction: 'asc' | 'desc' } | null>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
@@ -764,6 +765,62 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
                       <LabelList dataKey="despesas" position="top" formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(value)} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#ef4444' }} />
                    </Bar>
                 </BarChart>
+             </ResponsiveContainer>
+          </div>
+      </div>
+
+      {/* Projeção de Parcelamentos (Novo Gráfico) */}
+      <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
+          <header className="mb-8">
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Projeção de Parcelas</h3>
+            <p className="text-xs text-slate-500 font-medium">Comprometimento futuro com compras parceladas</p>
+          </header>
+          <div className="h-[300px]">
+             <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={(() => {
+                  const data = [];
+                  const today = new Date();
+                  for (let i = 0; i < 6; i++) {
+                    const month = addMonthsDate(today, i);
+                    const monthKey = format(month, 'MMM/yy', { locale: ptBR });
+                    
+                    let total = 0;
+                    installmentGroups.forEach(group => {
+                      const baseDate = parseISO(group.startDate);
+                      for (let j = 0; j < group.totalInstallments; j++) {
+                        const dueDate = new Date(baseDate);
+                        dueDate.setDate(baseDate.getDate() + (j * group.intervalDays));
+                        if (isSameMonth(dueDate, month) && isSameYear(dueDate, month)) {
+                          total += group.installmentAmount;
+                        }
+                      }
+                    });
+                    data.push({ name: monthKey, valor: total });
+                  }
+                  return data;
+                })()}>
+                   <defs>
+                      <linearGradient id="colorParcelas" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b8" opacity={0.1} />
+                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} dy={10} />
+                   <YAxis hide />
+                   <Tooltip content={<CustomTooltip />} />
+                   <Area 
+                      type="monotone" 
+                      dataKey="valor" 
+                      name="Parcelas"
+                      stroke="#f59e0b" 
+                      fillOpacity={1} 
+                      fill="url(#colorParcelas)" 
+                      strokeWidth={3}
+                    >
+                      <LabelList dataKey="valor" position="top" formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(value)} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#f59e0b' }} />
+                    </Area>
+                </AreaChart>
              </ResponsiveContainer>
           </div>
       </div>
