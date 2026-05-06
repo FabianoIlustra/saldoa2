@@ -123,6 +123,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [recCategory, setRecCategory] = useState(categories[0]?.name || '');
   const [recDay, setRecDay] = useState('5');
   const [recAccount, setRecAccount] = useState(accounts[0]?.id || '');
+  const [recToAccount, setRecToAccount] = useState('');
   const [recIsJoint, setRecIsJoint] = useState(true);
 
   // Estados para Modais
@@ -148,6 +149,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [editRecCategory, setEditRecCategory] = useState('');
   const [editRecDay, setEditRecDay] = useState('');
   const [editRecAccount, setEditRecAccount] = useState('');
+  const [editRecToAccount, setEditRecToAccount] = useState('');
   const [editRecIsJoint, setEditRecIsJoint] = useState(true);
 
   const handleAddAccount = (e: React.FormEvent) => {
@@ -166,19 +168,22 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const handleAddRecurring = (e: React.FormEvent) => {
     e.preventDefault();
     if (!recDesc || !recAmount || !recAccount) return;
+    if (recType === 'TRANSFER' && !recToAccount) return;
 
     onAddRecurring({
         description: recDesc,
         amount: parseFloat(recAmount),
         type: recType,
-        category: recCategory,
+        category: recType === 'TRANSFER' ? 'Transferência' : recCategory,
         dayOfMonth: parseInt(recDay),
         accountId: recAccount,
+        toAccountId: recType === 'TRANSFER' ? recToAccount : undefined,
         userId: 'default', // Should be current user ideally, but simplified for now
         isJoint: recIsJoint
     });
     setRecDesc('');
     setRecAmount('');
+    setRecToAccount('');
   };
 
   const openDeleteModal = (id: string) => {
@@ -217,6 +222,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     setEditRecCategory(rec.category);
     setEditRecDay(rec.dayOfMonth.toString());
     setEditRecAccount(rec.accountId);
+    setEditRecToAccount(rec.toAccountId || '');
     setEditRecIsJoint(rec.isJoint);
   };
 
@@ -254,14 +260,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const saveEditRecurring = (e: React.FormEvent) => {
     e.preventDefault();
     if (recurringToEdit && editRecDesc && editRecAmount && editRecAccount) {
+      if (editRecType === 'TRANSFER' && !editRecToAccount) return;
+
       onUpdateRecurring({
         ...recurringToEdit,
         description: editRecDesc,
         amount: parseFloat(editRecAmount),
         type: editRecType,
-        category: editRecCategory,
+        category: editRecType === 'TRANSFER' ? 'Transferência' : editRecCategory,
         dayOfMonth: parseInt(editRecDay),
         accountId: editRecAccount,
+        toAccountId: editRecType === 'TRANSFER' ? editRecToAccount : undefined,
         isJoint: editRecIsJoint
       });
       setRecurringToEdit(null);
@@ -642,13 +651,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Tipo</label>
-                    <div className="flex bg-white dark:bg-slate-900 rounded-2xl p-1">
-                        <button type="button" onClick={() => setRecType('INCOME')} className={`flex-1 py-2 rounded-xl text-xs font-bold ${recType === 'INCOME' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400'}`}>Receita</button>
-                        <button type="button" onClick={() => setRecType('EXPENSE')} className={`flex-1 py-2 rounded-xl text-xs font-bold ${recType === 'EXPENSE' ? 'bg-rose-100 text-rose-700' : 'text-slate-400'}`}>Despesa</button>
+                    <div className="flex bg-white dark:bg-slate-900 rounded-2xl p-1 gap-1">
+                        <button type="button" onClick={() => setRecType('EXPENSE')} className={`flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${recType === 'EXPENSE' ? 'bg-rose-500 text-white shadow-lg shadow-rose-100 dark:shadow-none' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Despesa</button>
+                        <button type="button" onClick={() => setRecType('INCOME')} className={`flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${recType === 'INCOME' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-100 dark:shadow-none' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Receita</button>
+                        <button type="button" onClick={() => {
+                            setRecType('TRANSFER');
+                            setRecCategory('Transferência');
+                        }} className={`flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${recType === 'TRANSFER' ? 'bg-blue-500 text-white shadow-lg shadow-blue-100 dark:shadow-none' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>Transf.</button>
                     </div>
                 </div>
                 <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Conta</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">
+                        {recType === 'TRANSFER' ? 'Origem' : 'Conta'}
+                    </label>
                     <select 
                         value={recAccount}
                         onChange={e => setRecAccount(e.target.value)}
@@ -657,6 +672,22 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
                 </div>
+                {recType === 'TRANSFER' && (
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Destino</label>
+                        <select 
+                            value={recToAccount}
+                            onChange={e => setRecToAccount(e.target.value)}
+                            required
+                            className="w-full px-5 py-3.5 bg-white dark:bg-slate-900 rounded-2xl border-none focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                        >
+                            <option value="">Destino...</option>
+                            {accounts.filter(a => a.id !== recAccount).map(a => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
                 <div className="flex items-center pt-6">
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" checked={recIsJoint} onChange={e => setRecIsJoint(e.target.checked)} className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500" />
@@ -1079,9 +1110,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Tipo</label>
-                  <div className="flex bg-slate-50 dark:bg-slate-800 rounded-xl p-1">
-                      <button type="button" onClick={() => setEditRecType('INCOME')} className={`flex-1 py-2 rounded-lg text-[10px] font-bold ${editRecType === 'INCOME' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400'}`}>Receita</button>
-                      <button type="button" onClick={() => setEditRecType('EXPENSE')} className={`flex-1 py-2 rounded-lg text-[10px] font-bold ${editRecType === 'EXPENSE' ? 'bg-rose-100 text-rose-700' : 'text-slate-400'}`}>Despesa</button>
+                  <div className="flex bg-slate-50 dark:bg-slate-800 rounded-xl p-1 gap-1">
+                      <button type="button" onClick={() => setEditRecType('EXPENSE')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold ${editRecType === 'EXPENSE' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400'}`}>Despesa</button>
+                      <button type="button" onClick={() => setEditRecType('INCOME')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold ${editRecType === 'INCOME' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}>Receita</button>
+                      <button type="button" onClick={() => {
+                          setEditRecType('TRANSFER');
+                          setEditRecCategory('Transferência');
+                      }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold ${editRecType === 'TRANSFER' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-400'}`}>Transf.</button>
                   </div>
                 </div>
                 <div>
@@ -1095,16 +1130,35 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Conta</label>
-                <select 
-                  value={editRecAccount}
-                  onChange={e => setEditRecAccount(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold"
-                >
-                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">
+                        {editRecType === 'TRANSFER' ? 'Conta de Origem' : 'Conta'}
+                    </label>
+                    <select 
+                        value={editRecAccount}
+                        onChange={e => setEditRecAccount(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold"
+                    >
+                        {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                </div>
+                {editRecType === 'TRANSFER' && (
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Conta de Destino</label>
+                        <select 
+                            value={editRecToAccount}
+                            onChange={e => setEditRecToAccount(e.target.value)}
+                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold"
+                        >
+                            <option value="">Selecione o destino</option>
+                            {accounts.filter(a => a.id !== editRecAccount).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                    </div>
+                )}
               </div>
+
               <div className="flex items-center pt-2">
                   <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={editRecIsJoint} onChange={e => setEditRecIsJoint(e.target.checked)} className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500" />

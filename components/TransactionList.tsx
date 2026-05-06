@@ -61,7 +61,9 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
         const matchesCategory = currentFilters.categories.length === 0 || currentFilters.categories.includes(t.category);
         
         // Accounts (Multi-select)
-        const matchesAccount = currentFilters.accounts.length === 0 || currentFilters.accounts.includes(t.accountId);
+        const matchesAccount = currentFilters.accounts.length === 0 || 
+                               currentFilters.accounts.includes(t.accountId) || 
+                               (t.type === 'TRANSFER' && t.toAccountId && currentFilters.accounts.includes(t.toAccountId));
         
         // Date Range
         const tDate = parseISO(t.date);

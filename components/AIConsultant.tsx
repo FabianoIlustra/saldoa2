@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send, Loader2, BrainCircuit, Mic, MicOff, Volume2, Trash2 } from 'lucide-react';
 import { Transaction, ChatMessage, User } from '../types';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, Modality, Type, LiveServerMessage } from "@google/genai";
 
 interface AIConsultantProps {
   transactions: Transaction[];
@@ -71,14 +71,17 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
   const startVoice = async () => {
     try {
       setIsVoiceActive(true);
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
       audioContextRef.current = audioCtx;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const addTransactionTool = {
+      const registrarTransacaoTool = {
         name: 'registrar_transacao',
         parameters: {
           type: Type.OBJECT,
@@ -93,15 +96,31 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
         },
       };
 
+      const registrarTransferenciaTool = {
+        name: 'registrar_transferencia',
+        parameters: {
+          type: Type.OBJECT,
+          description: 'Registra uma transferência interna entre duas contas do usuário.',
+          properties: {
+            description: { type: Type.STRING, description: 'Descrição da transferência (ex: Transferência para reserva).' },
+            amount: { type: Type.NUMBER, description: 'Valor da transferência.' },
+            fromAccount: { type: Type.STRING, description: 'Nome ou ID da conta de origem.' },
+            toAccount: { type: Type.STRING, description: 'Nome ou ID da conta de destino.' },
+          },
+          required: ['description', 'amount', 'fromAccount', 'toAccount'],
+        },
+      };
+
       const sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        model: 'gemini-2.0-flash-exp',
         config: {
           responseModalities: [Modality.AUDIO],
-          tools: [{ functionDeclarations: [addTransactionTool] }],
+          tools: [{ functionDeclarations: [registrarTransacaoTool, registrarTransferenciaTool] }],
           systemInstruction: `Você é o assistente de voz do Saldo A2. 
           Você está falando com ${currentUser.name}.
-          Sua tarefa é ouvir o usuário e ajudá-lo a registrar transações. 
-          Quando o usuário disser algo como "Gastei 10 reais com café", chame a função registrar_transacao.
+          Sua tarefa é ouvir o usuário e ajudá-lo a registrar transações ou transferências. 
+          Quando o usuário disser algo como "Gastei 10 reais com café", chame registrar_transacao.
+          Quando o usuário disser algo como "Transfira 50 reais da conta Corrente para a Poupança", chame registrar_transferencia.
           Sempre confirme verbalmente com uma frase curta e simpática.`
         },
         callbacks: {
@@ -124,7 +143,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
                   onAddTransaction({
                     ...data,
                     userId: currentUser.id,
-                    accountId: 'default', // Fallback to default account
+                    accountId: 'default',
                     date: new Date().toISOString().split('T')[0],
                     recurrence: 'NONE'
                   });
@@ -136,7 +155,31 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
 
                   sessionPromise.then(session => {
                     session.sendToolResponse({
-                      functionResponses: { id: fc.id, name: fc.name, response: { result: "Transação registrada com sucesso!" } }
+                      functionResponses: { id: fc.id, name: fc.name, response: { result: "Transação registrada!" } }
+                    });
+                  });
+                } else if (fc.name === 'registrar_transferencia') {
+                   const data = fc.args as any;
+                   // Em um cenário real, buscaríamos os IDs das contas pelo nome.
+                   // Aqui simplificamos ou abrimos o formulário para completar.
+                   onAddTransaction({
+                     description: data.description,
+                     amount: data.amount,
+                     type: 'TRANSFER',
+                     category: 'Transferência',
+                     userId: currentUser.id,
+                     date: new Date().toISOString().split('T')[0],
+                     recurrence: 'NONE'
+                   });
+
+                   setMessages(prev => [...prev, { 
+                    role: 'model', 
+                    text: `✅ Entendido! Preparei a transferência de R$ ${data.amount}. Verifique os detalhes das contas.` 
+                  }]);
+
+                  sessionPromise.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: { id: fc.id, name: fc.name, response: { result: "Transferência preparada!" } }
                     });
                   });
                 }
@@ -175,10 +218,10 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, currentUser, 
     setLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const context = `Você está ajudando ${currentUser.name}. Contexto financeiro (últimas 20 transações): ${JSON.stringify(transactions.slice(0, 20))}. Pergunta: ${userMessage}`;
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-flash-latest",
         contents: context,
       });
       setMessages(prev => [...prev, { role: 'model', text: response.text || "Não entendi, pode repetir?" }]);

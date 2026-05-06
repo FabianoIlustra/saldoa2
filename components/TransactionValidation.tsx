@@ -31,6 +31,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
   const [editAmount, setEditAmount] = useState<string>('');
   const [editDate, setEditDate] = useState<string>('');
   const [editAccountId, setEditAccountId] = useState<string>('');
+  const [editToAccountId, setEditToAccountId] = useState<string>('');
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
   const [statusFilters, setStatusFilters] = useState<('PENDING' | 'LATE' | 'PAID')[]>(['PENDING', 'LATE']);
   
@@ -149,6 +150,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
     setEditAmount(item.amount.toString());
     setEditDate(format(item.dueDate, 'yyyy-MM-dd'));
     setEditAccountId(item.accountId);
+    setEditToAccountId(item.toAccountId || '');
   };
 
   const handleConfirm = async () => {
@@ -158,14 +160,20 @@ const TransactionValidation: React.FC<ValidationProps> = ({
       return;
     }
     
+    if (selectedItem.type === 'TRANSFER' && !editToAccountId) {
+        alert('Por favor, selecione a conta de destino.');
+        return;
+    }
+
     try {
       await onValidate({
         userId: selectedItem.userId,
         accountId: editAccountId,
+        toAccountId: selectedItem.type === 'TRANSFER' ? editToAccountId : undefined,
         description: selectedItem.description,
         amount: parseFloat(editAmount),
         type: selectedItem.type,
-        category: selectedItem.category,
+        category: selectedItem.type === 'TRANSFER' ? 'Transferência' : selectedItem.category,
         date: editDate,
         recurrence: 'NONE', // It becomes a real one-time transaction
         isJoint: selectedItem.isJoint
@@ -566,7 +574,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
 
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Vincular a qual conta?</label>
+                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">
+                    {selectedItem.type === 'TRANSFER' ? 'Conta de Origem' : 'Vincular a qual conta?'}
+                </label>
                 <div className="relative">
                   <select 
                     value={editAccountId}
@@ -582,6 +592,28 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                   <CreditCard className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 </div>
               </div>
+
+              {selectedItem.type === 'TRANSFER' && (
+                <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Conta de Destino</label>
+                    <div className="relative">
+                        <select 
+                            value={editToAccountId}
+                            onChange={e => setEditToAccountId(e.target.value)}
+                            required
+                            className="w-full pl-12 pr-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-500 outline-none appearance-none font-bold transition-all"
+                        >
+                            <option value="">Selecione a conta de destino</option>
+                            {accounts.filter(a => a.id !== editAccountId).map(acc => (
+                                <option key={acc.id} value={acc.id}>
+                                    {acc.name} ({acc.type})
+                                </option>
+                            ))}
+                        </select>
+                        <CreditCard className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Descrição</label>
