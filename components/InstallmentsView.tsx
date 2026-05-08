@@ -30,7 +30,7 @@ import {
 interface InstallmentsViewProps {
   installmentGroups: InstallmentGroup[];
   transactions: Transaction[];
-  onAdd: (group: Omit<InstallmentGroup, 'id' | 'active'>) => Promise<any>;
+  onAdd: (group: Omit<InstallmentGroup, 'id' | 'active'>, customInstallments?: { number: number; date: string; amount: number; description?: string }[]) => Promise<any>;
   onDelete: (id: string, deleteTransactions: boolean) => void;
   onValidate: (transaction: Omit<Transaction, 'id' | 'isTemplate'>) => void;
   onDeleteTransaction: (id: string) => void;
@@ -64,7 +64,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
   const [statusFilters, setStatusFilters] = useState<('PENDING' | 'LATE' | 'PAID')[]>(['PENDING', 'LATE']);
 
   const [step, setStep] = useState<'FORM' | 'PREVIEW'>('FORM');
-  const [previewItems, setPreviewItems] = useState<{ number: number; date: string; amount: number }[]>([]);
+  const [previewItems, setPreviewItems] = useState<{ number: number; date: string; amount: number; description: string }[]>([]);
 
   const [newGroup, setNewGroup] = useState<Omit<InstallmentGroup, 'id' | 'active' | 'userId'>>({
     accountId: accounts[0]?.id || '',
@@ -194,7 +194,8 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
         items.push({
             number: i + 1,
             date: format(dueDate, 'yyyy-MM-dd'),
-            amount: newGroup.installmentAmount
+            amount: newGroup.installmentAmount,
+            description: `${newGroup.description} (${i + 1}/${newGroup.totalInstallments})`
         });
     }
     setPreviewItems(items);
@@ -202,9 +203,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
   };
 
   const handleFinalSubmit = async () => {
-    // Current implementation of onAdd expects a pattern, but we can update it if needed.
-    // For now we save the group. In a more advanced version we'd save the custom items.
-    await onAdd(newGroup as any);
+    await onAdd(newGroup as any, previewItems);
     setIsFormOpen(false);
     setStep('FORM');
     setPreviewItems([]);
@@ -798,12 +797,28 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
 
                 <div className="space-y-3">
                   {previewItems.map((item, idx) => (
-                    <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl flex items-center gap-4 group">
-                      <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-100 dark:border-slate-700">
-                        {item.number}
+                    <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl flex flex-col gap-3 group border border-transparent hover:border-indigo-100 dark:hover:border-indigo-900/30 transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-100 dark:border-slate-700">
+                            {item.number}
+                        </div>
+                        <input 
+                            type="text"
+                            value={item.description}
+                            onChange={e => {
+                                const newItems = [...previewItems];
+                                newItems[idx].description = e.target.value;
+                                setPreviewItems(newItems);
+                            }}
+                            className="flex-1 bg-transparent border-none p-0 text-sm font-bold text-slate-900 dark:text-white focus:ring-0 outline-none"
+                            placeholder="Descrição da parcela"
+                        />
+                        <div className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <CheckCircle2 className="w-5 h-5" />
+                        </div>
                       </div>
                       
-                      <div className="flex-1 grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-3 pl-11">
                         <div className="space-y-1">
                           <label className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Data</label>
                           <input 
@@ -814,12 +829,12 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                                newItems[idx].date = e.target.value;
                                setPreviewItems(newItems);
                             }}
-                            className="w-full bg-transparent border-none p-0 text-xs font-bold text-slate-900 dark:text-white focus:ring-0 outline-none"
+                            className="w-full bg-slate-100/50 dark:bg-slate-900/50 px-2 py-1.5 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500 outline-none border-none transition-all"
                           />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Valor</label>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-900/50 px-2 py-1.5 rounded-lg">
                             <span className="text-[10px] font-bold text-slate-400">R$</span>
                             <input 
                               type="number"
@@ -834,10 +849,6 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                             />
                           </div>
                         </div>
-                      </div>
-
-                      <div className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <CheckCircle2 className="w-5 h-5" />
                       </div>
                     </div>
                   ))}
