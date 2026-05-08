@@ -538,7 +538,7 @@ export const useFinancialData = () => {
       setRecurringTransactions(prev => prev.map(rec => rec.id === r.id ? r : rec));
   };
 
-  const addInstallmentGroup = async (g: Omit<InstallmentGroup, 'id' | 'active'>) => {
+  const addInstallmentGroup = async (g: Omit<InstallmentGroup, 'id' | 'active'>, customInstallments?: { number: number; date: string; amount: number }[]) => {
     if (!user) return;
     
     // First, save the group/contract
@@ -566,12 +566,34 @@ export const useFinancialData = () => {
     if (groupError) throw groupError;
 
     if (groupData) {
+      if (customInstallments && customInstallments.length > 0) {
+        const installmentTransactions = customInstallments.map(item => ({
+          user_id: user.id,
+          account_id: g.accountId,
+          description: `${g.description} (${item.number}/${g.totalInstallments})`,
+          amount: item.amount,
+          type: g.type,
+          category: g.category,
+          date: item.date,
+          is_joint: g.isJoint,
+          installment_group_id: groupData.id,
+          installment_number: item.number,
+          total_installments: g.totalInstallments,
+          is_template: false // Saves as a regular transaction
+        }));
+        
+        const { error: transError } = await supabase.from('transactions').insert(installmentTransactions);
+        if (transError) console.error('Error saving individual installments:', transError);
+      }
+
       const newGroup: InstallmentGroup = {
         ...g,
         id: groupData.id,
         active: true
       };
+      
       setInstallmentGroups(prev => [...prev, newGroup]);
+      await fetchData(); // Refresh all transactions and balances
       return newGroup;
     }
   };
