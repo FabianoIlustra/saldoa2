@@ -703,16 +703,14 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Intervalo (Dias)</label>
-                  <select 
+                  <input 
+                    type="number"
+                    min="1"
+                    placeholder="30"
                     value={newGroup.intervalDays}
-                    onChange={e => setNewGroup({...newGroup, intervalDays: parseInt(e.target.value)})}
+                    onChange={e => setNewGroup({...newGroup, intervalDays: parseInt(e.target.value) || 0})}
                     className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  >
-                    <option value={30}>Mensal (30 dias)</option>
-                    <option value={15}>Quinzenal (15 dias)</option>
-                    <option value={7}>Semanal (7 dias)</option>
-                    <option value={31}>31 dias</option>
-                  </select>
+                  />
                 </div>
               </div>
 
