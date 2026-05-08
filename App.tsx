@@ -307,8 +307,8 @@ const AppContent: React.FC = () => {
           <InstallmentsView 
             installmentGroups={installmentGroups}
             transactions={filteredTransactions}
-            onAdd={async (g) => {
-                await addInstallmentGroup(g);
+            onAdd={async (g, customItems) => {
+                await addInstallmentGroup(g, customItems);
                 showToast('Parcelamento criado e lançamentos gerados!');
             }}
             onDelete={async (id, deleteTrans) => {
