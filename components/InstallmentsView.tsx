@@ -97,35 +97,57 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
       const baseDate = parseISO(group.startDate);
       
       for (let i = 0; i < group.totalInstallments; i++) {
-        const dueDate = new Date(baseDate);
-        dueDate.setDate(baseDate.getDate() + (i * group.intervalDays));
+        // Find if there's a real transaction record for this installment
+        const record = transactions.find(t => 
+          String(t.installmentGroupId) === String(group.id) && 
+          Number(t.installmentNumber) === (i + 1)
+        );
+
+        // Use the date from the record if it exists, otherwise calculate it
+        const finalDate = record ? (typeof record.date === 'string' ? parseISO(record.date) : record.date) : (() => {
+            const d = new Date(baseDate);
+            d.setDate(baseDate.getDate() + (i * group.intervalDays));
+            return d;
+        })();
+
+        // Use the amount from the record if it exists
+        const finalAmount = record ? record.amount : group.installmentAmount;
+        
+        // Use the description from the record if it exists
+        const finalDescription = record ? record.description : `${group.description} (${i + 1}/${group.totalInstallments})`;
         
         let shouldInclude = false;
         if (isYearFilter) {
-            shouldInclude = dueDate.getFullYear() === targetDate.getFullYear();
+            shouldInclude = finalDate.getFullYear() === targetDate.getFullYear();
         } else {
-            shouldInclude = dueDate.getMonth() === targetDate.getMonth() && dueDate.getFullYear() === targetDate.getFullYear();
+            shouldInclude = finalDate.getMonth() === targetDate.getMonth() && finalDate.getFullYear() === targetDate.getFullYear();
         }
 
         if (shouldInclude) {
-          const paidRecord = transactions.find(t => 
-            t.installmentGroupId === group.id && 
-            t.installmentNumber === (i + 1)
-          );
-          
           let status: 'paid' | 'late' | 'pending' = 'pending';
-          if (paidRecord) {
-              status = 'paid';
-          } else if (isBefore(dueDate, startOfDay(new Date()))) {
+          
+          // In this app's logic, if the transaction is in the DB and is NOT a template, 
+          // it is considered "Paid" or "Accounted for".
+          // If it's a future date, we'll call it pending.
+          if (record && !record.isTemplate) {
+              const recordDate = parseISO(record.date);
+              if (isBefore(recordDate, startOfDay(new Date()))) {
+                  status = 'paid';
+              } else {
+                  status = 'pending';
+              }
+          } else if (isBefore(finalDate, startOfDay(new Date()))) {
               status = 'late';
           }
 
           list.push({
             ...group,
+            description: finalDescription, // Updated to use the record's specific description
+            installmentAmount: finalAmount, // Updated to use the record's specific amount
             installmentNumber: i + 1,
-            dueDate,
+            dueDate: finalDate,
             status,
-            paidTransactionId: paidRecord?.id
+            paidTransactionId: record?.id
           });
         }
       }
