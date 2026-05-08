@@ -120,7 +120,8 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
             amount: Math.abs(amount),
             type: amount < 0 ? 'EXPENSE' : 'INCOME',
             category: learnedCategory, 
-            originalId: fitid
+            originalId: fitid,
+            selected: true
           });
         }
       }
@@ -145,7 +146,8 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
         const result = await parseStatement(rawText, categories);
         const resultWithRules = result.map(t => ({
             ...t,
-            category: t.category === 'Outros' ? findLearnedCategory(t.description || '') : t.category
+            category: t.category === 'Outros' ? findLearnedCategory(t.description || '') : t.category,
+            selected: true
         }));
         setPreview(resultWithRules);
       }
@@ -174,7 +176,8 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
                 const result = await parseStatementFile(base64Data, file.type, categories);
                 const resultWithRules = result.map(t => ({
                     ...t,
-                    category: t.category === 'Outros' ? findLearnedCategory(t.description || '') : t.category
+                    category: t.category === 'Outros' ? findLearnedCategory(t.description || '') : t.category,
+                    selected: true
                 }));
                 setPreview(resultWithRules);
             } catch (err) {
@@ -202,7 +205,7 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
              } catch (err) {
                  setError('Erro ao ler arquivo OFX.');
              }
-         }, 100);
+          }, 100);
       }
     };
     reader.readAsText(file);
@@ -214,7 +217,13 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
   };
 
   const handleConfirm = () => {
-    preview.forEach(t => {
+    const itemsToImport = preview.filter(p => p.selected);
+    if (itemsToImport.length === 0) {
+        setError('Selecione pelo menos uma transação para importar.');
+        return;
+    }
+
+    itemsToImport.forEach(t => {
         if (t.category && t.category !== 'Outros') {
             const cleanDesc = cleanDescription(t.description);
             if (cleanDesc.length > 2) { // Only learn meaningful descriptions
@@ -230,8 +239,13 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
         }
     });
 
-    onImport(preview, selectedAccountId);
+    onImport(itemsToImport, selectedAccountId);
     onClose();
+  };
+
+  const toggleAll = () => {
+    const allSelected = preview.every(p => p.selected);
+    setPreview(prev => prev.map(p => ({ ...p, selected: !allSelected })));
   };
 
   const removeTransaction = (index: number) => {
@@ -308,48 +322,70 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
             <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
               <div className="flex flex-col md:flex-row justify-between items-end gap-4">
                 <div>
-                    <h3 className="font-black text-slate-900 dark:text-white text-lg">Validar Importação ({preview.length})</h3>
+                    <h3 className="font-black text-slate-900 dark:text-white text-lg">Validar Importação ({preview.filter(p => p.selected).length}/{preview.length})</h3>
                     <p className="text-xs text-slate-400 font-bold mt-1">
                         Conta: {accounts.find(a => a.id === selectedAccountId)?.name}
                     </p>
                 </div>
-                <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800">
-                    <div className="flex flex-col">
-                        <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Data Geral</label>
-                        <input 
-                            type="date" 
-                            value={globalDate}
-                            onChange={(e) => setGlobalDate(e.target.value)}
-                            className="bg-transparent border-none outline-none text-xs font-bold text-slate-700 dark:text-white px-1"
-                        />
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800">
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Data Geral</label>
+                            <input 
+                                type="date" 
+                                value={globalDate}
+                                onChange={(e) => setGlobalDate(e.target.value)}
+                                className="bg-transparent border-none outline-none text-xs font-bold text-slate-700 dark:text-white px-1"
+                            />
+                        </div>
+                        <button 
+                            onClick={applyGlobalDate}
+                            className="bg-indigo-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition-all"
+                        >
+                            Aplicar a Todos
+                        </button>
                     </div>
-                    <button 
-                        onClick={applyGlobalDate}
-                        className="bg-indigo-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition-all"
-                    >
-                        Aplicar a Todos
-                    </button>
                 </div>
                 <div className="flex gap-3">
-                    <button onClick={() => setPreview([])} className="text-sm text-slate-500 font-bold hover:text-rose-500 transition-all">Cancelar</button>
+                    <button onClick={() => setPreview([])} className="text-sm text-slate-500 font-bold hover:text-rose-500 transition-all">Limpar e Voltar</button>
                 </div>
               </div>
 
-              <div className="border border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden mb-6 transition-colors max-h-[50vh] overflow-y-auto">
+              <div className="border border-slate-100 dark:border-slate-800 rounded-3xl overflow-hidden mb-6 transition-colors max-h-[50vh] overflow-y-auto custom-scrollbar">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase text-[10px] font-black tracking-widest sticky top-0 backdrop-blur-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase text-[10px] font-black tracking-widest sticky top-0 backdrop-blur-sm z-10">
                     <tr>
-                      <th className="px-6 py-4">Data</th>
-                      <th className="px-6 py-4">Descrição</th>
-                      <th className="px-6 py-4">Categoria</th>
-                      <th className="px-6 py-4">Valor</th>
-                      <th className="px-6 py-4 text-right">Ação</th>
+                      <th className="px-4 py-4 w-10">
+                        <input 
+                            type="checkbox" 
+                            checked={preview.length > 0 && preview.every(p => p.selected)}
+                            onChange={toggleAll}
+                            className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                        />
+                      </th>
+                      <th className="px-4 py-4 w-32">Data</th>
+                      <th className="px-4 py-4">Descrição</th>
+                      <th className="px-4 py-4 w-40">Categoria</th>
+                      <th className="px-4 py-4 w-32">Valor</th>
+                      <th className="px-4 py-4 text-right"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 dark:divide-slate-800 transition-colors">
                     {preview.map((item, i) => (
-                      <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
-                        <td className="px-6 py-4">
+                      <tr key={i} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group ${!item.selected ? 'opacity-50 grayscale select-none' : ''}`}>
+                        <td className="px-4 py-4">
+                            <input 
+                                type="checkbox" 
+                                checked={item.selected}
+                                onChange={(e) => {
+                                    const newPreview = [...preview];
+                                    newPreview[i].selected = e.target.checked;
+                                    setPreview(newPreview);
+                                }}
+                                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                            />
+                        </td>
+                        <td className="px-4 py-4">
                             <input 
                                 type="date" 
                                 value={item.date}
@@ -358,13 +394,25 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
                                     newPreview[i].date = e.target.value;
                                     setPreview(newPreview);
                                 }}
-                                className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-xl text-[10px] font-bold text-slate-500 dark:text-slate-400 border-none outline-none focus:ring-2 focus:ring-indigo-500"
+                                className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-xl text-[10px] font-bold text-slate-500 dark:text-slate-400 border-none outline-none focus:ring-2 focus:ring-indigo-500 w-full"
                             />
                         </td>
-                        <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{item.description}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
+                            <input 
+                                type="text"
+                                value={item.description}
+                                onChange={(e) => {
+                                    const newPreview = [...preview];
+                                    newPreview[i].description = e.target.value;
+                                    setPreview(newPreview);
+                                }}
+                                placeholder="Descrição do lançamento"
+                                className="w-full bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 border-none outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </td>
+                        <td className="px-4 py-4">
                           <select 
-                            className="bg-slate-100 dark:bg-slate-800 px-2 py-1.5 rounded-xl text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase border-none outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase border-none outline-none focus:ring-2 focus:ring-indigo-500 w-full"
                             value={item.category}
                             onChange={(e) => {
                                 const newPreview = [...preview];
@@ -376,10 +424,10 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
                               <option value="Outros">Outros</option>
                           </select>
                         </td>
-                        <td className={`px-6 py-4 font-black whitespace-nowrap ${item.type === 'INCOME' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        <td className={`px-4 py-4 font-black whitespace-nowrap text-right ${item.type === 'INCOME' ? 'text-emerald-500' : 'text-rose-500'}`}>
                           {item.type === 'INCOME' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-4 py-4 text-right">
                             <button onClick={() => removeTransaction(i)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
                                 <X className="w-4 h-4" />
                             </button>
@@ -390,12 +438,16 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
                 </table>
               </div>
 
-              <button
-                onClick={handleConfirm}
-                className="w-full bg-emerald-600 text-white py-5 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 shadow-xl shadow-emerald-100 dark:shadow-none"
-              >
-                <Check className="w-6 h-6" /> Confirmar Importação
-              </button>
+              <div className="flex flex-col gap-4">
+                {error && <p className="text-rose-500 text-center text-sm font-bold animate-pulse">{error}</p>}
+                <button
+                    onClick={handleConfirm}
+                    disabled={preview.filter(p => p.selected).length === 0}
+                    className="w-full bg-emerald-600 text-white py-5 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-emerald-700 disabled:bg-slate-300 transition-all flex items-center justify-center gap-3 shadow-xl shadow-emerald-100 dark:shadow-none"
+                >
+                    <Check className="w-6 h-6" /> Confirmar Lançamentos Selecionados
+                </button>
+              </div>
             </div>
           )}
         </div>
