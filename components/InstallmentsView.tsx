@@ -63,6 +63,9 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [statusFilters, setStatusFilters] = useState<('PENDING' | 'LATE' | 'PAID')[]>(['PENDING', 'LATE']);
 
+  const [step, setStep] = useState<'FORM' | 'PREVIEW'>('FORM');
+  const [previewItems, setPreviewItems] = useState<{ number: number; date: string; amount: number }[]>([]);
+
   const [newGroup, setNewGroup] = useState<Omit<InstallmentGroup, 'id' | 'active' | 'userId'>>({
     accountId: accounts[0]?.id || '',
     description: '',
@@ -179,10 +182,32 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
     });
   }, [installmentGroups, transactions, targetDate, currentFilters, sortField, sortDirection, statusFilters]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Generate Preview Items
+    const items = [];
+    const baseDate = parseISO(newGroup.startDate);
+    for (let i = 0; i < newGroup.totalInstallments; i++) {
+        const dueDate = new Date(baseDate);
+        dueDate.setDate(baseDate.getDate() + (i * newGroup.intervalDays));
+        items.push({
+            number: i + 1,
+            date: format(dueDate, 'yyyy-MM-dd'),
+            amount: newGroup.installmentAmount
+        });
+    }
+    setPreviewItems(items);
+    setStep('PREVIEW');
+  };
+
+  const handleFinalSubmit = async () => {
+    // Current implementation of onAdd expects a pattern, but we can update it if needed.
+    // For now we save the group. In a more advanced version we'd save the custom items.
     await onAdd(newGroup as any);
     setIsFormOpen(false);
+    setStep('FORM');
+    setPreviewItems([]);
     setNewGroup({
       accountId: accounts[0]?.id || '',
       description: '',
@@ -608,146 +633,233 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
             <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-indigo-600 rounded-2xl">
-                  <Plus className="w-6 h-6" />
+                  {step === 'FORM' ? <Plus className="w-6 h-6" /> : <CalendarCheck className="w-6 h-6" />}
                 </div>
                 <div>
-                  <h3 className="text-xl font-black tracking-tight">Novo Parcelamento</h3>
-                  <p className="text-indigo-300 text-[10px] font-bold uppercase tracking-widest">Cadastre compras divididas</p>
+                  <h3 className="text-xl font-black tracking-tight">
+                    {step === 'FORM' ? 'Novo Parcelamento' : 'Resumo do Parcelamento'}
+                  </h3>
+                  <p className="text-indigo-300 text-[10px] font-bold uppercase tracking-widest">
+                    {step === 'FORM' ? 'Cadastre compras divididas' : 'Confira e ajuste as datas e valores'}
+                  </p>
                 </div>
               </div>
               <button 
-                onClick={() => setIsFormOpen(false)}
+                onClick={() => {
+                   setIsFormOpen(false);
+                   setStep('FORM');
+                }}
                 className="p-2 hover:bg-white/10 rounded-xl transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Descrição</label>
-                <input 
-                  autoFocus
-                  required
-                  type="text"
-                  placeholder="Ex: Smart TV Samsung 55 polegadas"
-                  value={newGroup.description}
-                  onChange={e => setNewGroup({...newGroup, description: e.target.value})}
-                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            {step === 'FORM' ? (
+              <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Valor Total</label>
-                  <div className="relative">
-                    <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">R$</span>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Descrição</label>
+                  <input 
+                    autoFocus
+                    required
+                    type="text"
+                    placeholder="Ex: Smart TV Samsung 55 polegadas"
+                    value={newGroup.description}
+                    onChange={e => setNewGroup({...newGroup, description: e.target.value})}
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Valor Total</label>
+                    <div className="relative">
+                      <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">R$</span>
+                      <input 
+                        required
+                        type="number"
+                        step="0.01"
+                        placeholder="0,00"
+                        value={newGroup.totalAmount || ''}
+                        onChange={e => {
+                          const total = parseFloat(e.target.value);
+                          setNewGroup({
+                            ...newGroup, 
+                            totalAmount: total,
+                            installmentAmount: calculateInstallment(total, newGroup.totalInstallments)
+                          });
+                        }}
+                        className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nº Parcelas</label>
                     <input 
                       required
                       type="number"
-                      step="0.01"
-                      placeholder="0,00"
-                      value={newGroup.totalAmount || ''}
+                      min="2"
+                      max="120"
+                      value={newGroup.totalInstallments}
                       onChange={e => {
-                        const total = parseFloat(e.target.value);
+                        const count = parseInt(e.target.value);
                         setNewGroup({
                           ...newGroup, 
-                          totalAmount: total,
-                          installmentAmount: calculateInstallment(total, newGroup.totalInstallments)
+                          totalInstallments: count,
+                          installmentAmount: calculateInstallment(newGroup.totalAmount, count)
                         });
                       }}
-                      className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nº Parcelas</label>
-                  <input 
-                    required
-                    type="number"
-                    min="2"
-                    max="120"
-                    value={newGroup.totalInstallments}
-                    onChange={e => {
-                      const count = parseInt(e.target.value);
-                      setNewGroup({
-                        ...newGroup, 
-                        totalInstallments: count,
-                        installmentAmount: calculateInstallment(newGroup.totalAmount, count)
-                      });
-                    }}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  />
-                </div>
-              </div>
 
-              {newGroup.totalAmount > 0 && (
-                <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-widest">Valor da Parcela:</span>
-                  <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(newGroup.installmentAmount)}
-                  </span>
-                </div>
-              )}
+                {newGroup.totalAmount > 0 && (
+                  <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-widest">Valor da Parcela:</span>
+                    <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(newGroup.installmentAmount)}
+                    </span>
+                  </div>
+                )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Data 1ª Parcela</label>
-                  <input 
-                    required
-                    type="date"
-                    value={newGroup.startDate}
-                    onChange={e => setNewGroup({...newGroup, startDate: e.target.value})}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Intervalo (Dias)</label>
-                  <input 
-                    type="number"
-                    min="1"
-                    placeholder="30"
-                    value={newGroup.intervalDays}
-                    onChange={e => setNewGroup({...newGroup, intervalDays: parseInt(e.target.value) || 0})}
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Conta de Saída</label>
-                    <select 
-                      value={newGroup.accountId}
-                      onChange={e => setNewGroup({...newGroup, accountId: e.target.value})}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Data 1ª Parcela</label>
+                    <input 
+                      required
+                      type="date"
+                      value={newGroup.startDate}
+                      onChange={e => setNewGroup({...newGroup, startDate: e.target.value})}
                       className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                    >
-                      {accounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Categoria</label>
-                    <select 
-                      value={newGroup.category}
-                      onChange={e => setNewGroup({...newGroup, category: e.target.value})}
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Intervalo (Dias)</label>
+                    <input 
+                      type="number"
+                      min="1"
+                      placeholder="30"
+                      value={newGroup.intervalDays}
+                      onChange={e => setNewGroup({...newGroup, intervalDays: parseInt(e.target.value) || 0})}
                       className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                    >
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.name}>{cat.name}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Conta de Saída</label>
+                      <select 
+                        value={newGroup.accountId}
+                        onChange={e => setNewGroup({...newGroup, accountId: e.target.value})}
+                        className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      >
+                        {accounts.map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Categoria</label>
+                      <select 
+                        value={newGroup.category}
+                        onChange={e => setNewGroup({...newGroup, category: e.target.value})}
+                        className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      >
+                        {categories.map(cat => (
+                          <option key={cat.id} value={cat.name}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                </div>
+                
+                <button 
+                  type="submit"
+                  className="w-full py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95"
+                >
+                  Gerar Parcelas
+                </button>
+              </form>
+            ) : (
+              <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Resumo das Parcelas</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white uppercase">{newGroup.description}</span>
+                  </div>
+                  <button 
+                    onClick={() => setStep('FORM')}
+                    className="text-xs font-black text-indigo-600 hover:text-indigo-700 flex items-center gap-1 uppercase tracking-widest"
+                  >
+                    <Edit2 className="w-3 h-3" /> Alterar Dados
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {previewItems.map((item, idx) => (
+                    <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl flex items-center gap-4 group">
+                      <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-100 dark:border-slate-700">
+                        {item.number}
+                      </div>
+                      
+                      <div className="flex-1 grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Data</label>
+                          <input 
+                            type="date"
+                            value={item.date}
+                            onChange={e => {
+                               const newItems = [...previewItems];
+                               newItems[idx].date = e.target.value;
+                               setPreviewItems(newItems);
+                            }}
+                            className="w-full bg-transparent border-none p-0 text-xs font-bold text-slate-900 dark:text-white focus:ring-0 outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Valor</label>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] font-bold text-slate-400">R$</span>
+                            <input 
+                              type="number"
+                              step="0.01"
+                              value={item.amount}
+                              onChange={e => {
+                                 const newItems = [...previewItems];
+                                 newItems[idx].amount = parseFloat(e.target.value) || 0;
+                                 setPreviewItems(newItems);
+                              }}
+                              className="w-full bg-transparent border-none p-0 text-xs font-bold text-slate-900 dark:text-white focus:ring-0 outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex justify-between items-center mb-6">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Valor Total Conferido:</span>
+                    <span className="text-xl font-black text-indigo-600">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(previewItems.reduce((s, i) => s + i.amount, 0))}
+                    </span>
+                  </div>
+                  
+                  <button 
+                    onClick={handleFinalSubmit}
+                    className="w-full py-5 bg-emerald-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 dark:shadow-none hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-3"
+                  >
+                    <Check className="w-5 h-5" /> Confirmar e Salvar
+                  </button>
+                </div>
               </div>
-              
-              <button 
-                type="submit"
-                className="w-full py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95"
-              >
-                Gerar Parcelas
-              </button>
-            </form>
+            )}
           </div>
         </div>
       )}
