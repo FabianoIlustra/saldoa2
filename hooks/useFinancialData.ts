@@ -123,9 +123,9 @@ export const useFinancialData = () => {
           recurrence: t.recurrence as any,
           isJoint: t.is_joint,
           isTemplate: t.is_template,
-          installmentGroupId: t.installment_group_id || undefined,
-          installmentNumber: t.installment_number || undefined,
-          totalInstallments: t.total_installments || undefined,
+          installmentGroupId: t.installment_group_id,
+          installmentNumber: t.installment_number,
+          totalInstallments: t.total_installments,
           toAccountId: t.to_account_id || undefined
         }));
         setTransactions(mappedTransactions);
@@ -538,7 +538,7 @@ export const useFinancialData = () => {
       setRecurringTransactions(prev => prev.map(rec => rec.id === r.id ? r : rec));
   };
 
-  const addInstallmentGroup = async (g: Omit<InstallmentGroup, 'id' | 'active'>, customInstallments?: { number: number; date: string; amount: number }[]) => {
+  const addInstallmentGroup = async (g: Omit<InstallmentGroup, 'id' | 'active'>, customInstallments?: { number: number; date: string; amount: number; description: string }[]) => {
     if (!user) return;
     
     // First, save the group/contract
@@ -570,7 +570,7 @@ export const useFinancialData = () => {
         const installmentTransactions = customInstallments.map(item => ({
           user_id: user.id,
           account_id: g.accountId,
-          description: `${g.description} (${item.number}/${g.totalInstallments})`,
+          description: item.description || `${g.description} (${item.number}/${g.totalInstallments})`,
           amount: item.amount,
           type: g.type,
           category: g.category,
@@ -579,22 +579,14 @@ export const useFinancialData = () => {
           installment_group_id: groupData.id,
           installment_number: item.number,
           total_installments: g.totalInstallments,
-          is_template: false // Saves as a regular transaction
+          is_template: false
         }));
         
-        const { error: transError } = await supabase.from('transactions').insert(installmentTransactions);
-        if (transError) console.error('Error saving individual installments:', transError);
+        await supabase.from('transactions').insert(installmentTransactions);
       }
 
-      const newGroup: InstallmentGroup = {
-        ...g,
-        id: groupData.id,
-        active: true
-      };
-      
-      setInstallmentGroups(prev => [...prev, newGroup]);
-      await fetchData(); // Refresh all transactions and balances
-      return newGroup;
+      await fetchData(); 
+      return groupData;
     }
   };
 
