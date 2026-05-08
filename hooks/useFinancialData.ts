@@ -107,10 +107,34 @@ export const useFinancialData = () => {
       }
 
       // Fetch Transactions
-      const { data: trans } = await supabase.from('transactions').select('*');
+      let allTrans: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMoreTransactions = true;
+
+      while (hasMoreTransactions) {
+        const { data: transPage, error: transError } = await supabase
+          .from('transactions')
+          .select('*')
+          .range(from, from + step - 1);
+        
+        if (transError) throw transError;
+        
+        if (transPage && transPage.length > 0) {
+          allTrans = [...allTrans, ...transPage];
+          if (transPage.length < step) {
+            hasMoreTransactions = false;
+          } else {
+            from += step;
+          }
+        } else {
+          hasMoreTransactions = false;
+        }
+      }
+
       let mappedTransactions: Transaction[] = [];
-      if (trans) {
-        mappedTransactions = trans.map(t => ({
+      if (allTrans.length > 0) {
+        mappedTransactions = allTrans.map(t => ({
           id: t.id,
           userId: t.user_id,
           accountId: t.account_id,
@@ -193,9 +217,32 @@ export const useFinancialData = () => {
 
       // Fetch Installments
       try {
-        const { data: inst, error: instError } = await supabase.from('installment_groups').select('*');
-        if (!instError && inst) {
-          setInstallmentGroups(inst.map(i => ({
+        let allInst: any[] = [];
+        let instFrom = 0;
+        let hasMoreInst = true;
+
+        while (hasMoreInst) {
+          const { data: instPage, error: instError } = await supabase
+            .from('installment_groups')
+            .select('*')
+            .range(instFrom, instFrom + step - 1);
+          
+          if (instError) throw instError;
+          
+          if (instPage && instPage.length > 0) {
+            allInst = [...allInst, ...instPage];
+            if (instPage.length < step) {
+              hasMoreInst = false;
+            } else {
+              instFrom += step;
+            }
+          } else {
+            hasMoreInst = false;
+          }
+        }
+
+        if (allInst.length > 0) {
+          setInstallmentGroups(allInst.map(i => ({
             id: i.id,
             userId: i.user_id,
             accountId: i.account_id,
@@ -213,7 +260,7 @@ export const useFinancialData = () => {
           })));
         }
       } catch (e) {
-        console.warn('installment_groups table not found');
+        console.warn('installment_groups table not found or error fetching');
       }
 
     } catch (error) {
