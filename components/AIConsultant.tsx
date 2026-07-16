@@ -299,7 +299,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
       const ai = new GoogleGenAI({ apiKey });
       const context = `Você está ajudando ${currentUser.name}. Contexto financeiro (últimas 20 transações): ${JSON.stringify(transactions.slice(0, 20))}. Pergunta: ${userMessage}`;
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.5-flash",
         contents: context,
       });
       setMessages(prev => [...prev, { role: 'model', text: response.text || "Não entendi, pode repetir?" }]);
