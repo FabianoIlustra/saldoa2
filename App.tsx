@@ -90,7 +90,7 @@ const AppContent: React.FC = () => {
   // Calculate Account Balances dynamically
   const accounts = useMemo(() => {
     return rawAccounts.map(account => {
-      const totalAmount = transactions.reduce((sum, t) => {
+      const totalAmount = transactions.filter(t => !t.isTemplate).reduce((sum, t) => {
         if (t.accountId === account.id) {
           if (t.type === 'INCOME') return sum + t.amount;
           return sum - t.amount; // EXPENSE or TRANSFER (source)
@@ -118,6 +118,25 @@ const AppContent: React.FC = () => {
   const filteredTransactions = useMemo(() => {
     // If couple mode is OFF, show only personal transactions (userId matches current user)
     // If couple mode is ON, show ALL transactions (Personal + Joint + Partner's)
+    let baseTransactions = transactions;
+    
+    // Hide regular templates (projections) from the main statement
+    baseTransactions = baseTransactions.filter(t => !t.isTemplate);
+
+    if (!isCoupleMode) {
+        return baseTransactions.filter(t => t.userId === user?.id);
+    }
+    return baseTransactions;
+  }, [transactions, isCoupleMode, user?.id]);
+
+  const filteredInstallmentGroups = useMemo(() => {
+    if (!isCoupleMode) {
+        return installmentGroups.filter(ig => ig.userId === user?.id);
+    }
+    return installmentGroups;
+  }, [installmentGroups, isCoupleMode, user?.id]);
+
+  const filteredRawTransactions = useMemo(() => {
     if (!isCoupleMode) {
         return transactions.filter(t => t.userId === user?.id);
     }
@@ -305,8 +324,8 @@ const AppContent: React.FC = () => {
 
         {activeTab === 'parcelados' && (
           <InstallmentsView 
-            installmentGroups={installmentGroups}
-            transactions={filteredTransactions}
+            installmentGroups={filteredInstallmentGroups}
+            transactions={filteredRawTransactions} // Pass filtered transactions to show templates for current user/couple
             onAdd={async (g, customItems) => {
                 await addInstallmentGroup(g, customItems);
                 showToast('Parcelamento criado e lançamentos gerados!');
@@ -315,7 +334,19 @@ const AppContent: React.FC = () => {
                 await deleteInstallmentGroup(id, deleteTrans);
                 showToast(deleteTrans ? 'Parcelamento e lançamentos excluídos.' : 'Contrato de parcelamento excluído.');
             }}
-            onValidate={addTransaction}
+            onValidate={async (t: any) => {
+                try {
+                    if (t.id) {
+                        await updateTransaction({ ...t, isTemplate: false });
+                        showToast('Lançamento confirmado no extrato!');
+                    } else {
+                        await addTransaction(t);
+                        showToast('Lançamento adicionado!');
+                    }
+                } catch (error: any) {
+                    showToast(`Erro ao validar: ${error.message || 'Falha'}`, 'info');
+                }
+            }}
             onDeleteTransaction={deleteTransaction}
             accounts={accounts}
             categories={categories}
@@ -475,15 +506,31 @@ const AppContent: React.FC = () => {
                 } else {
                     if (t.installments && t.installments > 1) {
                         const baseDate = parseISO(t.date);
+                        const totalAmount = t.amount * t.installments;
+                        const customItems = [];
                         for (let i = 0; i < t.installments; i++) {
                             const newDate = addMonths(baseDate, i);
-                            await addTransaction({
-                                ...t,
-                                description: `${t.description} (${i + 1}/${t.installments})`,
-                                date: format(newDate, 'yyyy-MM-dd')
+                            customItems.push({
+                                number: i + 1,
+                                date: format(newDate, 'yyyy-MM-dd'),
+                                amount: t.amount,
+                                description: `${t.description} (${i + 1}/${t.installments})`
                             });
                         }
-                        showToast(`${t.installments} parcelas adicionadas!`);
+                        await addInstallmentGroup({
+                            userId: displayUser.id,
+                            accountId: t.accountId,
+                            description: t.description,
+                            totalAmount: totalAmount,
+                            installmentAmount: t.amount,
+                            totalInstallments: t.installments,
+                            startDate: t.date,
+                            intervalDays: 30,
+                            category: t.category,
+                            type: t.type,
+                            isJoint: t.isJoint
+                        }, customItems);
+                        showToast(`${t.installments} parcelas adicionadas sob confirmação!`);
                     } else {
                         await addTransaction(t);
                         showToast('Lançamento adicionado!');
