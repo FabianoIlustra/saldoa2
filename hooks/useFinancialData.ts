@@ -106,6 +106,18 @@ export const useFinancialData = () => {
         console.warn('import_rules table not found or query failed, using localStorage fallback');
       }
 
+      // Determine user IDs for filtering
+      let userIds = [user.id];
+      if (profile.couple_id) {
+          const { data: coupleProfiles } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('couple_id', profile.couple_id);
+          if (coupleProfiles) {
+              userIds = coupleProfiles.map(p => p.id);
+          }
+      }
+
       // Fetch Transactions
       let allTrans: any[] = [];
       let from = 0;
@@ -113,10 +125,13 @@ export const useFinancialData = () => {
       let hasMoreTransactions = true;
 
       while (hasMoreTransactions) {
-        const { data: transPage, error: transError } = await supabase
+        let query = supabase
           .from('transactions')
           .select('*')
+          .in('user_id', userIds)
           .range(from, from + step - 1);
+        
+        const { data: transPage, error: transError } = await query;
         
         if (transError) throw transError;
         
@@ -156,13 +171,13 @@ export const useFinancialData = () => {
       }
 
       // Fetch Accounts
-      const { data: accs } = await supabase.from('accounts').select('*');
+      const { data: accs } = await supabase.from('accounts').select('*').in('user_id', userIds);
       if (accs) {
         setAccounts(accs.map(a => {
-          const accountTransactions = mappedTransactions.filter(t => t.accountId === a.id || (t.type === 'TRANSFER' && t.toAccountId === a.id));
+          const accountTransactions = mappedTransactions.filter(t => !t.isTemplate && (t.accountId === a.id || (t.type === 'TRANSFER' && t.toAccountId === a.id)));
           let currentBalance = Number(a.initial_balance);
           
-          mappedTransactions.forEach(t => {
+          accountTransactions.forEach(t => {
             if (t.accountId === a.id) {
               if (t.type === 'INCOME') currentBalance += Number(t.amount);
               else if (t.type === 'EXPENSE' || t.type === 'TRANSFER') currentBalance -= Number(t.amount);
@@ -183,7 +198,7 @@ export const useFinancialData = () => {
       }
 
       // Fetch Goals
-      const { data: gs } = await supabase.from('goals').select('*');
+      const { data: gs } = await supabase.from('goals').select('*').in('user_id', userIds);
       if (gs) {
         setGoals(gs.map(g => ({
           id: g.id,
@@ -197,7 +212,7 @@ export const useFinancialData = () => {
       }
 
       // Fetch Recurring
-      const { data: recs } = await supabase.from('recurring_transactions').select('*');
+      const { data: recs } = await supabase.from('recurring_transactions').select('*').in('user_id', userIds);
       if (recs) {
         setRecurringTransactions(recs.map(r => ({
           id: r.id,
@@ -211,7 +226,8 @@ export const useFinancialData = () => {
           lastGeneratedDate: r.last_generated_date,
           active: r.active,
           toAccountId: r.to_account_id || undefined,
-          isJoint: r.is_joint
+          isJoint: r.is_joint,
+          startDate: r.start_date || undefined
         })));
       }
 
@@ -225,6 +241,7 @@ export const useFinancialData = () => {
           const { data: instPage, error: instError } = await supabase
             .from('installment_groups')
             .select('*')
+            .in('user_id', userIds)
             .range(instFrom, instFrom + step - 1);
           
           if (instError) throw instError;
@@ -291,7 +308,7 @@ export const useFinancialData = () => {
       date: t.date,
       recurrence: t.recurrence,
       is_joint: t.isJoint,
-      is_template: t.recurrence === 'MONTHLY'
+      is_template: (t as any).isTemplate !== undefined ? (t as any).isTemplate : (t.recurrence === 'MONTHLY')
     };
 
     if (t.type === 'TRANSFER' && t.toAccountId && t.toAccountId.trim() !== '') {
@@ -366,7 +383,8 @@ export const useFinancialData = () => {
       date: t.date,
       recurrence: t.recurrence,
       account_id: t.accountId,
-      is_joint: t.isJoint
+      is_joint: t.isJoint,
+      is_template: t.isTemplate !== undefined ? t.isTemplate : false
     };
 
     if (t.type === 'TRANSFER' && t.toAccountId && t.toAccountId.trim() !== '') {
@@ -517,7 +535,8 @@ export const useFinancialData = () => {
       category: r.category,
       day_of_month: r.dayOfMonth,
       is_joint: r.isJoint,
-      active: true
+      active: true,
+      start_date: r.startDate || new Date().toISOString().split('T')[0]
     };
 
     if (r.type === 'TRANSFER' && r.toAccountId) {
@@ -564,7 +583,8 @@ export const useFinancialData = () => {
           day_of_month: r.dayOfMonth,
           last_generated_date: r.lastGeneratedDate,
           active: r.active,
-          is_joint: r.isJoint
+          is_joint: r.isJoint,
+          start_date: r.startDate
       };
 
       if (r.type === 'TRANSFER' && r.toAccountId) {
@@ -626,7 +646,7 @@ export const useFinancialData = () => {
           installment_group_id: groupData.id,
           installment_number: item.number,
           total_installments: g.totalInstallments,
-          is_template: false
+          is_template: true
         }));
         
         await supabase.from('transactions').insert(installmentTransactions);
