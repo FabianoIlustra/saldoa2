@@ -17,7 +17,7 @@ export const getFinancialInsights = async (transactions: Transaction[]): Promise
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -46,7 +46,7 @@ export const parseStatement = async (rawText: string, categories: Category[]): P
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -86,7 +86,7 @@ export const analyzeReceiptImage = async (base64Image: string, categories: Categ
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: [
         {
           inlineData: {
@@ -142,7 +142,7 @@ export const parseStatementFile = async (base64Data: string, mimeType: string, c
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.5-flash",
       contents: [
         {
           inlineData: {
