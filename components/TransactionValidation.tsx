@@ -54,7 +54,20 @@ const TransactionValidation: React.FC<ValidationProps> = ({
     
     const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
     
-    return recurringTransactions.filter(r => r.active).map(rec => {
+    return recurringTransactions.filter(r => {
+      if (!r.active) return false;
+      if (r.startDate) {
+        const start = parseISO(r.startDate);
+        const startYear = start.getFullYear();
+        const startMonth = start.getMonth();
+        const targetYear = targetDate.getFullYear();
+        const targetMonth = targetDate.getMonth();
+        
+        if (startYear > targetYear) return false;
+        if (startYear === targetYear && startMonth > targetMonth) return false;
+      }
+      return true;
+    }).map(rec => {
       // Check if already paid in this month
       // Use description and amount match since DB column is missing
       let paidTransactionId: string | undefined;
