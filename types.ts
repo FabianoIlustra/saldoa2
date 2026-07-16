@@ -77,6 +77,7 @@ export interface RecurringTransaction {
   lastGeneratedDate?: string;
   active: boolean;
   isJoint?: boolean;
+  startDate?: string;
 }
 
 export interface InstallmentGroup {
