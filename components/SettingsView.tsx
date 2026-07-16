@@ -125,6 +125,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [recAccount, setRecAccount] = useState(accounts[0]?.id || '');
   const [recToAccount, setRecToAccount] = useState('');
   const [recIsJoint, setRecIsJoint] = useState(true);
+  const [recStartDate, setRecStartDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Estados para Modais
   const [accountToDelete, setAccountToDelete] = useState<string | null>(null);
@@ -151,6 +152,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [editRecAccount, setEditRecAccount] = useState('');
   const [editRecToAccount, setEditRecToAccount] = useState('');
   const [editRecIsJoint, setEditRecIsJoint] = useState(true);
+  const [editRecStartDate, setEditRecStartDate] = useState('');
 
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,7 +181,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         accountId: recAccount,
         toAccountId: recType === 'TRANSFER' ? recToAccount : undefined,
         userId: 'default', // Should be current user ideally, but simplified for now
-        isJoint: recIsJoint
+        isJoint: recIsJoint,
+        startDate: recStartDate
     });
     setRecDesc('');
     setRecAmount('');
@@ -224,6 +227,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     setEditRecAccount(rec.accountId);
     setEditRecToAccount(rec.toAccountId || '');
     setEditRecIsJoint(rec.isJoint);
+    setEditRecStartDate(rec.startDate || new Date().toISOString().split('T')[0]);
   };
 
   const saveEdit = (e: React.FormEvent) => {
@@ -271,7 +275,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         dayOfMonth: parseInt(editRecDay),
         accountId: editRecAccount,
         toAccountId: editRecType === 'TRANSFER' ? editRecToAccount : undefined,
-        isJoint: editRecIsJoint
+        isJoint: editRecIsJoint,
+        startDate: editRecStartDate
       });
       setRecurringToEdit(null);
     }
@@ -603,7 +608,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         <p className="text-sm text-slate-500 mb-8">Cadastre suas contas fixas para que sejam lançadas automaticamente todo mês.</p>
 
         <form onSubmit={handleAddRecurring} className="flex flex-col gap-4 mb-10 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Descrição</label>
                     <input 
@@ -636,6 +641,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                             <option key={d} value={d}>{d}</option>
                         ))}
                     </select>
+                </div>
+                <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Data de Início</label>
+                    <input 
+                        type="date" 
+                        value={recStartDate}
+                        onChange={e => setRecStartDate(e.target.value)}
+                        className="w-full px-5 py-3.5 bg-white dark:bg-slate-900 rounded-2xl border-none focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                    />
                 </div>
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Categoria</label>
@@ -1106,6 +1120,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     ))}
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Data de Início</label>
+                <input 
+                  type="date"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold" 
+                  value={editRecStartDate} 
+                  onChange={e => setEditRecStartDate(e.target.value)} 
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
