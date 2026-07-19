@@ -1,7 +1,7 @@
 
 // Force sync
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, Loader2, BrainCircuit, Mic, MicOff, Volume2, Trash2, AlertCircle } from 'lucide-react';
+import { Sparkles, Send, Loader2, BrainCircuit, Mic, MicOff, Volume2, VolumeX, Trash2, AlertCircle } from 'lucide-react';
 import { Transaction, ChatMessage, User, Account } from '../types';
 import { GoogleGenAI, Modality, Type, LiveServerMessage } from "@google/genai";
 
@@ -36,12 +36,40 @@ function createBlob(data: Float32Array): any {
   };
 }
 
+function downsample(data: Float32Array, fromRate: number, toRate: number): Float32Array {
+  if (fromRate === toRate) return data;
+  if (toRate > fromRate) return data; // only downsample
+  const ratio = fromRate / toRate;
+  const newLength = Math.round(data.length / ratio);
+  const result = new Float32Array(newLength);
+  let offsetResult = 0;
+  let offsetData = 0;
+  while (offsetResult < result.length) {
+    const nextOffsetData = Math.round((offsetResult + 1) * ratio);
+    let accum = 0;
+    let count = 0;
+    for (let i = offsetData; i < nextOffsetData && i < data.length; i++) {
+      accum += data[i];
+      count++;
+    }
+    result[offsetResult] = count > 0 ? accum / count : 0;
+    offsetResult++;
+    offsetData = nextOffsetData;
+  }
+  return result;
+}
+
 const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, currentUser, onAddTransaction, autoStartVoice, onVoiceHandled }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'processing' | 'responding'>('idle');
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [showMicPermission, setShowMicPermission] = useState(false);
+  const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('finan_ai_voice_output_enabled') !== 'false';
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   
   // Refs para sessão de voz
@@ -50,7 +78,30 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
   const streamRef = useRef<MediaStream | null>(null);
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
-  const isHoldingRef = useRef(false);
+  const lastSpeechTimeRef = useRef<number>(Date.now());
+  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const transactionAddedRef = useRef<boolean>(false);
+
+  const toggleVoiceOutput = () => {
+    const newValue = !isVoiceOutputEnabled;
+    setIsVoiceOutputEnabled(newValue);
+    localStorage.setItem('finan_ai_voice_output_enabled', String(newValue));
+    
+    if (!newValue) {
+      audioQueueRef.current = [];
+      if (activeSourceRef.current) {
+        try {
+          activeSourceRef.current.stop();
+        } catch (e) {
+          // ignore
+        }
+        activeSourceRef.current = null;
+      }
+      if (isVoiceActive) {
+        setVoiceState('listening');
+      }
+    }
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -59,45 +110,65 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
   }, [messages, loading]);
 
   useEffect(() => {
-    if (autoStartVoice && !isVoiceActive) {
-      startVoice();
+    if (autoStartVoice) {
+      // Just clear and reset for a fresh voice recording session, waiting for user to click
+      setMessages([]);
+      stopVoice();
       onVoiceHandled?.();
     }
   }, [autoStartVoice]);
 
   const playAudioQueue = async () => {
+    if (!isVoiceOutputEnabled) {
+      audioQueueRef.current = [];
+      if (isVoiceActive) {
+        setVoiceState('listening');
+      }
+      return;
+    }
     if (isPlayingRef.current || audioQueueRef.current.length === 0 || !audioContextRef.current) return;
     
     isPlayingRef.current = true;
+    setVoiceState('responding');
     const audioCtx = audioContextRef.current;
 
-    while (audioQueueRef.current.length > 0 && audioCtx.state !== 'closed') {
+    while (audioQueueRef.current.length > 0 && audioCtx.state !== 'closed' && isVoiceOutputEnabled) {
       const data = audioQueueRef.current.shift()!;
       const float32 = new Float32Array(data.length);
       for (let i = 0; i < data.length; i++) {
         float32[i] = data[i] / 32768;
       }
 
-      const buffer = audioCtx.createBuffer(1, float32.length, 16000);
+      const buffer = audioCtx.createBuffer(1, float32.length, 24000); // Correct sample rate for Gemini's output
       buffer.getChannelData(0).set(float32);
       
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
       source.connect(audioCtx.destination);
+      activeSourceRef.current = source;
       
       await new Promise<void>((resolve) => {
-        source.onended = () => resolve();
+        source.onended = () => {
+          activeSourceRef.current = null;
+          resolve();
+        };
         source.start();
       });
     }
     
     isPlayingRef.current = false;
+    if (transactionAddedRef.current) {
+      transactionAddedRef.current = false;
+      stopVoice();
+    } else {
+      setVoiceState('listening');
+      lastSpeechTimeRef.current = Date.now();
+    }
   };
 
   const startVoice = async () => {
-    if (isHoldingRef.current) return;
-    isHoldingRef.current = true;
     setIsVoiceActive(true);
+    setVoiceState('listening');
     setVoiceError(null);
 
     try {
@@ -107,7 +178,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
       }
       const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
       
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       if (audioCtx.state === 'suspended') {
         await audioCtx.resume();
       }
@@ -118,13 +189,6 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
         throw err;
       });
 
-      if (!isHoldingRef.current) {
-        console.log("Soltou o botão antes de obter stream");
-        stream.getTracks().forEach(track => track.stop());
-        if (audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
-        setIsVoiceActive(false);
-        return;
-      }
       streamRef.current = stream;
 
       const registrarTransacaoTool = {
@@ -161,6 +225,13 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
         model: 'gemini-3.1-flash-live-preview',
         config: {
           responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: "Charon"
+              }
+            }
+          },
           tools: [{ functionDeclarations: [registrarTransacaoTool, registrarTransferenciaTool] }],
           systemInstruction: `Você é o assistente de voz do Saldo A2. 
           Você está falando com ${currentUser.name}.
@@ -175,7 +246,28 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
             const scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
-              const pcmBlob = createBlob(inputData);
+              
+              // VAD / Speech detection to trigger "Processando..." state
+              let sum = 0;
+              for (let i = 0; i < inputData.length; i++) {
+                sum += inputData[i] * inputData[i];
+              }
+              const rms = Math.sqrt(sum / inputData.length);
+              
+              if (rms > 0.008) {
+                lastSpeechTimeRef.current = Date.now();
+                if (!isPlayingRef.current) {
+                  setVoiceState('listening');
+                }
+              } else {
+                if (Date.now() - lastSpeechTimeRef.current > 1500 && !isPlayingRef.current) {
+                  setVoiceState('processing');
+                }
+              }
+
+              // Downsample input from native sampleRate to 16000Hz for Gemini Live API
+              const downsampled = downsample(inputData, audioCtx.sampleRate, 16000);
+              const pcmBlob = createBlob(downsampled);
               sessionPromise.then(session => session.sendRealtimeInput({
                 audio: { 
                   mimeType: 'audio/pcm;rate=16000',
@@ -187,6 +279,9 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
             scriptProcessor.connect(audioCtx.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
+            // Set voiceState to processing when a message begins or a tool is called
+            setVoiceState('processing');
+
             // Audio response from AI
             const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64Audio) {
@@ -224,6 +319,13 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
                       functionResponses: [{ id: fc.id, name: fc.name, response: { result: "Transação registrada!" } }]
                     });
                   });
+
+                  transactionAddedRef.current = true;
+                  if (!isVoiceOutputEnabled) {
+                    setTimeout(() => {
+                      stopVoice();
+                    }, 1500);
+                  }
                 } else if (fc.name === 'registrar_transferencia') {
                    const data = fc.args as any;
                    onAddTransaction({
@@ -246,6 +348,13 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
                       functionResponses: [{ id: fc.id, name: fc.name, response: { result: "Transferência preparada!" } }]
                     });
                   });
+
+                  transactionAddedRef.current = true;
+                  if (!isVoiceOutputEnabled) {
+                    setTimeout(() => {
+                      stopVoice();
+                    }, 1500);
+                  }
                 }
               }
             }
@@ -268,8 +377,8 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
   };
 
   const stopVoice = () => {
-    isHoldingRef.current = false;
     setIsVoiceActive(false);
+    setVoiceState('idle');
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -277,7 +386,25 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close().catch(e => console.error("Erro ao fechar AudioContext:", e));
     }
-    if (sessionRef.current) sessionRef.current.close();
+    if (sessionRef.current) {
+      try {
+        sessionRef.current.close();
+      } catch (e) {}
+      sessionRef.current = null;
+    }
+  };
+
+  const toggleVoice = () => {
+    if (isVoiceActive) {
+      stopVoice();
+    } else {
+      const hasPermission = localStorage.getItem('finan_ai_mic_permission') === 'true';
+      if (hasPermission) {
+        startVoice();
+      } else {
+        setShowMicPermission(true);
+      }
+    }
   };
 
   const handleSend = async (e?: React.FormEvent) => {
@@ -321,20 +448,37 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
             <span className="font-bold block">A2Bot</span>
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1">
               {isVoiceActive ? (
-                <span className="flex items-center gap-1 text-emerald-400">
-                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping"></span> Ouvindo...
-                </span>
+                voiceState === 'processing' ? (
+                  <span className="flex items-center gap-1 text-indigo-400">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Processando...
+                  </span>
+                ) : voiceState === 'responding' ? (
+                  <span className="flex items-center gap-1 text-amber-400 animate-pulse">
+                    <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping"></span> Respondendo...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-emerald-400">
+                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping"></span> Ouvindo...
+                  </span>
+                )
               ) : "Pronto para ajudar"}
             </span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           {voiceError && (
             <div className="bg-rose-500/20 text-rose-300 text-[10px] px-3 py-1 rounded-full flex items-center gap-1 border border-rose-500/30">
               <AlertCircle className="w-3 h-3" /> {voiceError}
             </div>
           )}
-          <button onClick={() => setMessages([])} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+          <button 
+            onClick={toggleVoiceOutput} 
+            title={isVoiceOutputEnabled ? "Desativar voz do robô" : "Ativar voz do robô"} 
+            className={`p-2 rounded-xl transition-colors ${isVoiceOutputEnabled ? 'hover:bg-white/10 text-emerald-400' : 'hover:bg-white/10 text-slate-400'}`}
+          >
+            {isVoiceOutputEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+          </button>
+          <button onClick={() => setMessages([])} className="p-2 hover:bg-white/10 rounded-xl transition-colors" title="Limpar conversa">
             <Trash2 className="w-5 h-5 text-slate-400" />
           </button>
         </div>
@@ -342,26 +486,53 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30 dark:bg-slate-900/50 transition-colors">
         {messages.length === 0 && !isVoiceActive && (
-          <div className="flex flex-col items-center justify-center p-8 text-center max-w-sm mx-auto">
-            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl flex items-center justify-center mb-4 transition-colors">
-              <Sparkles className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex flex-col items-center justify-center p-8 text-center max-w-sm mx-auto my-auto h-full">
+            <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center mb-4 transition-colors animate-pulse">
+              <Mic className="w-8 h-8" />
             </div>
-            <h4 className="text-lg font-bold text-slate-800 dark:text-white mb-1">Olá, {currentUser.name.split(' ')[0]}!</h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Segure o microfone para registrar gastos ou digite sua dúvida.
+            <h4 className="text-xl font-black text-slate-800 dark:text-white mb-2">Aperte o microfone para registrar</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+              Toque no botão verde de microfone abaixo e fale seu lançamento para que o A2Bot registre para você automaticamente.
             </p>
+            <div className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-3 py-2 rounded-xl">
+              Ex: <span className="font-semibold text-emerald-600 dark:text-emerald-400">"Almoço de 35 reais no cartão"</span>
+            </div>
           </div>
         )}
 
         {isVoiceActive && (
-          <div className="flex flex-col items-center justify-center h-full space-y-6 animate-pulse">
-            <div className="flex gap-1 items-end h-12">
-              {[1,2,3,4,5,4,3,2,1].map((h, i) => (
-                <div key={i} className="w-1 bg-indigo-500 rounded-full" style={{ height: `${h * 20}%`, animationDelay: `${i * 0.1}s` }} />
-              ))}
-            </div>
-            <p className="text-indigo-600 dark:text-indigo-400 font-bold">Modo de Voz Ativo</p>
-            <p className="text-slate-400 dark:text-slate-500 text-sm text-center">Fale seu comando agora...<br/>Chame as funções para registrar gastos.</p>
+          <div className="flex flex-col items-center justify-center h-full space-y-6">
+            {voiceState === 'processing' ? (
+              <div className="flex flex-col items-center gap-4">
+                <Loader2 className="w-12 h-12 animate-spin text-indigo-600 dark:text-indigo-400" />
+                <p className="text-indigo-600 dark:text-indigo-400 font-bold animate-pulse text-lg">Processando comando...</p>
+                <p className="text-slate-400 dark:text-slate-500 text-sm text-center">O A2Bot está analisando seu áudio e processando o lançamento...</p>
+              </div>
+            ) : voiceState === 'responding' ? (
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex gap-1.5 items-end h-12">
+                  {[2, 4.5, 3, 5, 2.5, 4, 1.5, 3, 2].map((h, i) => (
+                    <div key={i} className="w-1.5 bg-emerald-500 dark:bg-emerald-400 rounded-full animate-bounce" style={{ height: `${h * 20}%`, animationDelay: `${i * 0.12}s`, animationDuration: '0.75s' }} />
+                  ))}
+                </div>
+                <p className="text-emerald-600 dark:text-emerald-400 font-bold text-lg">A2Bot Respondendo...</p>
+                <p className="text-slate-400 dark:text-slate-500 text-sm text-center">Ouça a confirmação do seu assistente de voz.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex gap-1 items-end h-12">
+                  {[1, 2, 3, 4, 5, 4, 3, 2, 1].map((h, i) => (
+                    <div key={i} className="w-1 bg-indigo-500 rounded-full animate-pulse" style={{ height: `${h * 20}%`, animationDelay: `${i * 0.1}s` }} />
+                  ))}
+                </div>
+                <p className="text-indigo-600 dark:text-indigo-400 font-bold text-lg animate-pulse">Ouvindo você...</p>
+                <p className="text-slate-400 dark:text-slate-500 text-sm text-center leading-relaxed">
+                  Fale seu comando agora...<br />
+                  Ex: <span className="font-semibold text-indigo-500">"Gastei 15 reais com almoço"</span> ou<br />
+                  <span className="font-semibold text-indigo-500">"Recebi R$ 2500 de salário"</span>
+                </p>
+              </div>
+            )}
           </div>
         )}
         
@@ -380,15 +551,13 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
       <div className="p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 transition-colors">
         <div className="flex gap-3">
           <button 
-            onPointerDown={(e) => { e.preventDefault(); startVoice(); }}
-            onPointerUp={(e) => { e.preventDefault(); stopVoice(); }}
-            onPointerCancel={(e) => { e.preventDefault(); stopVoice(); }}
-            onContextMenu={(e) => e.preventDefault()}
-            className={`p-4 rounded-[1.5rem] transition-all shadow-lg flex-shrink-0 touch-none active:scale-95 ${
-              isVoiceActive ? 'bg-rose-500 text-white scale-110 shadow-rose-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'
+            type="button"
+            onClick={toggleVoice}
+            className={`p-4 rounded-[1.5rem] transition-all shadow-lg flex-shrink-0 active:scale-95 ${
+              isVoiceActive ? 'bg-rose-500 text-white scale-110 shadow-rose-200 animate-pulse' : 'bg-emerald-600 text-white hover:bg-emerald-700'
             }`}
           >
-            <Mic className={`w-6 h-6 ${isVoiceActive ? 'animate-pulse' : ''}`} />
+            {isVoiceActive ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
           </button>
           <form onSubmit={handleSend} className="flex-1 flex gap-3">
             <input 
@@ -408,6 +577,42 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
           </form>
         </div>
       </div>
+
+      {showMicPermission && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-950 w-full max-w-md rounded-[2.5rem] p-8 border border-slate-100 dark:border-slate-800 shadow-2xl text-center space-y-6 animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white">
+            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 rounded-3xl flex items-center justify-center mx-auto text-indigo-600 dark:text-indigo-400">
+              <Mic className="w-8 h-8" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-black">Acesso ao Microfone</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                O A2Bot precisa de acesso ao seu microfone para ouvir seus comandos de voz e registrar suas despesas ou receitas diretamente no seu extrato.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowMicPermission(false)}
+                className="flex-1 py-3.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl font-bold text-slate-600 dark:text-slate-300 transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMicPermission(false);
+                  localStorage.setItem('finan_ai_mic_permission', 'true');
+                  startVoice();
+                }}
+                className="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black transition-colors text-sm"
+              >
+                Permitir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
