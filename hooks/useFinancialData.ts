@@ -29,12 +29,36 @@ export const useFinancialData = () => {
         .single();
 
       if (profile) {
+        let profileTier = profile.tier || 'gratis';
+        let profileRole = profile.role || 'user';
+        let profileEmail = profile.email || user.email || '';
+
+        // Auto-promote our specific owner to Admin and Premium
+        if (user.email === 'fabianofreitasfoto@hotmail.com' && (profileRole !== 'admin' || profileTier !== 'premium')) {
+          profileRole = 'admin';
+          profileTier = 'premium';
+          try {
+            await supabase.from('profiles').update({ role: 'admin', tier: 'premium', email: user.email }).eq('id', user.id);
+          } catch (err) {
+            console.error("Could not auto-promote admin in DB", err);
+          }
+        } else if (!profile.email && user.email) {
+          try {
+            await supabase.from('profiles').update({ email: user.email }).eq('id', user.id);
+          } catch (err) {
+            console.error("Could not auto-sync email in DB", err);
+          }
+        }
+
         const currentUser = {
           id: profile.id,
           name: profile.name || user.email?.split('@')[0] || 'User',
           avatarColor: profile.avatar_color || '#6366f1',
           spendingCeiling: profile.spending_ceiling,
-          coupleId: profile.couple_id
+          coupleId: profile.couple_id,
+          tier: profileTier as 'gratis' | 'basico' | 'medio' | 'premium',
+          role: profileRole as 'user' | 'admin',
+          email: profileEmail
         };
         setCurrentUserProfile(currentUser);
 
@@ -49,7 +73,10 @@ export const useFinancialData = () => {
                 const mappedUsers = coupleProfiles.map(p => ({
                     id: p.id,
                     name: p.name || 'User',
-                    avatarColor: p.avatar_color || '#6366f1'
+                    avatarColor: p.avatar_color || '#6366f1',
+                    tier: (p.tier || 'gratis') as 'gratis' | 'basico' | 'medio' | 'premium',
+                    role: (p.role || 'user') as 'user' | 'admin',
+                    email: p.email || ''
                 }));
                 setUsers(mappedUsers);
             } else {
@@ -936,6 +963,7 @@ export const useFinancialData = () => {
 
   return {
     loading,
+    fetchData,
     transactions,
     categories,
     accounts,
