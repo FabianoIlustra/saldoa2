@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users, ArrowUpCircle } from 'lucide-react';
+import { LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users, ArrowUpCircle, ShieldCheck, Sparkles } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TransactionList from './components/TransactionList';
 import TransactionForm from './components/TransactionForm';
@@ -16,12 +16,14 @@ import Auth from './components/Auth';
 import CashFlow from './components/CashFlow';
 import TransactionValidation from './components/TransactionValidation';
 import InstallmentsView from './components/InstallmentsView';
+import AdminPanel from './components/AdminPanel';
+import SubscriptionModal from './components/SubscriptionModal';
 import { Transaction } from './types';
 import { addMonths, format, parseISO } from 'date-fns';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useFinancialData } from './hooks/useFinancialData';
 
-type TabType = 'dashboard' | 'transactions' | 'cashflow' | 'validation' | 'parcelados' | 'goals' | 'ai' | 'settings' | 'scanner' | 'visuals';
+type TabType = 'dashboard' | 'transactions' | 'cashflow' | 'validation' | 'parcelados' | 'goals' | 'ai' | 'settings' | 'scanner' | 'visuals' | 'admin';
 
 const AppContent: React.FC = () => {
   const { user, signOut, loading: authLoading } = useAuth();
@@ -36,6 +38,7 @@ const AppContent: React.FC = () => {
     installmentGroups,
     currentUserProfile,
     users,
+    fetchData,
     addTransaction,
     updateTransaction,
     deleteTransaction,
@@ -75,6 +78,7 @@ const AppContent: React.FC = () => {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [shouldAutoStartVoice, setShouldAutoStartVoice] = useState(false);
+  const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'info' = 'success') => {
     setToast({ message, type });
@@ -175,29 +179,37 @@ const AppContent: React.FC = () => {
           </div>
 
           <nav className="space-y-2">
-            {[
-              { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
-              { id: 'transactions', icon: History, label: 'Meu Extrato' },
-              { id: 'cashflow', icon: TrendingUp, label: 'Fluxo de Caixa' },
-              { id: 'validation', icon: CalendarCheck, label: 'Recorrentes' },
-              { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
-              { id: 'visuals', icon: CreditCard, label: 'Gráficos' },
-              { id: 'goals', icon: Target, label: 'Metas' },
-              { id: 'ai', icon: MessageSquareCode, label: 'Consultor IA' },
-              { id: 'settings', icon: Settings, label: 'Ajustes' },
-            ].map(item => (
-              <button 
-                key={item.id}
-                onClick={() => setActiveTab(item.id as TabType)}
-                className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl font-bold transition-all text-sm ${
-                  activeTab === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 
-                  'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                {item.label}
-              </button>
-            ))}
+            {(() => {
+              const menuItems = [
+                { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
+                { id: 'transactions', icon: History, label: 'Meu Extrato' },
+                { id: 'cashflow', icon: TrendingUp, label: 'Fluxo de Caixa' },
+                { id: 'validation', icon: CalendarCheck, label: 'Recorrentes' },
+                { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
+                { id: 'visuals', icon: CreditCard, label: 'Gráficos' },
+                { id: 'goals', icon: Target, label: 'Metas' },
+                { id: 'ai', icon: MessageSquareCode, label: 'Consultor IA' },
+                { id: 'settings', icon: Settings, label: 'Ajustes' },
+              ];
+
+              if (currentUserProfile?.role === 'admin') {
+                menuItems.push({ id: 'admin', icon: ShieldCheck, label: 'Painel Admin' });
+              }
+
+              return menuItems.map(item => (
+                <button 
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as TabType)}
+                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl font-bold transition-all text-sm ${
+                    activeTab === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 
+                    'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <item.icon className="w-5 h-5" />
+                  {item.label}
+                </button>
+              ));
+            })()}
           </nav>
         </div>
         
@@ -247,6 +259,7 @@ const AppContent: React.FC = () => {
                activeTab === 'visuals' ? 'Gráficos' :
                activeTab === 'goals' ? 'Metas' :
                activeTab === 'settings' ? 'Configurações' :
+               activeTab === 'admin' ? 'Painel Admin' :
                activeTab === 'ai' ? 'Consultoria IA' : 'Financeiro'}
             </h1>
             <p className="text-slate-400 font-medium">Gerencie suas contas e transações em um só lugar.</p>
@@ -464,31 +477,43 @@ const AppContent: React.FC = () => {
             onClearImportRules={clearImportRules}
           />
         )}
+
+        {activeTab === 'admin' && currentUserProfile?.role === 'admin' && (
+          <AdminPanel currentUser={displayUser} />
+        )}
       </main>
 
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-1 py-1 flex overflow-x-auto z-50 safe-area-bottom no-scrollbar">
-        {[
-          { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
-          { id: 'transactions', icon: History, label: 'Extrato' },
-          { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
-          { id: 'visuals', icon: TrendingUp, label: 'Gráficos' },
-          { id: 'cashflow', icon: ArrowUpCircle, label: 'Fluxo' },
-          { id: 'validation', icon: CalendarCheck, label: 'Contas' },
-          { id: 'ai', icon: MessageSquareCode, label: 'IA' },
-          { id: 'settings', icon: Settings, label: 'Ajustes' },
-        ].map(item => (
-          <button 
-            key={item.id}
-            onClick={() => setActiveTab(item.id as TabType)}
-            className={`flex flex-col items-center justify-center gap-1 transition-all rounded-xl py-2 px-1 min-w-[56px] ${
-              activeTab === item.id ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-            }`}
-          >
-            <item.icon className={`w-5 h-5 ${activeTab === item.id ? 'fill-current' : ''}`} />
-            <span className="text-[8px] font-bold truncate w-full text-center">{item.label}</span>
-          </button>
-        ))}
+        {(() => {
+          const mobileItems = [
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
+            { id: 'transactions', icon: History, label: 'Extrato' },
+            { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
+            { id: 'visuals', icon: TrendingUp, label: 'Gráficos' },
+            { id: 'cashflow', icon: ArrowUpCircle, label: 'Fluxo' },
+            { id: 'validation', icon: CalendarCheck, label: 'Contas' },
+            { id: 'ai', icon: MessageSquareCode, label: 'IA' },
+            { id: 'settings', icon: Settings, label: 'Ajustes' },
+          ];
+
+          if (currentUserProfile?.role === 'admin') {
+            mobileItems.push({ id: 'admin', icon: ShieldCheck, label: 'Admin' });
+          }
+
+          return mobileItems.map(item => (
+            <button 
+              key={item.id}
+              onClick={() => setActiveTab(item.id as TabType)}
+              className={`flex flex-col items-center justify-center gap-1 transition-all rounded-xl py-2 px-1 min-w-[56px] ${
+                activeTab === item.id ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              <item.icon className={`w-5 h-5 ${activeTab === item.id ? 'fill-current' : ''}`} />
+              <span className="text-[8px] font-bold truncate w-full text-center">{item.label}</span>
+            </button>
+          ));
+        })()}
       </nav>
 
       {isFormOpen && (
@@ -582,6 +607,23 @@ const AppContent: React.FC = () => {
           <CheckCircle className="w-5 h-5 text-emerald-400" />
           <span className="text-sm font-bold">{toast.message}</span>
         </div>
+      )}
+
+      {/* Hidden button for Subscription Modal trigger from sub-components */}
+      <button 
+        id="trigger-subscription-modal" 
+        onClick={() => setIsSubscriptionOpen(true)} 
+        className="hidden pointer-events-none"
+        aria-hidden="true"
+      />
+
+      {isSubscriptionOpen && currentUserProfile && (
+        <SubscriptionModal 
+          isOpen={isSubscriptionOpen} 
+          onClose={() => setIsSubscriptionOpen(false)} 
+          currentUser={currentUserProfile}
+          onTierUpdated={fetchData}
+        />
       )}
     </div>
   );
