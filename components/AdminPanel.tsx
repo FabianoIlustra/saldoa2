@@ -136,16 +136,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   }, [profiles, searchTerm, tierFilter]);
 
   const copySQLCommand = () => {
-    const sql = `-- Execute este comando no editor SQL do Supabase para atualizar as permissões do Admin:
+    const sql = `-- Execute este comando no editor SQL do Supabase para atualizar as permissões do Admin sem recursão:
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'gratis';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
 
+-- Criação da função de verificação segura (evita recursão infinita na RLS do Supabase)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Admins can update all profiles" ON public.profiles;
 
-CREATE POLICY "Admins can view all profiles" ON public.profiles FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
-CREATE POLICY "Admins can update all profiles" ON public.profiles FOR UPDATE USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+CREATE POLICY "Admins can view all profiles" ON public.profiles FOR SELECT USING (public.is_admin());
+CREATE POLICY "Admins can update all profiles" ON public.profiles FOR UPDATE USING (public.is_admin());
 
 UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${currentUser.id}';`;
     navigator.clipboard.writeText(sql);
