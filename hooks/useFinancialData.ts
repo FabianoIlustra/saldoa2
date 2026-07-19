@@ -22,11 +22,53 @@ export const useFinancialData = () => {
     setLoading(true);
     try {
       // Fetch Profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      let profile: any = null;
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          console.error("Error fetching profile", error);
+        } else if (data) {
+          profile = data;
+        }
+      } catch (e) {
+        console.error("Error catching profile", e);
+      }
+
+      // If no profile exists, let's auto-create it
+      if (!profile) {
+        const isOwner = user.email === 'fabianofreitasfoto@hotmail.com';
+        const defaultProfile = {
+          id: user.id,
+          name: user.user_metadata?.name || user.email?.split('@')[0] || 'Usuário',
+          avatar_color: user.user_metadata?.avatar_color || '#6366f1',
+          tier: isOwner ? 'premium' : 'gratis',
+          role: isOwner ? 'admin' : 'user',
+          email: user.email || ''
+        };
+
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .insert([defaultProfile])
+            .select()
+            .single();
+
+          if (!error && data) {
+            profile = data;
+          } else {
+            console.warn("DB insert of profile failed or column missing. Using in-memory fallback:", error);
+            profile = defaultProfile;
+          }
+        } catch (e) {
+          console.warn("Caught exception creating profile, using fallback:", e);
+          profile = defaultProfile;
+        }
+      }
 
       if (profile) {
         let profileTier = profile.tier || 'gratis';
