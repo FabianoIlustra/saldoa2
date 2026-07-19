@@ -2,7 +2,7 @@
 // Force sync
 import React, { useState } from 'react';
 import { Category, Account, RecurringTransaction, TransactionType, Transaction, User } from '../types';
-import { Plus, Trash2, Tag, Download, Upload, ShieldCheck, CreditCard, Wallet, Banknote, Pencil, X, AlertTriangle, Calendar, Repeat, Users, Copy, LogOut, CheckCircle, Brain, Heart, Moon, Sun, Target, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Tag, Download, Upload, ShieldCheck, CreditCard, Wallet, Banknote, Pencil, X, AlertTriangle, Calendar, Repeat, Users, Copy, LogOut, CheckCircle, Brain, Heart, Moon, Sun, Target, ChevronDown, Lock, Sparkles } from 'lucide-react';
 import { getRandomColor } from '../constants';
 
 interface SettingsViewProps {
@@ -369,13 +369,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         {/* Preferências de Visualização */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             <button 
-                onClick={() => onToggleCoupleMode?.(!isCoupleMode)}
-                className={`p-6 rounded-[2rem] border flex items-center justify-between transition-all ${
+                onClick={() => {
+                  const isBlocked = !currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico';
+                  if (isBlocked) {
+                    const modalBtn = document.getElementById('trigger-subscription-modal');
+                    if (modalBtn) modalBtn.click();
+                    return;
+                  }
+                  onToggleCoupleMode?.(!isCoupleMode);
+                }}
+                className={`p-6 rounded-[2rem] border flex items-center justify-between transition-all relative overflow-hidden ${
                     isCoupleMode 
                     ? 'bg-rose-50 border-rose-100 dark:bg-rose-900/20 dark:border-rose-900/30 text-rose-600' 
                     : 'bg-slate-50 border-slate-100 dark:bg-slate-800/50 dark:border-slate-800 text-slate-500'
                 }`}
             >
+                {(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') && (
+                  <div className="absolute right-3 top-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 text-[8px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> Premium / Médio
+                  </div>
+                )}
                 <div className="flex items-center gap-4">
                     <div className={`p-3 rounded-2xl ${isCoupleMode ? 'bg-rose-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
                         <Heart className={`w-6 h-6 ${isCoupleMode ? 'fill-current' : ''}`} />
@@ -408,7 +421,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800">
+            {/* Convidar Pessoa */}
+            <div className={`bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 relative ${(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') ? 'min-h-[220px]' : ''}`}>
+                {(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') && (
+                  <div 
+                    onClick={() => document.getElementById('trigger-subscription-modal')?.click()}
+                    className="absolute inset-0 bg-slate-50/10 dark:bg-slate-900/10 backdrop-blur-[1.5px] rounded-3xl z-10 flex flex-col items-center justify-center p-4 text-center cursor-pointer hover:bg-slate-50/20 dark:hover:bg-slate-950/20 transition-all"
+                  >
+                    <Lock className="w-6 h-6 text-indigo-600 dark:text-indigo-400 mb-1" />
+                    <span className="text-[11px] font-black uppercase text-slate-800 dark:text-white">Conexão de Família Bloqueada</span>
+                    <span className="text-[9px] text-slate-400 mt-0.5">Disponível nos planos Médio e Premium</span>
+                    <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-extrabold mt-1.5 uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md">Ver Planos</span>
+                  </div>
+                )}
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Convidar Pessoa</h3>
                 <p className="text-sm text-slate-500 mb-4">Compartilhe este código para que outra pessoa entre na sua família.</p>
                 <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 mb-4">
@@ -465,7 +490,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
             </div>
 
-            <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800">
+            {/* Entrar em uma Família */}
+            <div className={`bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 relative ${(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') ? 'min-h-[220px]' : ''}`}>
+                {(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') && (
+                  <div 
+                    onClick={() => document.getElementById('trigger-subscription-modal')?.click()}
+                    className="absolute inset-0 bg-slate-50/10 dark:bg-slate-900/10 backdrop-blur-[1.5px] rounded-3xl z-10 flex flex-col items-center justify-center p-4 text-center cursor-pointer hover:bg-slate-50/20 dark:hover:bg-slate-950/20 transition-all"
+                  >
+                    <Lock className="w-6 h-6 text-indigo-600 dark:text-indigo-400 mb-1" />
+                    <span className="text-[11px] font-black uppercase text-slate-800 dark:text-white">Conexão de Família Bloqueada</span>
+                    <span className="text-[9px] text-slate-400 mt-0.5">Disponível nos planos Médio e Premium</span>
+                    <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-extrabold mt-1.5 uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md">Ver Planos</span>
+                  </div>
+                )}
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Entrar em uma Família</h3>
                 <p className="text-sm text-slate-500 mb-4">Digite o código de convite de outra pessoa para se juntar a ela.</p>
                 <div className="flex gap-2">
@@ -511,6 +548,38 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
                 ))}
             </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* Plano & Assinatura */}
+      <CollapsibleSection 
+        title="Plano & Assinatura" 
+        icon={<Sparkles className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />}
+        defaultOpen={true}
+      >
+        <div className="bg-slate-50 dark:bg-slate-800/50 p-6 md:p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <div className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider">Seu Plano Financeiro</div>
+            <h3 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+              Plano Ativo: <span className="text-indigo-600 dark:text-indigo-400 uppercase font-black">{currentUserProfile?.tier || 'gratis'}</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+              {currentUserProfile?.tier === 'premium' ? 'Parabéns! Você tem acesso completo e ilimitado a todas as ferramentas, automações recorrentes, modo família e comando de voz.' : 
+               currentUserProfile?.tier === 'medio' ? 'Excelente! Seu plano Médio libera automações recorrentes, controle inteligente por voz e sincronização em tempo real de casal.' :
+               currentUserProfile?.tier === 'basico' ? 'Seu plano Básico libera controle por voz para lançar transações rapidamente com áudio.' :
+               'Você está utilizando o plano Grátis. Faça um upgrade para liberar lançamentos por voz, metas personalizadas extras, cadastro de contas recorrentes e conexão de casal!'}
+            </p>
+          </div>
+          <button 
+            type="button"
+            onClick={() => {
+              const modalBtn = document.getElementById('trigger-subscription-modal');
+              if (modalBtn) modalBtn.click();
+            }}
+            className="px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs tracking-widest uppercase rounded-2xl shadow-lg transition-all shrink-0"
+          >
+            Alterar Assinatura
+          </button>
         </div>
       </CollapsibleSection>
 
@@ -607,7 +676,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       >
         <p className="text-sm text-slate-500 mb-8">Cadastre suas contas fixas para que sejam lançadas automaticamente todo mês.</p>
 
-        <form onSubmit={handleAddRecurring} className="flex flex-col gap-4 mb-10 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800">
+        <div className="relative">
+          {(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') && (
+            <div 
+              onClick={() => document.getElementById('trigger-subscription-modal')?.click()}
+              className="absolute inset-0 bg-slate-50/10 dark:bg-slate-900/10 backdrop-blur-[1.5px] rounded-3xl z-10 flex flex-col items-center justify-center p-6 text-center cursor-pointer hover:bg-slate-50/20 dark:hover:bg-slate-950/20 transition-all"
+            >
+              <Lock className="w-8 h-8 text-indigo-600 dark:text-indigo-400 mb-2" />
+              <span className="text-sm font-black uppercase text-slate-800 dark:text-white">Automações Recorrentes Bloqueadas</span>
+              <span className="text-xs text-slate-400 mt-1 max-w-sm">Assine o plano Médio ou Premium para automatizar seus lançamentos de contas fixas todos os meses.</span>
+              <span className="text-xs text-indigo-600 dark:text-indigo-400 font-extrabold mt-3 uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1.5 rounded-xl">Conhecer Planos</span>
+            </div>
+          )}
+          <form onSubmit={handleAddRecurring} className={`flex flex-col gap-4 mb-10 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800 ${(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') ? 'opacity-30 select-none pointer-events-none' : ''}`}>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Descrição</label>
@@ -715,6 +796,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
             </div>
         </form>
+      </div>
 
         <div className="space-y-3">
             {recurringTransactions.length === 0 && <p className="text-center text-slate-400 py-4">Nenhuma recorrência cadastrada.</p>}
