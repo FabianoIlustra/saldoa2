@@ -9,6 +9,9 @@ export interface User {
   pin?: string;
   spendingCeiling?: number;
   coupleId?: string;
+  tier?: 'gratis' | 'basico' | 'medio' | 'premium';
+  role?: 'user' | 'admin';
+  email?: string;
 }
 
 export interface Account {
