@@ -17,7 +17,26 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ categories, accounts, o
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Partial<Transaction> | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || '');
+  const [showCameraPermission, setShowCameraPermission] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const triggerCamera = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.onchange = (e) => handleFileChange(e as any);
+    input.click();
+  };
+
+  const handleCameraClick = () => {
+    const hasPermission = localStorage.getItem('finan_ai_camera_permission') === 'true';
+    if (hasPermission) {
+      triggerCamera();
+    } else {
+      setShowCameraPermission(true);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,14 +100,8 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ categories, accounts, o
                 
                 <div className="grid grid-cols-2 gap-4 w-full">
                   <button 
-                    onClick={() => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.accept = 'image/*';
-                        input.capture = 'environment';
-                        input.onchange = (e) => handleFileChange(e as any);
-                        input.click();
-                    }}
+                    type="button"
+                    onClick={handleCameraClick}
                     className="flex flex-col items-center gap-2 p-4 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 hover:border-indigo-500 transition-all shadow-sm"
                   >
                     <Camera className="w-6 h-6 text-indigo-600" />
@@ -193,6 +206,42 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ categories, accounts, o
         </div>
       </div>
       
+      {showCameraPermission && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-950 w-full max-w-md rounded-[2.5rem] p-8 border border-slate-100 dark:border-slate-800 shadow-2xl text-center space-y-6 animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white">
+            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 rounded-3xl flex items-center justify-center mx-auto text-indigo-600 dark:text-indigo-400">
+              <Camera className="w-8 h-8" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-black">Acesso à Câmera</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                O Scanner de Recibos IA precisa de acesso à sua câmera para capturar fotos nítidas dos seus comprovantes de compra e notas fiscais.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCameraPermission(false)}
+                className="flex-1 py-3.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl font-bold text-slate-600 dark:text-slate-300 transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCameraPermission(false);
+                  localStorage.setItem('finan_ai_camera_permission', 'true');
+                  triggerCamera();
+                }}
+                className="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black transition-colors text-sm"
+              >
+                Permitir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes scan {
           0% { top: 0%; opacity: 1; }
