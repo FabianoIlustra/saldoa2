@@ -129,20 +129,36 @@ export const useFinancialData = () => {
         }
       }
 
+      // Determine user IDs for filtering
+      let userIds = [user.id];
+      if (profile && profile.couple_id) {
+          const { data: coupleProfiles } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('couple_id', profile.couple_id);
+          if (coupleProfiles) {
+              userIds = coupleProfiles.map(p => p.id);
+          }
+      }
+
       // Fetch Categories
-      const { data: cats } = await supabase.from('categories').select('*');
+      const { data: cats } = await supabase.from('categories').select('*').in('user_id', userIds);
       if (cats && cats.length > 0) {
         setCategories(cats.map(c => ({
           id: c.id,
           name: c.name,
-          color: c.color || '#94a3b8' // Fallback if color missing
+          color: c.color || '#94a3b8', // Fallback if color missing
+          type: c.type || 'EXPENSE',
+          limit: c.limit !== undefined && c.limit !== null ? Number(c.limit) : undefined,
+          monitored: c.monitored !== undefined && c.monitored !== null ? !!c.monitored : false,
+          isEssential: c.is_essential !== undefined && c.is_essential !== null ? !!c.is_essential : false
         })));
       } else {
         // If no categories, insert defaults
         const defaultCats = DEFAULT_CATEGORIES.map(c => ({
           user_id: user.id,
           name: c.name,
-          type: 'EXPENSE', // Default type, though categories can be both
+          type: c.type || 'EXPENSE',
           color: c.color
         }));
         // We can't easily insert all at once if we want to keep IDs consistent with UI, 
@@ -157,7 +173,7 @@ export const useFinancialData = () => {
       // Fetch Import Rules
       try {
         let rulesQuery = supabase.from('import_rules').select('*');
-        if (profile.couple_id) {
+        if (profile && profile.couple_id) {
             rulesQuery = rulesQuery.or(`user_id.eq.${user.id},couple_id.eq.${profile.couple_id}`);
         } else {
             rulesQuery = rulesQuery.eq('user_id', user.id);
@@ -189,18 +205,6 @@ export const useFinancialData = () => {
         console.warn('import_rules query threw exception, using localStorage fallback:', e);
         const localRules = JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
         setImportRules(localRules);
-      }
-
-      // Determine user IDs for filtering
-      let userIds = [user.id];
-      if (profile.couple_id) {
-          const { data: coupleProfiles } = await supabase
-              .from('profiles')
-              .select('id')
-              .eq('couple_id', profile.couple_id);
-          if (coupleProfiles) {
-              userIds = coupleProfiles.map(p => p.id);
-          }
       }
 
       // Fetch Transactions
@@ -756,27 +760,64 @@ export const useFinancialData = () => {
     // Remove id if it's a temp one, or let Supabase generate it
     const { id, ...rest } = c as any; 
     
-    const { data } = await supabase.from('categories').insert({
+    const payload: any = {
       user_id: user.id,
       name: c.name,
       color: c.color,
-      type: 'EXPENSE' // Default type as UI doesn't specify it in all places
-    }).select().single();
+      type: c.type || 'EXPENSE'
+    };
+    if (c.limit !== undefined) payload.limit = c.limit;
+    if (c.monitored !== undefined) payload.monitored = c.monitored;
+    if (c.isEssential !== undefined) payload.is_essential = c.isEssential;
+
+    let data;
+    try {
+      const res = await supabase.from('categories').insert(payload).select().single();
+      data = res.data;
+    } catch (e) {
+      console.warn('Falha ao inserir colunas estendidas de categorias, tentando simplificado:', e);
+      const res = await supabase.from('categories').insert({
+        user_id: user.id,
+        name: c.name,
+        color: c.color,
+        type: c.type || 'EXPENSE'
+      }).select().single();
+      data = res.data;
+    }
 
     if (data) {
       setCategories(prev => [...prev, {
         id: data.id,
         name: data.name,
-        color: data.color
+        color: data.color,
+        type: data.type || 'EXPENSE',
+        limit: data.limit ? Number(data.limit) : undefined,
+        monitored: !!data.monitored,
+        isEssential: !!data.is_essential
       }]);
     }
   };
 
   const updateCategory = async (c: Category) => {
-    await supabase.from('categories').update({
+    const payload: any = {
       name: c.name,
-      color: c.color
-    }).eq('id', c.id);
+      color: c.color,
+      type: c.type || 'EXPENSE'
+    };
+    if (c.limit !== undefined) payload.limit = c.limit;
+    if (c.monitored !== undefined) payload.monitored = c.monitored;
+    if (c.isEssential !== undefined) payload.is_essential = c.isEssential;
+
+    try {
+      await supabase.from('categories').update(payload).eq('id', c.id);
+    } catch (e) {
+      console.warn('Falha ao atualizar colunas estendidas de categorias, tentando simplificado:', e);
+      await supabase.from('categories').update({
+        name: c.name,
+        color: c.color,
+        type: c.type || 'EXPENSE'
+      }).eq('id', c.id);
+    }
     setCategories(prev => prev.map(cat => cat.id === c.id ? c : cat));
   };
 
