@@ -39,7 +39,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [insights, setInsights] = useState<FinancialAnalysis | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
-  const [isWeeklyScheduleOpen, setIsWeeklyScheduleOpen] = useState(false);
+  const [isWeeklyScheduleOpen, setIsWeeklyScheduleOpen] = useState(true);
 
   const totalBalance = useMemo(() => {
     const total = accounts.reduce((acc, a) => acc + a.currentBalance, 0);
@@ -134,13 +134,16 @@ const Dashboard: React.FC<DashboardProps> = ({
           }
 
           if (isEligible) {
-            // Check if already paid in that month
+            // Check if already paid in that month (case-insensitive and partial match)
             const isPaid = allRawTransactions.some(t => {
               if (t.isTemplate) return false;
               const tDate = parseISO(t.date);
-              return t.description === rt.description &&
-                     tDate.getFullYear() === targetDate.getFullYear() &&
-                     tDate.getMonth() === targetDate.getMonth();
+              const isSamePeriod = tDate.getFullYear() === targetDate.getFullYear() && tDate.getMonth() === targetDate.getMonth();
+              if (!isSamePeriod) return false;
+              
+              const tDesc = t.description.toLowerCase().trim();
+              const rtDesc = rt.description.toLowerCase().trim();
+              return tDesc === rtDesc || tDesc.includes(rtDesc) || rtDesc.includes(tDesc);
             });
 
             if (!isPaid) {
@@ -165,13 +168,39 @@ const Dashboard: React.FC<DashboardProps> = ({
       // Check template transactions (unpaid templates remain on past dates as late)
       allRawTransactions.forEach(t => {
         if (t.date === targetDateStr && t.isTemplate) {
+          // Robust check if this installment has already been paid
+          if (t.installmentGroupId && t.installmentNumber) {
+            const isPaidInstallment = allRawTransactions.some(realT => 
+              !realT.isTemplate && 
+              String(realT.installmentGroupId) === String(t.installmentGroupId) && 
+              Number(realT.installmentNumber) === Number(t.installmentNumber)
+            );
+            if (isPaidInstallment) return; // Skip showing in reminders!
+          }
+
+          // Robust check for recurring templates (monthly recurrence) already recorded/paid this month
+          if (t.recurrence === 'MONTHLY' || !t.installmentGroupId) {
+            const isPaidTemplate = allRawTransactions.some(realT => 
+              !realT.isTemplate && 
+              (realT.description.toLowerCase().trim() === t.description.toLowerCase().trim() ||
+               realT.description.toLowerCase().includes(t.description.toLowerCase().trim()) ||
+               t.description.toLowerCase().includes(realT.description.toLowerCase().trim())) &&
+              parseISO(realT.date).getFullYear() === targetDate.getFullYear() &&
+              parseISO(realT.date).getMonth() === targetDate.getMonth()
+            );
+            if (isPaidTemplate) return; // Skip showing in reminders!
+          }
+
+          const suffix = t.installmentNumber ? `(${t.installmentNumber}/${t.totalInstallments})` : '';
+          const displayDescription = suffix && !t.description.endsWith(suffix) ? `${t.description} ${suffix}` : t.description;
+
           list.push({
             id: `trans-late-${t.id}-${targetDateStr}`,
             date: targetDate,
             dateStr: targetDateStr,
             label: dayLabel,
             type: t.type,
-            description: `${t.description} (${t.installmentNumber}/${t.totalInstallments})`,
+            description: displayDescription,
             amount: t.amount,
             isRecurring: false,
             category: t.category,
@@ -214,13 +243,16 @@ const Dashboard: React.FC<DashboardProps> = ({
           }
 
           if (isEligible) {
-            // Check if already paid in that month
+            // Check if already paid in that month (case-insensitive and partial match)
             const isPaid = allRawTransactions.some(t => {
               if (t.isTemplate) return false;
               const tDate = parseISO(t.date);
-              return t.description === rt.description &&
-                     tDate.getFullYear() === targetDate.getFullYear() &&
-                     tDate.getMonth() === targetDate.getMonth();
+              const isSamePeriod = tDate.getFullYear() === targetDate.getFullYear() && tDate.getMonth() === targetDate.getMonth();
+              if (!isSamePeriod) return false;
+              
+              const tDesc = t.description.toLowerCase().trim();
+              const rtDesc = rt.description.toLowerCase().trim();
+              return tDesc === rtDesc || tDesc.includes(rtDesc) || rtDesc.includes(tDesc);
             });
 
             if (!isPaid) {
@@ -245,13 +277,39 @@ const Dashboard: React.FC<DashboardProps> = ({
       // Check template transactions
       allRawTransactions.forEach(t => {
         if (t.date === targetDateStr && t.isTemplate) {
+          // Robust check if this installment has already been paid
+          if (t.installmentGroupId && t.installmentNumber) {
+            const isPaidInstallment = allRawTransactions.some(realT => 
+              !realT.isTemplate && 
+              String(realT.installmentGroupId) === String(t.installmentGroupId) && 
+              Number(realT.installmentNumber) === Number(t.installmentNumber)
+            );
+            if (isPaidInstallment) return; // Skip showing in reminders!
+          }
+
+          // Robust check for recurring templates (monthly recurrence) already recorded/paid this month
+          if (t.recurrence === 'MONTHLY' || !t.installmentGroupId) {
+            const isPaidTemplate = allRawTransactions.some(realT => 
+              !realT.isTemplate && 
+              (realT.description.toLowerCase().trim() === t.description.toLowerCase().trim() ||
+               realT.description.toLowerCase().includes(t.description.toLowerCase().trim()) ||
+               t.description.toLowerCase().includes(realT.description.toLowerCase().trim())) &&
+              parseISO(realT.date).getFullYear() === targetDate.getFullYear() &&
+              parseISO(realT.date).getMonth() === targetDate.getMonth()
+            );
+            if (isPaidTemplate) return; // Skip showing in reminders!
+          }
+
+          const suffix = t.installmentNumber ? `(${t.installmentNumber}/${t.totalInstallments})` : '';
+          const displayDescription = suffix && !t.description.endsWith(suffix) ? `${t.description} ${suffix}` : t.description;
+
           list.push({
             id: `trans-${t.id}-${targetDateStr}`,
             date: targetDate,
             dateStr: targetDateStr,
             label: dayLabel,
             type: t.type,
-            description: `${t.description} (${t.installmentNumber}/${t.totalInstallments})`,
+            description: displayDescription,
             amount: t.amount,
             isRecurring: false,
             category: t.category,
