@@ -163,16 +163,32 @@ export const useFinancialData = () => {
             rulesQuery = rulesQuery.eq('user_id', user.id);
         }
 
-        const { data: rules } = await rulesQuery;
-        if (rules) {
+        const { data: rules, error: rulesError } = await rulesQuery;
+        
+        const localRules = JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
+        
+        if (rulesError) {
+          console.warn('import_rules query failed, loading from localStorage:', rulesError);
+          setImportRules(localRules);
+        } else if (rules) {
           const rulesMap: Record<string, string> = {};
           rules.forEach(r => {
             rulesMap[r.pattern] = r.category;
           });
-          setImportRules(rulesMap);
+          
+          // Merge local and DB rules for maximum coverage
+          const mergedRules = { ...localRules, ...rulesMap };
+          setImportRules(mergedRules);
+          
+          // Sync merged rules back to localStorage for offline redundancy
+          localStorage.setItem('finan_ai_import_rules', JSON.stringify(mergedRules));
+        } else {
+          setImportRules(localRules);
         }
       } catch (e) {
-        console.warn('import_rules table not found or query failed, using localStorage fallback');
+        console.warn('import_rules query threw exception, using localStorage fallback:', e);
+        const localRules = JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
+        setImportRules(localRules);
       }
 
       // Determine user IDs for filtering
@@ -774,14 +790,18 @@ export const useFinancialData = () => {
     
     // Save to DB
     try {
-      await supabase.from('import_rules').upsert({
+      const { error } = await supabase.from('import_rules').upsert({
         user_id: user.id,
         couple_id: currentUserProfile?.coupleId || null,
         pattern,
         category
       }, { onConflict: 'user_id,pattern' });
+
+      if (error) {
+        console.warn('Error upserting to import_rules table in DB:', error.message);
+      }
     } catch (e) {
-      console.warn('Could not save to import_rules table');
+      console.warn('Could not save to import_rules table:', e);
     }
 
     // Update local state
@@ -795,9 +815,12 @@ export const useFinancialData = () => {
 
   const deleteImportRule = async (pattern: string) => {
     try {
-      await supabase.from('import_rules').delete().eq('pattern', pattern);
+      const { error } = await supabase.from('import_rules').delete().eq('pattern', pattern);
+      if (error) {
+        console.warn('Error deleting from import_rules in DB:', error.message);
+      }
     } catch (e) {
-      console.warn('Could not delete from import_rules table');
+      console.warn('Could not delete from import_rules table:', e);
     }
 
     setImportRules(prev => {
@@ -813,9 +836,12 @@ export const useFinancialData = () => {
 
   const clearImportRules = async () => {
     try {
-      await supabase.from('import_rules').delete().not('pattern', 'is', null);
+      const { error } = await supabase.from('import_rules').delete().not('pattern', 'is', null);
+      if (error) {
+        console.warn('Error clearing import_rules in DB:', error.message);
+      }
     } catch (e) {
-      console.warn('Could not clear import_rules table');
+      console.warn('Could not clear import_rules table:', e);
     }
 
     setImportRules({});
