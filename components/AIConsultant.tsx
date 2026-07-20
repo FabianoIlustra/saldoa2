@@ -43,6 +43,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({
   const streamRef = useRef<MediaStream | null>(null);
   const silenceTimerRef = useRef<any>(null);
   const isVoiceActiveRef = useRef(false);
+  const transcribedTextRef = useRef('');
 
   const toggleVoiceOutput = () => {
     const newValue = !isVoiceOutputEnabled;
@@ -138,6 +139,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({
     setVoiceState('listening');
     setVoiceError(null);
     setTranscribedText('');
+    transcribedTextRef.current = '';
     isVoiceActiveRef.current = true;
 
     try {
@@ -158,26 +160,26 @@ const AIConsultant: React.FC<AIConsultantProps> = ({
       rec.continuous = true;
       rec.interimResults = true;
 
-      let accumulatedText = '';
-
       rec.onstart = () => {
         setVoiceState('listening');
       };
 
       rec.onresult = (event: any) => {
-        let interimTranscript = '';
         let finalTranscript = '';
+        let interimTranscript = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
+        for (let i = 0; i < event.results.length; ++i) {
+          const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
+            finalTranscript += transcript + ' ';
           } else {
-            interimTranscript += event.results[i][0].transcript;
+            interimTranscript += transcript;
           }
         }
 
-        const currentText = (accumulatedText + finalTranscript + interimTranscript).trim();
+        const currentText = (finalTranscript + interimTranscript).trim();
         setTranscribedText(currentText);
+        transcribedTextRef.current = currentText;
 
         // Reset silence timer
         if (silenceTimerRef.current) {
@@ -265,7 +267,12 @@ Responda ESTRITAMENTE em formato JSON com o seguinte schema (sem tags markdown):
         }
       });
 
-      const parsedJson = JSON.parse(response.text?.trim() || '{}');
+      let cleanText = response.text?.trim() || '{}';
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/^```(?:json)?\s*/i, '');
+        cleanText = cleanText.replace(/\s*```$/, '');
+      }
+      const parsedJson = JSON.parse(cleanText.trim());
 
       if (parsedJson.isTransaction && parsedJson.amount > 0) {
         const targetAccountId = parsedJson.accountId || accounts[0]?.id || 'default';
@@ -328,7 +335,11 @@ Responda ESTRITAMENTE em formato JSON com o seguinte schema (sem tags markdown):
 
   const toggleVoice = () => {
     if (isVoiceActive) {
-      stopVoice();
+      if (transcribedTextRef.current.trim().length > 3) {
+        processVoiceCommandText(transcribedTextRef.current.trim());
+      } else {
+        stopVoice();
+      }
     } else {
       const hasPermission = localStorage.getItem('finan_ai_mic_permission') === 'true';
       if (hasPermission) {
@@ -383,7 +394,12 @@ Categorias: ${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name, type
         }
       });
 
-      const parsed = JSON.parse(response.text?.trim() || '{}');
+      let cleanText = response.text?.trim() || '{}';
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/^```(?:json)?\s*/i, '');
+        cleanText = cleanText.replace(/\s*```$/, '');
+      }
+      const parsed = JSON.parse(cleanText.trim());
 
       if (parsed.isTransaction && parsed.amount > 0) {
         const targetAccountId = parsed.accountId || accounts[0]?.id || 'default';
