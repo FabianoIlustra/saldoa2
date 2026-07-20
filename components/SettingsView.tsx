@@ -147,6 +147,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [categoryToEdit, setCategoryToEdit] = useState<Category | null>(null);
   const [editCatName, setEditCatName] = useState('');
   const [editCatColor, setEditCatColor] = useState('');
+  const [editCatType, setEditCatType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [editCatLimit, setEditCatLimit] = useState('');
   const [editCatMonitored, setEditCatMonitored] = useState(false);
   const [editCatIsEssential, setEditCatIsEssential] = useState(false);
@@ -220,6 +221,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     setCategoryToEdit(cat);
     setEditCatName(cat.name);
     setEditCatColor(cat.color);
+    setEditCatType(cat.type || 'EXPENSE');
     setEditCatLimit(cat.limit?.toString() || '');
     setEditCatMonitored(!!cat.monitored);
     setEditCatIsEssential(!!cat.isEssential);
@@ -255,19 +257,20 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const saveEditCategory = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (categoryToEdit && editCatName) {
-      onUpdateCategory({
-        ...categoryToEdit,
-        name: editCatName,
-        color: editCatColor,
-        limit: editCatLimit ? parseFloat(editCatLimit) : undefined,
-        monitored: editCatMonitored,
-        isEssential: editCatIsEssential
-      });
-      setCategoryToEdit(null);
-    }
-  };
+     e.preventDefault();
+     if (categoryToEdit && editCatName) {
+       onUpdateCategory({
+         ...categoryToEdit,
+         name: editCatName,
+         color: editCatColor,
+         type: editCatType,
+         limit: editCatLimit ? parseFloat(editCatLimit) : undefined,
+         monitored: editCatMonitored,
+         isEssential: editCatIsEssential
+       });
+       setCategoryToEdit(null);
+     }
+   };
 
   const saveEditRecurring = (e: React.FormEvent) => {
     e.preventDefault();
@@ -609,7 +612,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 id: Math.random().toString(36).substr(2, 9), 
                 name: newCatName, 
                 color: getRandomColor(),
-                type: 'EXPENSE' // Default to expense, can be changed later or add selector
+                type: newCatType
             });
             setNewCatName('');
           }
@@ -644,7 +647,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     <div key={cat.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-lg group transition-all hover:bg-white dark:hover:bg-slate-800">
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                        <span className="text-xs font-bold truncate text-slate-700 dark:text-slate-300">{cat.name}</span>
+                        <div className="text-xs font-bold truncate text-slate-700 dark:text-slate-300 flex items-center gap-1.5 min-w-0 flex-wrap">
+                          <span className="truncate">{cat.name}</span>
+                          {cat.limit && cat.limit > 0 ? (
+                            <span className="text-[10px] font-semibold text-rose-500 dark:text-rose-400 shrink-0 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-md border border-rose-100/50 dark:border-rose-900/30">
+                              Lmt: R$ {cat.limit.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="flex gap-0.5 shrink-0">
                         <button onClick={() => openEditCategoryModal(cat)} className="text-slate-400 hover:text-indigo-500 p-1">
@@ -666,7 +676,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     <div key={cat.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-lg group transition-all hover:bg-white dark:hover:bg-slate-800">
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                        <span className="text-xs font-bold truncate text-slate-700 dark:text-slate-300">{cat.name}</span>
+                        <div className="text-xs font-bold truncate text-slate-700 dark:text-slate-300 flex items-center gap-1.5 min-w-0 flex-wrap">
+                          <span className="truncate">{cat.name}</span>
+                          {cat.limit && cat.limit > 0 ? (
+                            <span className="text-[10px] font-semibold text-emerald-500 dark:text-emerald-400 shrink-0 bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-md border border-emerald-100/50 dark:border-emerald-900/30">
+                              Lmt: R$ {cat.limit.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="flex gap-0.5 shrink-0">
                         <button onClick={() => openEditCategoryModal(cat)} className="text-slate-400 hover:text-indigo-500 p-1">
@@ -952,6 +969,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     />
                     <span className="text-[10px] font-mono text-slate-500">{editCatColor}</span>
                 </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-0.5 mb-1 block">Tipo de Categoria</label>
+                <select 
+                  value={editCatType}
+                  onChange={e => setEditCatType(e.target.value as 'INCOME' | 'EXPENSE')}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold text-xs"
+                >
+                  <option value="EXPENSE">Despesa</option>
+                  <option value="INCOME">Receita</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-1 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
