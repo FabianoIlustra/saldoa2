@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
-import { X, Check, Lock, Sparkles, CreditCard, QrCode, ShieldAlert, ArrowRight, Zap, RefreshCw, HelpCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Check, Lock, Sparkles, CreditCard, QrCode, ShieldAlert, ArrowRight, Zap, RefreshCw, HelpCircle, AlertCircle, Ticket } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { User } from '../types';
+import { 
+  getPricingConfig, 
+  getCouponsConfig, 
+  getPromoConfig, 
+  addAsaasTransaction 
+} from '../services/adminSettings';
+
+export type PlanTier = 'gratis' | 'basico' | 'medio' | 'premium';
 
 interface SubscriptionModalProps {
   isOpen: boolean;
@@ -10,115 +18,53 @@ interface SubscriptionModalProps {
   onTierUpdated: () => void;
 }
 
-export type PlanTier = 'gratis' | 'basico' | 'medio' | 'premium';
+export let PLAN_DETAILS = getPricingConfig();
 
-export const PLAN_DETAILS = {
-  gratis: {
-    name: 'Grátis',
-    price: 'R$ 0',
-    period: '',
-    description: 'Comece a organizar suas finanças essenciais.',
-    features: [
-      'Até 1 Conta Cadastrada',
-      'Até 15 Lançamentos por Mês',
-      'Até 1 Meta Ativa',
-      'Filtros Básicos de Transações',
-    ],
-    limits: {
-      accounts: 1,
-      transactions: 15,
-      goals: 1,
-      hasVoice: false,
-      hasCouple: false,
-      hasImport: false,
-      hasRecurring: false,
-    }
-  },
-  basico: {
-    name: 'Básico',
-    price: 'R$ 19,90',
-    period: '/mês',
-    description: 'Perfeito para controle individual avançado.',
-    features: [
-      'Até 3 Contas Cadastradas',
-      'Até 50 Lançamentos por Mês',
-      'Até 3 Metas Ativas',
-      'Comando de Voz por IA (A2Bot)',
-      'Relatórios em Gráficos',
-    ],
-    limits: {
-      accounts: 3,
-      transactions: 50,
-      goals: 3,
-      hasVoice: true,
-      hasCouple: false,
-      hasImport: false,
-      hasRecurring: false,
-    }
-  },
-  medio: {
-    name: 'Médio',
-    price: 'R$ 39,90',
-    period: '/mês',
-    description: 'Ideal para casais ou famílias organizadas.',
-    features: [
-      'Até 10 Contas Cadastradas',
-      'Até 200 Lançamentos por Mês',
-      'Até 10 Metas Ativas',
-      'Comando de Voz por IA (A2Bot)',
-      'Modo Compartilhado / Casal',
-      'Importação de Extrato Bancário',
-      'Regras de Categorização por IA',
-    ],
-    limits: {
-      accounts: 10,
-      transactions: 200,
-      goals: 10,
-      hasVoice: true,
-      hasCouple: true,
-      hasImport: true,
-      hasRecurring: true,
-    }
-  },
-  premium: {
-    name: 'Premium',
-    price: 'R$ 59,90',
-    period: '/mês',
-    description: 'Acesso ilimitado e assessoria financeira total.',
-    features: [
-      'Contas e Metas ILIMITADAS',
-      'Lançamentos ILIMITADOS',
-      'Comando de Voz e IA Sem Limites',
-      'Modo Compartilhado / Casal',
-      'Importação de Extrato Inteligente',
-      'Validação de Recorrentes Automática',
-      'Leitor de Recibos por Foto',
-      'Suporte Prioritário',
-    ],
-    limits: {
-      accounts: Infinity,
-      transactions: Infinity,
-      goals: Infinity,
-      hasVoice: true,
-      hasCouple: true,
-      hasImport: true,
-      hasRecurring: true,
-    }
-  }
+export const reloadPlanDetails = () => {
+  PLAN_DETAILS = getPricingConfig();
 };
 
+
 const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, currentUser, onTierUpdated }) => {
+  const [plans, setPlans] = useState(() => getPricingConfig());
+  const [coupons, setCoupons] = useState(() => getCouponsConfig());
+  const [promos, setPromos] = useState(() => getPromoConfig());
+  
   const [selectedPlan, setSelectedPlan] = useState<PlanTier | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<'plans' | 'checkout' | 'success'>('plans');
   const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'pix'>('credit_card');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfigHelp, setShowConfigHelp] = useState(false);
 
+  // Coupon & Billing cycle states
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<any | null>(null);
+  const [couponError, setCouponError] = useState('');
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'semiannual' | 'annual'>('monthly');
+
   // Form State
   const [cardNumber, setCardNumber] = useState('4532 •••• •••• 8821');
   const [cardName, setCardName] = useState(currentUser.name);
   const [cardExpiry, setCardExpiry] = useState('12/29');
   const [cardCvv, setCardCvv] = useState('123');
+
+  // Reload configurations when modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      const latestPlans = getPricingConfig();
+      setPlans(latestPlans);
+      setCoupons(getCouponsConfig());
+      setPromos(getPromoConfig());
+      
+      // Update global PLAN_DETAILS pointer so standard checks see updated limits immediately
+      PLAN_DETAILS = latestPlans;
+      
+      setCouponInput('');
+      setAppliedCoupon(null);
+      setCouponError('');
+      setBillingCycle('monthly');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -128,6 +74,79 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, 
     if (tier === currentTier) return;
     setSelectedPlan(tier);
     setCheckoutStep('checkout');
+  };
+
+  const getPlanPrices = (tier: PlanTier) => {
+    const plan = plans[tier];
+    if (!plan) return { originalPrice: 0, cyclePrice: 0, finalPrice: 0, cycleDiscount: 0, couponDiscountAmount: 0 };
+
+    const originalPrice = plan.price;
+    let cycleDiscount = 0;
+    if (billingCycle === 'annual') {
+      const p = promos.find(pr => pr.id === 'annual');
+      if (p && p.active) cycleDiscount = p.discountPercentage;
+    } else if (billingCycle === 'semiannual') {
+      const p = promos.find(pr => pr.id === 'semiannual');
+      if (p && p.active) cycleDiscount = p.discountPercentage;
+    }
+
+    const cyclePrice = originalPrice * (1 - cycleDiscount / 100);
+    let finalPrice = cyclePrice;
+    let couponDiscountAmount = 0;
+
+    if (appliedCoupon && appliedCoupon.active) {
+      if (appliedCoupon.type === 'percentage') {
+        couponDiscountAmount = cyclePrice * (appliedCoupon.value / 100);
+      } else {
+        couponDiscountAmount = appliedCoupon.value;
+      }
+      finalPrice = Math.max(0, cyclePrice - couponDiscountAmount);
+    }
+
+    return {
+      originalPrice,
+      cyclePrice,
+      finalPrice,
+      cycleDiscount,
+      couponDiscountAmount
+    };
+  };
+
+  const handleApplyCoupon = () => {
+    setCouponError('');
+    if (!couponInput.trim()) return;
+
+    const coupon = coupons.find(c => c.code.trim().toUpperCase() === couponInput.trim().toUpperCase());
+    if (!coupon) {
+      setCouponError('Cupom inválido ou não existente.');
+      setAppliedCoupon(null);
+      return;
+    }
+
+    if (!coupon.active) {
+      setCouponError('Este cupom não está mais ativo.');
+      setAppliedCoupon(null);
+      return;
+    }
+
+    if (coupon.expirationDate) {
+      const today = new Date();
+      const exp = new Date(coupon.expirationDate);
+      if (exp < today) {
+        setCouponError('Este cupom expirou.');
+        setAppliedCoupon(null);
+        return;
+      }
+    }
+
+    setAppliedCoupon(coupon);
+    setCouponError('');
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponError('');
   };
 
   const handleSimulatePayment = async () => {
@@ -142,6 +161,24 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, 
 
       if (error) throw error;
 
+      // Log payment in Asaas database if current user is not admin
+      if (currentUser.role !== 'admin') {
+        try {
+          const prices = getPlanPrices(selectedPlan);
+          addAsaasTransaction({
+            customerEmail: currentUser.email || 'usuario@email.com',
+            customerName: currentUser.name || 'Usuário',
+            plan: selectedPlan,
+            amount: Number(prices.finalPrice.toFixed(2)),
+            paymentMethod: paymentMethod,
+            status: 'CONFIRMED',
+            couponUsed: appliedCoupon ? appliedCoupon.code : undefined
+          });
+        } catch (e) {
+          console.warn("Could not log Asaas transaction:", e);
+        }
+      }
+
       setCheckoutStep('success');
       onTierUpdated();
     } catch (err) {
@@ -151,6 +188,9 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, 
       setIsSubmitting(false);
     }
   };
+
+  const prices = selectedPlan ? getPlanPrices(selectedPlan) : null;
+  const plan = selectedPlan ? plans[selectedPlan] : null;
 
   return (
     <div id="subscription-modal" className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -186,8 +226,8 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, 
 
               {/* Bento Grid de Planos */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {(Object.keys(PLAN_DETAILS) as PlanTier[]).map((tier) => {
-                  const plan = PLAN_DETAILS[tier];
+                {(Object.keys(plans) as PlanTier[]).map((tier) => {
+                  const plan = plans[tier];
                   const isCurrent = tier === currentTier;
                   const isPopular = tier === 'medio';
 
@@ -215,8 +255,10 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, 
                         </div>
 
                         <div className="py-2">
-                          <span className="text-3xl font-black text-slate-800 dark:text-white">{plan.price}</span>
-                          {plan.period && <span className="text-xs text-slate-400 dark:text-slate-500 font-bold">{plan.period}</span>}
+                          <span className="text-3xl font-black text-slate-800 dark:text-white">
+                            {plan.price === 0 ? 'R$ 0' : `R$ ${plan.price.toFixed(2).replace('.', ',')}`}
+                          </span>
+                          {plan.price > 0 && <span className="text-xs text-slate-400 dark:text-slate-500 font-bold">/mês</span>}
                         </div>
 
                         <div className="h-px bg-slate-100 dark:bg-slate-800/60 my-2" />
@@ -259,34 +301,149 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, 
             </div>
           )}
 
-          {checkoutStep === 'checkout' && selectedPlan && (
+          {checkoutStep === 'checkout' && selectedPlan && plan && prices && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-              {/* Resumo do Pedido */}
-              <div className="space-y-6">
-                <div className="bg-slate-50 dark:bg-slate-950 p-6 rounded-3xl border border-slate-100 dark:border-slate-800/80 space-y-4">
-                  <h4 className="text-sm font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Resumo da Assinatura</h4>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase">Plano {PLAN_DETAILS[selectedPlan].name}</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{PLAN_DETAILS[selectedPlan].description}</p>
+                {/* Resumo do Pedido */}
+                <div className="space-y-6">
+                  {/* Ciclo de Faturamento */}
+                  {selectedPlan !== 'gratis' && (
+                    <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-3xl border border-slate-100 dark:border-slate-800/80 space-y-3">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Ciclo de Faturamento</h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setBillingCycle('monthly')}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                            billingCycle === 'monthly'
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                          }`}
+                        >
+                          Mensal
+                        </button>
+                        
+                        {promos.find(p => p.id === 'semiannual')?.active && (
+                          <button
+                            type="button"
+                            onClick={() => setBillingCycle('semiannual')}
+                            className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center ${
+                              billingCycle === 'semiannual'
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>Semestral</span>
+                            <span className="text-[9px] opacity-80">-{promos.find(p => p.id === 'semiannual')?.discountPercentage}%</span>
+                          </button>
+                        )}
+
+                        {promos.find(p => p.id === 'annual')?.active && (
+                          <button
+                            type="button"
+                            onClick={() => setBillingCycle('annual')}
+                            className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center ${
+                              billingCycle === 'annual'
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>Anual</span>
+                            <span className="text-[9px] opacity-80">-{promos.find(p => p.id === 'annual')?.discountPercentage}%</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{PLAN_DETAILS[selectedPlan].price} <span className="text-xs font-bold text-slate-400">{PLAN_DETAILS[selectedPlan].period}</span></span>
-                  </div>
+                  )}
 
-                  <div className="h-px bg-slate-200 dark:bg-slate-800 my-4" />
+                  {/* Detalhes da Cobrança */}
+                  <div className="bg-slate-50 dark:bg-slate-950 p-6 rounded-3xl border border-slate-100 dark:border-slate-800/80 space-y-4">
+                    <h4 className="text-sm font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Resumo da Assinatura</h4>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase">Plano {plan.name}</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{plan.description}</p>
+                      </div>
+                      <div className="text-right">
+                        {prices.finalPrice < prices.originalPrice ? (
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs text-slate-400 line-through font-medium">
+                              R$ {prices.originalPrice.toFixed(2).replace('.', ',')}
+                            </span>
+                            <span className="text-2xl font-black text-emerald-500 dark:text-emerald-400">
+                              R$ {prices.finalPrice.toFixed(2).replace('.', ',')}
+                              <span className="text-[10px] font-bold text-slate-400">
+                                {billingCycle === 'monthly' ? '/mês' : billingCycle === 'semiannual' ? '/semestre' : '/ano'}
+                              </span>
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                            R$ {prices.finalPrice.toFixed(2).replace('.', ',')}
+                            <span className="text-xs font-bold text-slate-400">/mês</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-                  <div className="space-y-2">
-                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Recursos inclusos neste nível:</p>
-                    <ul className="space-y-2.5">
-                      {PLAN_DETAILS[selectedPlan].features.map((feat, idx) => (
-                        <li key={idx} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
-                          <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                          <span>{feat}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    {/* Campo de Cupom */}
+                    {selectedPlan !== 'gratis' && (
+                      <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                          <Ticket className="w-3.5 h-3.5 text-indigo-500" />
+                          Possui Cupom de Desconto?
+                        </label>
+                        {!appliedCoupon ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Digite seu cupom (Ex: BEMVINDO30)"
+                              value={couponInput}
+                              onChange={(e) => setCouponInput(e.target.value)}
+                              className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-indigo-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleApplyCoupon}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all"
+                            >
+                              Aplicar
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/30 px-3 py-2.5 rounded-xl text-xs font-semibold text-emerald-800 dark:text-emerald-400">
+                            <span className="flex items-center gap-1.5 font-bold">
+                              <Check className="w-4 h-4" />
+                              Cupom {appliedCoupon.code} ({appliedCoupon.type === 'percentage' ? `${appliedCoupon.value}%` : `R$ ${appliedCoupon.value.toFixed(2)}`} de desconto)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleRemoveCoupon}
+                              className="text-[10px] uppercase font-black text-red-500 hover:text-red-700"
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        )}
+                        {couponError && (
+                          <p className="text-[11px] font-bold text-red-500 mt-1">{couponError}</p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="h-px bg-slate-200 dark:bg-slate-800/60 my-2" />
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Recursos inclusos neste nível:</p>
+                      <ul className="space-y-2.5">
+                        {plan.features.map((feat, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                            <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
-                </div>
 
                 {/* Banner informativo de simulação */}
                 <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 p-5 rounded-3xl flex gap-3">
