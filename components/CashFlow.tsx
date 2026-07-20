@@ -118,7 +118,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
     return Object.entries(groups).sort((a, b) => b[1] - a[1]);
   }, [normalizedTransactions]);
 
-  const [activeView, setActiveView] = useState<'DEMONSTRATIVO' | 'RESUMIDO' | 'DRE'>('DEMONSTRATIVO');
+  const [activeView, setActiveView] = useState<'CATEGORIAS' | 'BANCO'>('CATEGORIAS');
 
   // ... existing memos ...
 
@@ -136,9 +136,8 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
       {/* Tabs */}
       <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit">
         {[
-          { id: 'DEMONSTRATIVO', label: 'Demonstrativo' },
-          { id: 'RESUMIDO', label: 'Extrato Resumido' },
-          { id: 'DRE', label: 'DRE Operacional' }
+          { id: 'CATEGORIAS', label: 'Categorias' },
+          { id: 'BANCO', label: 'Banco' }
         ].map(tab => (
           <button
             key={tab.id}
@@ -155,18 +154,13 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
       </div>
 
       {/* Views */}
-      {activeView === 'DEMONSTRATIVO' && (
-        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
-          {/* ... Existing Demonstrativo Content ... */}
+      {activeView === 'CATEGORIAS' && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
           <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
             <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-indigo-500" />
-              Demonstrativo Financeiro
+              Categorias
             </h2>
-            <div className="text-right">
-               <p className="text-xs text-slate-400 font-bold uppercase">Saldo Atual Selecionado</p>
-               <p className="text-2xl font-black text-slate-900 dark:text-white">{formatCurrency(totalBalance)}</p>
-            </div>
           </div>
 
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -174,7 +168,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                  <h3 className="text-sm font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2">
-                   <ArrowUpRight className="w-4 h-4" /> Receitas Operacionais
+                   <ArrowUpRight className="w-4 h-4" /> Receitas
                  </h3>
                  <span className="text-sm font-bold text-emerald-600">{formatCurrency(income)}</span>
               </div>
@@ -197,7 +191,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                  <h3 className="text-sm font-black text-rose-600 uppercase tracking-widest flex items-center gap-2">
-                   <ArrowDownRight className="w-4 h-4" /> Despesas Operacionais
+                   <ArrowDownRight className="w-4 h-4" /> Despesas
                  </h3>
                  <span className="text-sm font-bold text-rose-600">{formatCurrency(expense)}</span>
               </div>
@@ -237,9 +231,9 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
         </div>
       )}
 
-      {activeView === 'RESUMIDO' && (
-        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800 p-8">
-            <h2 className="text-xl font-black text-slate-800 dark:text-white mb-6">Extrato Resumido</h2>
+      {activeView === 'BANCO' && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 p-6">
+            <h2 className="text-xl font-black text-slate-800 dark:text-white mb-6">Banco</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-2xl">
                     <p className="text-xs font-bold text-slate-400 uppercase mb-2">Entradas Totais</p>
@@ -297,67 +291,6 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, accounts, categories 
                             </div>
                         );
                     })}
-                </div>
-            </div>
-        </div>
-      )}
-
-      {activeView === 'DRE' && (
-        <div className="space-y-6">
-            {/* Top Summary Section */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 space-y-4">
-                <h2 className="text-lg font-bold text-indigo-900 dark:text-indigo-100 border-b border-indigo-100 dark:border-indigo-900/30 pb-2 mb-4">
-                    Demonstrativo Financeiro (Operacional)
-                </h2>
-                
-                <div className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                    <span className="font-bold text-slate-700 dark:text-slate-300">(+) Receitas Operacionais</span>
-                    <span className="font-black text-emerald-600">{formatCurrency(income)}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                    <span className="font-bold text-slate-700 dark:text-slate-300">(-) Despesas Operacionais</span>
-                    <span className="font-black text-rose-600">{formatCurrency(expense)}</span>
-                </div>
-                <div className="flex justify-between items-center p-4 bg-slate-100 dark:bg-slate-800 rounded-lg mt-2">
-                    <span className="font-black text-slate-900 dark:text-white">(=) Resultado Operacional do Período</span>
-                    <span className={`font-black text-xl ${income - expense >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {formatCurrency(income - expense)}
-                    </span>
-                </div>
-            </div>
-
-            {/* Side by Side Lists */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Receitas */}
-                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
-                    <h3 className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-6 flex items-center gap-2">
-                        <ArrowUpRight className="w-4 h-4" /> Receitas por Categoria
-                    </h3>
-                    <div className="space-y-3">
-                        {incomeByCategory.map(([cat, val]) => (
-                            <div key={cat} className="flex justify-between items-center border-b border-slate-50 dark:border-slate-800 pb-2 last:border-0">
-                                <span className="text-sm font-medium text-slate-600 dark:text-slate-400 uppercase">{cat}</span>
-                                <span className="text-sm font-bold text-emerald-600">{formatCurrency(val)}</span>
-                            </div>
-                        ))}
-                         {incomeByCategory.length === 0 && <p className="text-xs text-slate-400 italic">Nenhuma receita.</p>}
-                    </div>
-                </div>
-
-                {/* Despesas */}
-                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
-                    <h3 className="text-xs font-black text-rose-600 uppercase tracking-widest mb-6 flex items-center gap-2">
-                        <ArrowDownRight className="w-4 h-4" /> Despesas por Categoria
-                    </h3>
-                    <div className="space-y-3">
-                        {expenseByCategory.map(([cat, val]) => (
-                            <div key={cat} className="flex justify-between items-center border-b border-slate-50 dark:border-slate-800 pb-2 last:border-0">
-                                <span className="text-sm font-medium text-slate-600 dark:text-slate-400 uppercase">{cat}</span>
-                                <span className="text-sm font-bold text-rose-600">{formatCurrency(val)}</span>
-                            </div>
-                        ))}
-                        {expenseByCategory.length === 0 && <p className="text-xs text-slate-400 italic">Nenhuma despesa.</p>}
-                    </div>
                 </div>
             </div>
         </div>

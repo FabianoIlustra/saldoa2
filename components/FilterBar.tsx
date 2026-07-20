@@ -137,155 +137,221 @@ const FilterBar: React.FC<FilterBarProps> = ({ categories, accounts, onFilterCha
     setFilters(prev => ({ ...prev, viewMode: mode, dateRange: newRange }));
   };
 
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    if (!value) return;
+    const regex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!regex.test(value)) return;
+
+    try {
+      const parsedDate = new Date(`${value}T00:00:00`);
+      if (!isNaN(parsedDate.getTime())) {
+        setFilters(prev => ({
+          ...prev,
+          dateRange: {
+            ...prev.dateRange,
+            [type]: parsedDate.toISOString()
+          }
+        }));
+      }
+    } catch (e) {
+      console.error("Erro ao converter data:", e);
+    }
+  };
+
+  const setQuickRange = (days: number) => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days);
+    
+    setFilters(prev => ({
+      ...prev,
+      dateRange: {
+        start: start.toISOString(),
+        end: end.toISOString()
+      }
+    }));
+  };
+
   return (
-    <div className="space-y-4 bg-white dark:bg-slate-900 p-4 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-800">
+    <div className="space-y-2 bg-white dark:bg-slate-900 p-2 md:p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
       {/* Top Row: Search, Date Nav, Print */}
-      <div className="flex flex-col xl:flex-row gap-4 items-center justify-between">
+      <div className="flex flex-col sm:flex-row gap-2 items-center justify-between">
         
         {/* Search */}
-        <div className="relative group w-full xl:w-64">
-          <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+        <div className="relative group w-full sm:w-64">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
           <input 
             type="text"
             placeholder="Buscar..."
             value={filters.searchTerm}
             onChange={e => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
-            className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white"
+            className="w-full pl-8 pr-3 py-1.5 md:py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-[11px] md:text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white"
           />
         </div>
 
         {/* Date Navigation - Always Visible */}
-        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-2xl overflow-x-auto max-w-full">
+        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl overflow-x-auto max-w-full">
           {filters.viewMode !== 'CUSTOM' && (
               <>
-                <button onClick={() => handleDateNavigate('prev')} className="p-2 hover:bg-white dark:hover:bg-slate-700 rounded-xl transition-all text-slate-500">
-                    <ChevronLeft className="w-4 h-4" />
+                <button onClick={() => handleDateNavigate('prev')} className="p-1 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all text-slate-500">
+                    <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
                 
-                <div className="flex flex-col items-center min-w-[120px] px-2">
-                    <span className="text-xs font-black uppercase text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                <div className="flex flex-col items-center min-w-[90px] md:min-w-[120px] px-1">
+                    <span className="text-[10px] md:text-xs font-black uppercase text-slate-700 dark:text-slate-200 whitespace-nowrap">
                     {filters.viewMode === 'MONTH' 
                         ? format(filters.currentDate, 'MMMM yyyy', { locale: ptBR })
                         : format(filters.currentDate, 'yyyy', { locale: ptBR })}
                     </span>
                 </div>
 
-                <button onClick={() => handleDateNavigate('next')} className="p-2 hover:bg-white dark:hover:bg-slate-700 rounded-xl transition-all text-slate-500">
-                    <ChevronRight className="w-4 h-4" />
+                <button onClick={() => handleDateNavigate('next')} className="p-1 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all text-slate-500">
+                    <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </>
           )}
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2"></div>
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
 
-          <div className="flex gap-1">
+          <div className="flex gap-0.5">
             <button 
                 onClick={() => setViewMode('MONTH')}
-                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${filters.viewMode === 'MONTH' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                className={`px-2 py-1 rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-wider transition-all ${filters.viewMode === 'MONTH' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
             >
                 Mês
             </button>
             <button 
                 onClick={() => setViewMode('YEAR')}
-                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${filters.viewMode === 'YEAR' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                className={`px-2 py-1 rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-wider transition-all ${filters.viewMode === 'YEAR' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
             >
                 Ano
             </button>
             <button 
                 onClick={() => setViewMode('CUSTOM')}
-                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${filters.viewMode === 'CUSTOM' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                className={`px-2 py-1 rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-wider transition-all ${filters.viewMode === 'CUSTOM' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
             >
-                Período
+                Período (De/Até)
             </button>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2">
-          {showPrint && onPrint && (
+        {showPrint && onPrint && (
+          <div className="hidden sm:flex gap-1">
             <button 
               onClick={onPrint}
-              className="p-3 bg-slate-50 dark:bg-slate-800 text-slate-500 hover:text-indigo-600 rounded-2xl transition-all"
+              className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-500 hover:text-indigo-600 rounded-xl transition-all"
               title="Imprimir"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-3.5 h-3.5" />
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Custom Date Inputs */}
       {filters.viewMode === 'CUSTOM' && (
-          <div className="flex gap-4 items-center justify-center bg-slate-50 dark:bg-slate-800 p-3 rounded-xl animate-in fade-in slide-in-from-top-1">
-              <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">De</span>
-                  <input 
-                    type="date" 
-                    value={filters.dateRange.start.split('T')[0]}
-                    onChange={(e) => setFilters(prev => ({ ...prev, dateRange: { ...prev.dateRange, start: new Date(e.target.value + 'T00:00:00').toISOString() } }))}
-                    className="bg-white dark:bg-slate-900 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500"
-                  />
+          <div className="flex flex-col md:flex-row gap-3 items-center justify-between bg-indigo-50/50 dark:bg-slate-800/40 border border-indigo-100/50 dark:border-slate-700/40 p-3 rounded-xl animate-in fade-in slide-in-from-top-1">
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <Calendar className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                      <span className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500">De</span>
+                      <input 
+                        type="date" 
+                        value={filters.dateRange.start.split('T')[0]}
+                        onChange={(e) => handleCustomDateChange('start', e.target.value)}
+                        className="w-full sm:w-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm"
+                      />
+                  </div>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <span className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500">Até</span>
+                      <input 
+                        type="date" 
+                        value={filters.dateRange.end.split('T')[0]}
+                        onChange={(e) => handleCustomDateChange('end', e.target.value)}
+                        className="w-full sm:w-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm"
+                      />
+                  </div>
               </div>
-              <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Até</span>
-                  <input 
-                    type="date" 
-                    value={filters.dateRange.end.split('T')[0]}
-                    onChange={(e) => setFilters(prev => ({ ...prev, dateRange: { ...prev.dateRange, end: new Date(e.target.value + 'T00:00:00').toISOString() } }))}
-                    className="bg-white dark:bg-slate-900 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500"
-                  />
+              <div className="flex gap-1 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
+                  <button 
+                    onClick={() => setQuickRange(7)}
+                    className="px-2 py-1 text-[9px] font-black uppercase bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-slate-600 rounded-md text-slate-600 dark:text-slate-300 transition-colors whitespace-nowrap"
+                  >
+                    7 Dias
+                  </button>
+                  <button 
+                    onClick={() => setQuickRange(15)}
+                    className="px-2 py-1 text-[9px] font-black uppercase bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-slate-600 rounded-md text-slate-600 dark:text-slate-300 transition-colors whitespace-nowrap"
+                  >
+                    15 Dias
+                  </button>
+                  <button 
+                    onClick={() => setQuickRange(30)}
+                    className="px-2 py-1 text-[9px] font-black uppercase bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-slate-600 rounded-md text-slate-600 dark:text-slate-300 transition-colors whitespace-nowrap"
+                  >
+                    30 Dias
+                  </button>
+                  <button 
+                    onClick={() => setQuickRange(90)}
+                    className="px-2 py-1 text-[9px] font-black uppercase bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-slate-600 rounded-md text-slate-600 dark:text-slate-300 transition-colors whitespace-nowrap"
+                  >
+                    90 Dias
+                  </button>
               </div>
           </div>
       )}
 
-      {/* Filters Row - Always Visible */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+      {/* Filters Row - Compact single-row scrollable or 3-column grid on mobile */}
+      <div className="grid grid-cols-3 gap-1.5 md:gap-4 pt-1">
           
           {/* Transaction Type */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Tipo</label>
+          <div className="space-y-1">
+            <label className="hidden md:block text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Tipo</label>
             <select
                 value={filters.type}
                 onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value as any }))}
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                className="w-full px-2 py-1.5 md:px-4 md:py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-[11px] md:text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
             >
-                <option value="ALL">Todas</option>
+                <option value="ALL">Tipo: Todas</option>
                 <option value="INCOME">Receitas</option>
                 <option value="EXPENSE">Despesas</option>
             </select>
           </div>
 
           {/* Categories */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Categorias</label>
+          <div className="space-y-1">
+            <label className="hidden md:block text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Categorias</label>
             <div className="relative" ref={catRef}>
                 <button 
-                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-left flex justify-between items-center"
+                    className="w-full px-2 py-1.5 md:px-4 md:py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-[11px] md:text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-left flex justify-between items-center"
                     onClick={() => setCatsOpen(!catsOpen)}
                 >
-                    {filters.categories.length === 0 ? 'Todas' : `${filters.categories.length} selecionadas`}
-                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${catsOpen ? 'rotate-180' : ''}`} />
+                    <span className="truncate">
+                      {filters.categories.length === 0 ? 'Cat: Todas' : `${filters.categories.length} Sel.`}
+                    </span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                 </button>
                 {catsOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 p-2 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg shadow-xl z-50 p-1.5 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
                         <div 
-                            className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.categories.length === 0 ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
+                            className={`p-1.5 rounded cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 ${filters.categories.length === 0 ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
                             onClick={() => {
                                 setFilters(prev => ({ ...prev, categories: [] }));
                                 setCatsOpen(false);
                             }}
                         >
                             {filters.categories.length === 0 && <Check className="w-3 h-3" />}
-                            <span className="text-xs">Todas</span>
+                            <span className="text-[11px]">Todas</span>
                         </div>
                         {categories.map(cat => (
                             <div 
                                 key={cat.id}
-                                className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.categories.includes(cat.name) ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
+                                className={`p-1.5 rounded cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 ${filters.categories.includes(cat.name) ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
                                 onClick={() => toggleCategory(cat.name)}
                             >
                                 {filters.categories.includes(cat.name) && <Check className="w-3 h-3" />}
-                                <span className="text-xs">{cat.name}</span>
+                                <span className="text-[11px]">{cat.name}</span>
                             </div>
                         ))}
                     </div>
@@ -294,36 +360,38 @@ const FilterBar: React.FC<FilterBarProps> = ({ categories, accounts, onFilterCha
           </div>
 
           {/* Accounts */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Contas</label>
+          <div className="space-y-1">
+            <label className="hidden md:block text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Contas</label>
             <div className="relative" ref={accRef}>
                 <button 
-                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-left flex justify-between items-center"
+                    className="w-full px-2 py-1.5 md:px-4 md:py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-[11px] md:text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 text-left flex justify-between items-center"
                     onClick={() => setAccsOpen(!accsOpen)}
                 >
-                    {filters.accounts.length === 0 ? 'Todas' : `${filters.accounts.length} selecionadas`}
-                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${accsOpen ? 'rotate-180' : ''}`} />
+                    <span className="truncate">
+                      {filters.accounts.length === 0 ? 'Contas: Todas' : `${filters.accounts.length} Sel.`}
+                    </span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                 </button>
                 {accsOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 p-2 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg shadow-xl z-50 p-1.5 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
                         <div 
-                            className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.accounts.length === 0 ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
+                            className={`p-1.5 rounded cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 ${filters.accounts.length === 0 ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
                             onClick={() => {
                                 setFilters(prev => ({ ...prev, accounts: [] }));
                                 setAccsOpen(false);
                             }}
                         >
                             {filters.accounts.length === 0 && <Check className="w-3 h-3" />}
-                            <span className="text-xs">Todas</span>
+                            <span className="text-[11px]">Todas</span>
                         </div>
                         {accounts.map(acc => (
                             <div 
                                 key={acc.id}
-                                className={`p-2 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 ${filters.accounts.includes(acc.id) ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
+                                className={`p-1.5 rounded cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 ${filters.accounts.includes(acc.id) ? 'text-indigo-600 font-bold' : 'text-slate-500'}`}
                                 onClick={() => toggleAccount(acc.id)}
                             >
                                 {filters.accounts.includes(acc.id) && <Check className="w-3 h-3" />}
-                                <span className="text-xs">{acc.name}</span>
+                                <span className="text-[11px]">{acc.name}</span>
                             </div>
                         ))}
                     </div>

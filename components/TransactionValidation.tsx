@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { RecurringTransaction, Transaction, Category, Account } from '../types';
-import { CheckCircle, XCircle, AlertCircle, Calendar, Edit2, Check, X, ArrowUpDown, ArrowUp, ArrowDown, CreditCard, CalendarCheck } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Calendar, Edit2, Check, X, ArrowUpDown, ArrowUp, ArrowDown, CreditCard, CalendarCheck, Plus, Trash2, Lock, Repeat, Clock, Sparkles } from 'lucide-react';
 import { format, isSameMonth, isSameYear, parseISO, isBefore, isAfter, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import FilterBar, { FilterState } from './FilterBar';
@@ -13,6 +13,10 @@ interface ValidationProps {
   currentDate: Date;
   categories: Category[];
   accounts: Account[];
+  onAddRecurring?: (rec: Omit<RecurringTransaction, 'id' | 'lastGeneratedDate' | 'active'>) => void;
+  onUpdateRecurring?: (rec: RecurringTransaction) => void;
+  onDeleteRecurring?: (id: string) => void;
+  currentUserProfile?: any;
 }
 
 type SortField = 'dueDate' | 'description' | 'category' | 'amount' | 'status';
@@ -25,7 +29,11 @@ const TransactionValidation: React.FC<ValidationProps> = ({
   onDelete, 
   currentDate: initialDate, 
   categories, 
-  accounts 
+  accounts,
+  onAddRecurring,
+  onUpdateRecurring,
+  onDeleteRecurring,
+  currentUserProfile
 }) => {
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [editAmount, setEditAmount] = useState<string>('');
@@ -37,6 +45,90 @@ const TransactionValidation: React.FC<ValidationProps> = ({
   
   const [sortField, setSortField] = useState<SortField>('dueDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Estados para nova/edição de recorrência
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [recurringToEdit, setRecurringToEdit] = useState<RecurringTransaction | null>(null);
+  
+  const [recDesc, setRecDesc] = useState('');
+  const [recAmount, setRecAmount] = useState('');
+  const [recType, setRecType] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER'>('EXPENSE');
+  const [recCategory, setRecCategory] = useState('');
+  const [recDay, setRecDay] = useState('10');
+  const [recAccount, setRecAccount] = useState('');
+  const [recToAccount, setRecToAccount] = useState('');
+  const [recIsJoint, setRecIsJoint] = useState(true);
+  const [recStartDate, setRecStartDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Collapsible section for rules management
+  const [isRulesOpen, setIsRulesOpen] = useState(false);
+
+  const openNewRecurringModal = () => {
+    setRecDesc('');
+    setRecAmount('');
+    setRecType('EXPENSE');
+    setRecCategory(categories[0]?.name || '');
+    setRecDay('10');
+    setRecAccount(accounts[0]?.id || '');
+    setRecToAccount('');
+    setRecIsJoint(true);
+    setRecStartDate(new Date().toISOString().split('T')[0]);
+    setRecurringToEdit(null);
+    setIsFormOpen(true);
+  };
+
+  const openEditRecurringModal = (rec: RecurringTransaction) => {
+    setRecurringToEdit(rec);
+    setRecDesc(rec.description);
+    setRecAmount(rec.amount.toString());
+    setRecType(rec.type);
+    setRecCategory(rec.category);
+    setRecDay(rec.dayOfMonth.toString());
+    setRecAccount(rec.accountId);
+    setRecToAccount(rec.toAccountId || '');
+    setRecIsJoint(rec.isJoint);
+    setRecStartDate(rec.startDate || new Date().toISOString().split('T')[0]);
+    setIsFormOpen(true);
+  };
+
+  const handleRecurringSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recDesc || !recAmount || !recAccount) return;
+    if (recType === 'TRANSFER' && !recToAccount) return;
+
+    if (recurringToEdit) {
+      if (onUpdateRecurring) {
+        onUpdateRecurring({
+          ...recurringToEdit,
+          description: recDesc,
+          amount: parseFloat(recAmount),
+          type: recType,
+          category: recType === 'TRANSFER' ? 'Transferência' : recCategory,
+          dayOfMonth: parseInt(recDay),
+          accountId: recAccount,
+          toAccountId: recType === 'TRANSFER' ? recToAccount : undefined,
+          isJoint: recIsJoint,
+          startDate: recStartDate
+        });
+      }
+    } else {
+      if (onAddRecurring) {
+        onAddRecurring({
+          description: recDesc,
+          amount: parseFloat(recAmount),
+          type: recType,
+          category: recType === 'TRANSFER' ? 'Transferência' : recCategory,
+          dayOfMonth: parseInt(recDay),
+          accountId: recAccount,
+          toAccountId: recType === 'TRANSFER' ? recToAccount : undefined,
+          userId: 'default',
+          isJoint: recIsJoint,
+          startDate: recStartDate
+        });
+      }
+    }
+    setIsFormOpen(false);
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -325,7 +417,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
       
       <FilterBar 
         categories={categories}
@@ -335,91 +427,167 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         showPrint={true}
       />
 
+      {/* Header, Stats & Actions */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+        <div>
+          <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+            <CalendarCheck className="w-5 h-5 text-indigo-500" />
+            Lançamentos Recorrentes
+          </h2>
+          <p className="text-slate-400 text-[11px] mt-0.5">Gerencie e confirme suas transações recorrentes automáticas para este mês.</p>
+        </div>
+
+        <div className="flex gap-2 w-full lg:w-auto">
+          <button 
+            onClick={openNewRecurringModal}
+            className="flex-1 lg:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md shadow-indigo-100 dark:shadow-none"
+          >
+            <Plus className="w-4 h-4" /> Novo Recorrente
+          </button>
+          <button 
+            onClick={() => setIsRulesOpen(!isRulesOpen)}
+            className={`px-4 py-2.5 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border ${
+              isRulesOpen 
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900/30' 
+                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-500 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800'
+            }`}
+          >
+            <Repeat className="w-4 h-4" /> {isRulesOpen ? 'Ocultar Regras' : 'Gerenciar Regras'}
+          </button>
+        </div>
+      </div>
+
+      {/* Stats Cards Row */}
+      <div className="max-w-xs">
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 bg-rose-50 dark:bg-rose-900/20 rounded-xl flex items-center justify-center text-rose-600">
+            <XCircle className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Despesas Previstas</p>
+            <h4 className="text-sm font-black text-slate-900 dark:text-white">
+              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.expense)}
+            </h4>
+          </div>
+        </div>
+      </div>
+
+      {/* Rules Collapsible Section */}
+      {isRulesOpen && (
+        <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-3 animate-in slide-in-from-top-2 duration-200">
+          <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800">
+            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-indigo-500" />
+              Regras de Automação Recorrentes Ativas
+            </h3>
+            <span className="text-[10px] font-bold text-slate-400 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+              {recurringTransactions.length} {recurringTransactions.length === 1 ? 'regra' : 'regras'}
+            </span>
+          </div>
+
+          {recurringTransactions.length === 0 ? (
+            <p className="text-center text-slate-400 text-xs py-4">Nenhuma regra de automação cadastrada.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
+              {recurringTransactions.map(rec => (
+                <div key={rec.id} className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${rec.type === 'INCOME' ? 'bg-emerald-500' : rec.type === 'TRANSFER' ? 'bg-blue-500' : 'bg-rose-500'}`}>
+                      <Calendar className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-xs text-slate-800 dark:text-white leading-tight">{rec.description}</p>
+                      <p className="text-[10px] text-slate-400">Dia {rec.dayOfMonth} • {rec.category} {rec.isJoint ? '• Família' : ''}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`font-black text-xs ${rec.type === 'INCOME' ? 'text-emerald-600' : rec.type === 'TRANSFER' ? 'text-blue-600' : 'text-rose-600'}`}>
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(rec.amount)}
+                    </span>
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={() => openEditRecurringModal(rec)} 
+                        className="p-1.5 text-slate-300 hover:text-indigo-500 transition-colors rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
+                        title="Editar Regra"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          if (onDeleteRecurring && confirm('Excluir esta regra de automação? Os lançamentos confirmados no extrato não serão afetados.')) {
+                            onDeleteRecurring(rec.id);
+                          }
+                        }} 
+                        className="p-1.5 text-slate-300 hover:text-rose-500 transition-colors rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
+                        title="Excluir Regra"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Status Filters */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
           <button 
             onClick={() => toggleStatusFilter('PENDING')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
                 statusFilters.includes('PENDING') 
-                ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800' 
-                : 'bg-white text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700'
+                ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800/40' 
+                : 'bg-white text-slate-400 border-slate-100 dark:bg-slate-900 dark:border-slate-800'
             }`}
           >
             A Vencer
           </button>
           <button 
             onClick={() => toggleStatusFilter('LATE')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
                 statusFilters.includes('LATE') 
-                ? 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800' 
-                : 'bg-white text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700'
+                ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800/40' 
+                : 'bg-white text-slate-400 border-slate-100 dark:bg-slate-900 dark:border-slate-800'
             }`}
           >
             Vencido
           </button>
           <button 
             onClick={() => toggleStatusFilter('PAID')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
                 statusFilters.includes('PAID') 
-                ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800' 
-                : 'bg-white text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800/40' 
+                : 'bg-white text-slate-400 border-slate-100 dark:bg-slate-900 dark:border-slate-800'
             }`}
           >
-            Pago
+            Confirmado
           </button>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
-        <div className="p-8 border-b border-slate-100 dark:border-slate-800">
-          <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
-            <CalendarCheck className="w-6 h-6 text-indigo-500" />
-            Recorrentes
-          </h2>
-          <p className="text-slate-400 text-sm mt-1">Gerencie seus lançamentos recorrentes para este mês.</p>
-        </div>
-
-        {/* Totals Summary Bar */}
-        <div className="px-8 py-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Receitas Previstas</span>
-            <span className="text-lg font-black text-emerald-600">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.income)}
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Despesas Previstas</span>
-            <span className="text-lg font-black text-rose-600">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.expense)}
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo Previsto (Recorrentes)</span>
-            <span className={`text-lg font-black ${totals.income - totals.expense >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.income - totals.expense)}
-            </span>
-          </div>
-        </div>
-
+      {/* Transactions List */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800/80 overflow-hidden">
         <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
                 <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-800">
-                        <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('status')}>
+                    <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/10">
+                        <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('status')}>
                             <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
                         </th>
-                        <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('dueDate')}>
+                        <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('dueDate')}>
                             <div className="flex items-center gap-1">Vencimento <SortIcon field="dueDate" /></div>
                         </th>
-                        <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('description')}>
+                        <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('description')}>
                             <div className="flex items-center gap-1">Descrição <SortIcon field="description" /></div>
                         </th>
-                        <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('category')}>
+                        <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('category')}>
                             <div className="flex items-center gap-1">Categoria <SortIcon field="category" /></div>
                         </th>
-                        <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-right" onClick={() => handleSort('amount')}>
+                        <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-right" onClick={() => handleSort('amount')}>
                             <div className="flex items-center gap-1 justify-end">Valor <SortIcon field="amount" /></div>
                         </th>
-                        <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">
+                        <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">
                             Ações
                         </th>
                     </tr>
@@ -430,8 +598,8 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                             key={idx} 
                             className={`group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${item.status === 'paid' ? 'opacity-50 grayscale' : ''}`}
                         >
-                            <td className="p-4">
-                                <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full ${
+                            <td className="px-3.5 py-2.5">
+                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                                     item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                                     item.status === 'late' ? 'bg-rose-100 text-rose-700' :
                                     'bg-blue-100 text-blue-700'
@@ -439,37 +607,37 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                                     {item.status === 'paid' ? 'Pago' : item.status === 'late' ? 'Vencido' : 'A Vencer'}
                                 </span>
                             </td>
-                            <td className="p-4 font-bold text-slate-700 dark:text-slate-300">
+                            <td className="px-3.5 py-2.5 font-bold text-xs text-slate-700 dark:text-slate-300">
                                 {format(item.dueDate, 'dd/MM/yyyy')}
                             </td>
-                            <td className="p-4 font-bold text-slate-900 dark:text-white">
+                            <td className="px-3.5 py-2.5 font-bold text-xs text-slate-900 dark:text-white">
                                 {item.description}
                             </td>
-                            <td className="p-4">
-                                <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg">
+                            <td className="px-3.5 py-2.5">
+                                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
                                     {item.category}
                                 </span>
                             </td>
-                            <td className={`p-4 font-black text-right ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <td className={`px-3.5 py-2.5 font-black text-xs text-right ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                 {item.type === 'INCOME' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
                             </td>
-                            <td className="p-4">
+                            <td className="px-3.5 py-2.5">
                                 <div className="flex items-center justify-center gap-2">
                                     {item.status !== 'paid' ? (
                                         <>
                                             <button 
                                                 onClick={() => handleClick(item)}
-                                                className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 dark:shadow-none"
+                                                className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
                                                 title="Confirmar/Editar Lançamento"
                                             >
-                                                <Check className="w-4 h-4" />
+                                                <Check className="w-3.5 h-3.5" />
                                             </button>
                                             <button 
                                                 onClick={() => handleIgnoreMonth(item)}
-                                                className="p-2 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-xl"
+                                                className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg"
                                                 title="Ignorar este mês"
                                             >
-                                                <XCircle className="w-4 h-4" />
+                                                <XCircle className="w-3.5 h-3.5" />
                                             </button>
                                         </>
                                     ) : (
@@ -479,10 +647,10 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                                                     onDelete(item.paidTransactionId);
                                                 }
                                             }}
-                                            className="bg-rose-100 text-rose-600 p-2 rounded-xl hover:bg-rose-200 transition-colors"
+                                            className="bg-rose-100 text-rose-600 p-1.5 rounded-lg hover:bg-rose-200 transition-colors"
                                             title="Estornar Pagamento"
                                         >
-                                            <ArrowUpDown className="w-4 h-4" />
+                                            <ArrowUpDown className="w-3.5 h-3.5" />
                                         </button>
                                     )}
                                 </div>
@@ -491,7 +659,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                     ))}
                     {expectedTransactions.length === 0 && (
                         <tr>
-                            <td colSpan={6} className="p-12 text-center text-slate-400">
+                            <td colSpan={6} className="p-8 text-center text-slate-400 text-xs">
                                 Nenhuma conta recorrente encontrada.
                             </td>
                         </tr>
@@ -501,17 +669,17 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         </div>
 
         {/* Mobile View (Cards) */}
-        <div className="md:hidden space-y-4 p-4 bg-slate-50 dark:bg-slate-900/50">
+        <div className="md:hidden space-y-2 p-2 bg-slate-50 dark:bg-slate-900/50">
             {expectedTransactions.map((item, idx) => (
-                <div key={idx} className={`bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 ${item.status === 'paid' ? 'opacity-60' : ''}`}>
-                    <div className="flex justify-between items-start mb-3">
+                <div key={idx} className={`bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 ${item.status === 'paid' ? 'opacity-60' : ''}`}>
+                    <div className="flex justify-between items-start mb-2">
                         <div className="flex flex-col">
-                            <span className="font-bold text-slate-900 dark:text-white text-lg mb-1">{item.description}</span>
-                            <span className="text-xs text-slate-500 font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg w-fit">
+                            <span className="font-bold text-slate-900 dark:text-white text-sm mb-0.5 leading-tight">{item.description}</span>
+                            <span className="text-[10px] text-slate-500 font-medium bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-md w-fit">
                                 {item.category}
                             </span>
                         </div>
-                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${
+                        <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
                             item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                             item.status === 'late' ? 'bg-rose-100 text-rose-700' :
                             'bg-blue-100 text-blue-700'
@@ -522,33 +690,32 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                     
                     <div className="flex justify-between items-end">
                         <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Vencimento</p>
-                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-bold">
-                                <Calendar className="w-4 h-4 text-slate-400" />
+                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px] font-bold">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
                                 {format(item.dueDate, 'dd/MM/yyyy')}
                             </div>
                         </div>
                         <div className="text-right">
-                             <p className={`text-xl font-black ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                             <p className={`text-sm font-black ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                 {item.type === 'INCOME' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
                             </p>
                         </div>
                     </div>
 
                     {item.status !== 'paid' ? (
-                        <div className="flex gap-2 mt-4">
+                        <div className="flex gap-2 mt-2.5">
                             <button 
                                 onClick={() => handleClick(item)}
-                                className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2"
+                                className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold uppercase text-[10px] tracking-wider hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1 shadow-sm"
                             >
-                                <Check className="w-4 h-4" /> Confirmar
+                                <Check className="w-3.5 h-3.5" /> Confirmar
                             </button>
                             <button 
                                 onClick={() => handleIgnoreMonth(item)}
-                                className="p-3 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-xl"
+                                className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-lg hover:text-rose-500 transition-colors"
                                 title="Ignorar este mês"
                             >
-                                <XCircle className="w-4 h-4" />
+                                <XCircle className="w-3.5 h-3.5" />
                             </button>
                         </div>
                     ) : (
@@ -558,15 +725,15 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                                     onDelete(item.paidTransactionId);
                                 }
                             }}
-                            className="w-full mt-4 bg-rose-50 text-rose-600 py-3 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-rose-100 transition-colors flex items-center justify-center gap-2"
+                            className="w-full mt-2.5 bg-rose-50 text-rose-600 py-2 rounded-lg font-bold uppercase text-[10px] tracking-wider hover:bg-rose-100 transition-colors flex items-center justify-center gap-1.5"
                         >
-                            <ArrowUpDown className="w-4 h-4" /> Estornar Pagamento
+                            <ArrowUpDown className="w-3.5 h-3.5" /> Estornar Pagamento
                         </button>
                     )}
                 </div>
             ))}
              {expectedTransactions.length === 0 && (
-                <div className="text-center py-10 text-slate-400">
+                <div className="text-center py-6 text-slate-400 text-xs">
                     <p>Nenhuma conta recorrente encontrada.</p>
                 </div>
             )}
@@ -574,20 +741,182 @@ const TransactionValidation: React.FC<ValidationProps> = ({
       </div>
 
 
-      {/* Confirmation Modal (Allows "Editing" for the current monthly instance) */}
-      {selectedItem && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2rem] shadow-2xl p-6 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-black text-slate-900 dark:text-white">Confirmar Lançamento</h3>
-              <button onClick={() => setSelectedItem(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-                <X className="w-5 h-5 text-slate-400" />
+      {/* Rules Creation & Edition Modal */}
+      {isFormOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 overflow-hidden">
+            
+            {/* Promo Subscription Lock Gate overlay if plan is blocked */}
+            {(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') && (
+              <div className="absolute inset-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm rounded-xl z-10 flex flex-col items-center justify-center p-6 text-center">
+                <Lock className="w-10 h-10 text-indigo-600 dark:text-indigo-400 mb-3" />
+                <span className="text-base font-black uppercase text-slate-800 dark:text-white">Automações Recorrentes Bloqueadas</span>
+                <span className="text-xs text-slate-400 mt-1.5 max-w-sm">Assine o plano Médio ou Premium para automatizar seus lançamentos de contas fixas todos os meses.</span>
+                <button 
+                  onClick={() => {
+                    setIsFormOpen(false);
+                    document.getElementById('trigger-subscription-modal')?.click();
+                  }}
+                  className="mt-4 px-6 py-2.5 bg-indigo-600 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
+                >
+                  Conhecer Planos & Upgrade
+                </button>
+                <button 
+                  onClick={() => setIsFormOpen(false)}
+                  className="mt-2 text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  Voltar
+                </button>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                {recurringToEdit ? 'Editar Regra Recorrente' : 'Cadastrar Conta Recorrente'}
+              </h3>
+              <button onClick={() => setIsFormOpen(false)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                <X className="w-4 h-4 text-slate-400" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <form onSubmit={handleRecurringSubmit} className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Descrição</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Aluguel, Academia, Netflix..." 
+                  value={recDesc}
+                  onChange={e => setRecDesc(e.target.value)}
+                  required
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Valor (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    placeholder="0,00" 
+                    value={recAmount}
+                    onChange={e => setRecAmount(e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Dia do Mês</label>
+                  <select 
+                    value={recDay}
+                    onChange={e => setRecDay(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
+                  >
+                    {Array.from({length: 31}, (_, i) => i + 1).map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Data de Início</label>
+                  <input 
+                    type="date" 
+                    value={recStartDate}
+                    onChange={e => setRecStartDate(e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Categoria</label>
+                  <select 
+                    value={recCategory}
+                    onChange={e => setRecCategory(e.target.value)}
+                    disabled={recType === 'TRANSFER'}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
+                  >
+                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Tipo</label>
+                <div className="flex bg-slate-50 dark:bg-slate-800 rounded-xl p-1 gap-1">
+                  <button type="button" onClick={() => setRecType('EXPENSE')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${recType === 'EXPENSE' ? 'bg-rose-500 text-white' : 'text-slate-400'}`}>Despesa</button>
+                  <button type="button" onClick={() => setRecType('INCOME')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${recType === 'INCOME' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}>Receita</button>
+                  <button type="button" onClick={() => {
+                    setRecType('TRANSFER');
+                    setRecCategory('Transferência');
+                  }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${recType === 'TRANSFER' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}>Transf.</button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">
+                    {recType === 'TRANSFER' ? 'Origem' : 'Conta'}
+                  </label>
+                  <select 
+                    value={recAccount}
+                    onChange={e => setRecAccount(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
+                  >
+                    {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+                {recType === 'TRANSFER' ? (
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Destino</label>
+                    <select 
+                      value={recToAccount}
+                      onChange={e => setRecToAccount(e.target.value)}
+                      required
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
+                    >
+                      <option value="">Destino...</option>
+                      {accounts.filter(a => a.id !== recAccount).map(a => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="flex items-center pt-5">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={recIsJoint} onChange={e => setRecIsJoint(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" />
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-[11px]">Lançamento Família</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 flex gap-2">
+                <button type="button" onClick={() => setIsFormOpen(false)} className="flex-1 py-2.5 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors uppercase tracking-wider">Cancelar</button>
+                <button type="submit" className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-extrabold text-xs uppercase tracking-wider hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100">Salvar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+
+      {/* Confirmation Modal (Allows "Editing" for the current monthly instance) */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-xl shadow-2xl p-5 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">Confirmar Lançamento</h3>
+              <button onClick={() => setSelectedItem(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">
                     {selectedItem.type === 'TRANSFER' ? 'Conta de Origem' : 'Vincular a qual conta?'}
                 </label>
                 <div className="relative">
@@ -595,26 +924,26 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                     value={editAccountId}
                     onChange={e => setEditAccountId(e.target.value)}
                     required
-                    className="w-full pl-12 pr-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-500 outline-none appearance-none font-bold transition-all"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-bold transition-all"
                   >
                     <option value="" disabled>Selecione uma conta</option>
                     {accounts.map(acc => (
                       <option key={acc.id} value={acc.id}>{acc.name} ({acc.type})</option>
                     ))}
                   </select>
-                  <CreditCard className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <CreditCard className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 </div>
               </div>
 
               {selectedItem.type === 'TRANSFER' && (
                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Conta de Destino</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Conta de Destino</label>
                     <div className="relative">
                         <select 
                             value={editToAccountId}
                             onChange={e => setEditToAccountId(e.target.value)}
                             required
-                            className="w-full pl-12 pr-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:border-indigo-500 outline-none appearance-none font-bold transition-all"
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-bold transition-all"
                         >
                             <option value="">Selecione a conta de destino</option>
                             {accounts.filter(a => a.id !== editAccountId).map(acc => (
@@ -623,48 +952,48 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                                 </option>
                             ))}
                         </select>
-                        <CreditCard className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <CreditCard className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     </div>
                 </div>
               )}
 
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Descrição</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Descrição</label>
                 <input 
                   type="text" 
                   value={selectedItem.description} 
                   disabled 
-                  className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl px-4 py-3 font-bold text-slate-500 cursor-not-allowed"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-xs font-bold text-slate-500 cursor-not-allowed"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Data Real</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Data Real</label>
                   <input 
                     type="date" 
                     value={editDate}
                     onChange={e => setEditDate(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:border-indigo-500 outline-none transition-colors"
+                    className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-colors dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Valor Real</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Valor Real</label>
                   <input 
                     type="number" 
                     step="0.01"
                     value={editAmount}
                     onChange={e => setEditAmount(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:border-indigo-500 outline-none transition-colors"
+                    className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-colors dark:text-white"
                   />
                 </div>
               </div>
 
               <button 
                 onClick={handleConfirm}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg shadow-emerald-200 dark:shadow-none transition-all flex items-center justify-center gap-2 mt-4"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-extrabold uppercase tracking-wider text-[11px] shadow-md shadow-emerald-100 dark:shadow-none transition-all flex items-center justify-center gap-1.5 mt-3"
               >
-                <Check className="w-5 h-5" /> Confirmar Pagamento
+                <Check className="w-4 h-4" /> Confirmar Pagamento
               </button>
             </div>
           </div>

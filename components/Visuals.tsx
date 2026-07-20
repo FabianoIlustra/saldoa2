@@ -35,7 +35,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, accounts, recurringTransactions, installmentGroups }) => {
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
-  const [sortConfig, setSortConfig] = useState<{ key: 'category' | 'type' | 'value', direction: 'asc' | 'desc' } | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: 'category' | 'type' | 'value' | 'average', direction: 'asc' | 'desc' } | null>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [helpId, setHelpId] = useState<string | null>(null);
 
@@ -67,10 +67,12 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
   };
 
   const filteredTransactions = useMemo(() => {
-    if (!currentFilters) return transactions;
-    // ... filtering logic ...
+    // Basic filter to ignore template projections
+    const baseTransactions = transactions.filter(t => !t.isTemplate);
+    
+    if (!currentFilters) return baseTransactions;
 
-    return transactions.filter(t => {
+    return baseTransactions.filter(t => {
         // Search
         const matchesSearch = t.description.toLowerCase().includes(currentFilters.searchTerm.toLowerCase()) || 
                              t.category.toLowerCase().includes(currentFilters.searchTerm.toLowerCase());
@@ -112,15 +114,42 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     });
   }, [filteredTransactions, currentFilters]);
 
+  const monthsCount = useMemo(() => {
+    if (!currentFilters) return 1;
+    if (currentFilters.viewMode === 'MONTH') return 1;
+    if (currentFilters.viewMode === 'YEAR') return 12;
+    
+    // Custom range
+    try {
+      const start = parseISO(currentFilters.dateRange.start);
+      const end = parseISO(currentFilters.dateRange.end);
+      const startYear = start.getFullYear();
+      const startMonth = start.getMonth();
+      const endYear = end.getFullYear();
+      const endMonth = end.getMonth();
+      
+      const diffMonths = (endYear - startYear) * 12 + (endMonth - startMonth) + 1;
+      return Math.max(1, diffMonths);
+    } catch (e) {
+      return 1;
+    }
+  }, [currentFilters]);
+
   const categorySummary = useMemo(() => {
-    const summary: Record<string, { category: string, type: string, value: number }> = {};
+    const summary: Record<string, { category: string, type: string, value: number, average: number }> = {};
+    const months = monthsCount;
     
     normalizedTransactions.forEach(t => {
       const key = `${t.category}-${t.type}`;
       if (!summary[key]) {
-        summary[key] = { category: t.category, type: t.type, value: 0 };
+        summary[key] = { category: t.category, type: t.type, value: 0, average: 0 };
       }
       summary[key].value += t.amount;
+    });
+
+    // Compute average
+    Object.values(summary).forEach(item => {
+      item.average = item.value / months;
     });
 
     let result = Object.values(summary);
@@ -134,9 +163,9 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     }
 
     return result;
-  }, [filteredTransactions, sortConfig]);
+  }, [normalizedTransactions, sortConfig, monthsCount]);
 
-  const requestSort = (key: 'category' | 'type' | 'value') => {
+  const requestSort = (key: 'category' | 'type' | 'value' | 'average') => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
@@ -145,6 +174,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
   };
 
   const totalSummaryValue = categorySummary.reduce((sum, item) => sum + (item.type === 'INCOME' ? item.value : -item.value), 0);
+  const totalSummaryAverage = categorySummary.reduce((sum, item) => sum + (item.type === 'INCOME' ? item.average : -item.average), 0);
 
   const financialStats = useMemo(() => {
     const targetDate = currentFilters ? currentFilters.currentDate : new Date();
@@ -192,11 +222,13 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     const today = new Date();
     const startOfThisWeek = startOfWeek(today, { locale: ptBR });
     
-    const daySpent = transactions
+    const baseTransactions = transactions.filter(t => !t.isTemplate);
+
+    const daySpent = baseTransactions
         .filter(t => t.type === 'EXPENSE' && t.date === format(today, 'yyyy-MM-dd'))
         .reduce((sum, t) => sum + t.amount, 0);
 
-    const weekSpent = transactions
+    const weekSpent = baseTransactions
         .filter(t => {
             if (t.type !== 'EXPENSE') return false;
             const tDate = t.date;
@@ -326,12 +358,12 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       {/* Unified Summary Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Card 1: Recent Spending */}
-        <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 p-8 rounded-[2.5rem] text-white shadow-xl shadow-indigo-100 dark:shadow-none relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
+        <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 p-5 md:p-6 rounded-2xl text-white shadow-xl shadow-indigo-100 dark:shadow-none relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-5 opacity-10 group-hover:scale-110 transition-transform">
             <Zap className="w-24 h-24" />
           </div>
           
-          <div className="flex justify-between items-start mb-8">
+          <div className="flex justify-between items-start mb-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-xl">
                 <History className="w-5 h-5 text-white" />
@@ -343,10 +375,10 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
             </button>
           </div>
 
-          <div className="space-y-8 relative z-10">
+          <div className="space-y-6 relative z-10">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Gasto de Hoje</p>
-              <p className="text-4xl font-black">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(advancedStats.daySpent)}</p>
+              <p className="text-3xl font-black">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(advancedStats.daySpent)}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-6 pt-6 border-t border-white/10">
@@ -363,12 +395,12 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
         </div>
 
         {/* Card 2: Financial Commitments */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-8 opacity-[0.03] dark:opacity-[0.07] group-hover:scale-110 transition-transform">
+        <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-5 opacity-[0.03] dark:opacity-[0.07] group-hover:scale-110 transition-transform">
             <CheckCircle className="w-24 h-24 text-slate-900 dark:text-white" />
           </div>
 
-          <div className="flex justify-between items-start mb-8">
+          <div className="flex justify-between items-start mb-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500">
                 <Target className="w-5 h-5" />
@@ -380,24 +412,24 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
             </button>
           </div>
 
-          <div className="space-y-8 relative z-10">
+          <div className="space-y-6 relative z-10">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Comprometimento Total</p>
-              <p className="text-4xl font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.totalCommitment)}</p>
+              <p className="text-3xl font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.totalCommitment)}</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-slate-50 dark:border-slate-800">
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-emerald-500 mb-1">Pagos</p>
-                <p className="text-sm font-black text-slate-900 dark:text-white truncate">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.paidExpenses)}</p>
+            <div className="flex flex-col gap-2 pt-4 border-t border-slate-50 dark:border-slate-800">
+              <div className="flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2 rounded-lg">
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Pagos</span>
+                <span className="text-sm font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.paidExpenses)}</span>
               </div>
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-blue-500 mb-1">Previstos</p>
-                <p className="text-sm font-black text-slate-900 dark:text-white truncate">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.plannedExpenses)}</p>
+              <div className="flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2 rounded-lg">
+                <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">Previstos</span>
+                <span className="text-sm font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.plannedExpenses)}</span>
               </div>
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-rose-500 mb-1">Atrasados</p>
-                <p className="text-sm font-black text-slate-900 dark:text-white truncate">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.lateExpenses)}</p>
+              <div className="flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2 rounded-lg">
+                <span className="text-[10px] font-black uppercase tracking-widest text-rose-500">Atrasados</span>
+                <span className="text-sm font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.lateExpenses)}</span>
               </div>
             </div>
           </div>
@@ -405,10 +437,10 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       </div>
 
       {/* Summary Table - Collapsible */}
-      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden transition-all">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden transition-all">
         <button 
             onClick={() => setIsSummaryOpen(!isSummaryOpen)}
-            className="w-full p-8 md:p-10 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+            className="w-full p-5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
         >
             <div className="flex items-center gap-3">
                 <div className="text-indigo-600">
@@ -424,7 +456,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
             </div>
         </button>
         
-        <div className={`transition-all duration-300 ease-in-out ${isSummaryOpen ? 'max-h-[2000px] opacity-100 p-8 md:p-10 pt-0 md:pt-0' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+        <div className={`transition-all duration-300 ease-in-out ${isSummaryOpen ? 'max-h-[2000px] opacity-100 p-5 pt-0' : 'max-h-0 opacity-0 pointer-events-none'}`}>
           <div className="border-t border-slate-50 dark:border-slate-800 pt-8 overflow-x-auto">
             <table className="w-full text-left border-collapse">
             <thead>
@@ -435,8 +467,11 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
                 <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-400 cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => requestSort('type')}>
                   <div className="flex items-center gap-2">Tipo <ArrowUpDown className="w-3 h-3" /></div>
                 </th>
+                <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => requestSort('average')}>
+                  <div className="flex items-center justify-end gap-2">Média <ArrowUpDown className="w-3 h-3" /></div>
+                </th>
                 <th className="py-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => requestSort('value')}>
-                  <div className="flex items-center justify-end gap-2">Valor <ArrowUpDown className="w-3 h-3" /></div>
+                  <div className="flex items-center justify-end gap-2">Valor Total <ArrowUpDown className="w-3 h-3" /></div>
                 </th>
               </tr>
             </thead>
@@ -453,6 +488,9 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
                     </span>
                   </td>
                   <td className="py-3 px-4 text-xs font-bold text-slate-700 dark:text-slate-300 text-right">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.average)}
+                  </td>
+                  <td className="py-3 px-4 text-xs font-bold text-slate-700 dark:text-slate-300 text-right">
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.value)}
                   </td>
                 </tr>
@@ -461,6 +499,9 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
             <tfoot>
                <tr className="bg-slate-50 dark:bg-slate-800/50">
                  <td colSpan={2} className="py-4 px-4 text-xs font-black uppercase tracking-widest text-slate-500 text-right">Total do Período</td>
+                 <td className={`py-4 px-4 text-sm font-black text-right ${totalSummaryAverage >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalSummaryAverage)}
+                 </td>
                  <td className={`py-4 px-4 text-sm font-black text-right ${totalSummaryValue >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalSummaryValue)}
                  </td>
@@ -474,11 +515,11 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       {/* Advanced Budget Monitoring & Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
         {/* Budget Progress Bars */}
-        <div className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
-          <header className="flex justify-between items-start mb-8">
+        <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+          <header className="flex justify-between items-start mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl text-indigo-600">
-                <Target className="w-6 h-6" />
+              <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-indigo-600">
+                <Target className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Orçamentos Ativos</h3>
@@ -539,11 +580,11 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
 
         {/* Pace and Savings Rate Indicator */}
         <div className="grid grid-cols-1 gap-8">
-          <div className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+          <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-2xl text-amber-600">
-                  <Zap className="w-6 h-6" />
+                <div className="p-2.5 bg-amber-50 dark:bg-amber-900/30 rounded-xl text-amber-600">
+                  <Zap className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">Ritmo de Gastos (Pace)</h3>
@@ -560,13 +601,13 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
             
             <div className="flex items-center gap-6">
               <div className="flex-1">
-                <p className={`text-4xl font-black ${advancedStats.dailyAllowance < 0 ? 'text-rose-500 animate-pulse' : 'text-slate-900 dark:text-white'}`}>
+                <p className={`text-3xl font-black ${advancedStats.dailyAllowance < 0 ? 'text-rose-500 animate-pulse' : 'text-slate-900 dark:text-white'}`}>
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(advancedStats.dailyAllowance)}
                 </p>
                 <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">
                   {advancedStats.dailyAllowance < 0 
-                    ? 'Orçamento ultrapassado! Ajuste seus gastos.' 
-                    : `Disponível por dia nos próximos ${advancedStats.daysRemaining} dias`}
+                    ? 'Orçamento ultrapassado!' 
+                    : `Disponível por dia`}
                 </p>
               </div>
               <div className="hidden sm:block">
@@ -595,7 +636,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
             <header className="mb-6 flex justify-between items-center">
               <div className="flex items-center gap-3">
                  <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-indigo-500">
@@ -675,8 +716,8 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
         {/* Distribuição de Gastos */}
-        <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
-          <header className="mb-8">
+        <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+          <header className="mb-6">
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Maiores Despesas</h3>
             <p className="text-xs text-slate-500 font-medium">Top 5 categorias do período</p>
           </header>
@@ -709,8 +750,8 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
         </div>
 
         {/* Evolução Saldo */}
-        <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
-          <header className="mb-8">
+        <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+          <header className="mb-6">
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Tendência de Saldo</h3>
             <p className="text-xs text-slate-500 font-medium">Evolução diária no período</p>
           </header>
@@ -750,11 +791,11 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       </div>
 
       {/* Histórico Receitas vs Despesas (Novo Gráfico) */}
-      <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
-         <header className="mb-8">
+      <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+         <header className="mb-6">
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Receitas vs Despesas</h3>
             <p className="text-xs text-slate-500 font-medium">Comparativo mensal</p>
-          </header>
+         </header>
           <div className="h-[300px]">
              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyHistory}>
@@ -774,8 +815,8 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       </div>
 
       {/* Projeção de Parcelamentos (Novo Gráfico) */}
-      <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
-          <header className="mb-8">
+      <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+          <header className="mb-6">
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Projeção de Parcelas</h3>
             <p className="text-xs text-slate-500 font-medium">Comprometimento futuro com compras parceladas</p>
           </header>
@@ -830,7 +871,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       </div>
 
       {/* User Comparison Section */}
-      <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
+      <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
         <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-8">Participação de Gastos</h3>
         <div className="space-y-6">
           {/* Gastos Conjuntos */}

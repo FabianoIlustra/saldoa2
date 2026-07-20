@@ -255,6 +255,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
     
     try {
       await onValidate({
+        id: selectedItem.paidTransactionId, // Pass existing ID if it's a template record
         userId: selectedItem.userId,
         accountId: editAccountId,
         description: `${selectedItem.description} (${selectedItem.installmentNumber}/${selectedItem.totalInstallments})`,
@@ -267,7 +268,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
         installmentGroupId: selectedItem.id,
         installmentNumber: selectedItem.installmentNumber,
         totalInstallments: selectedItem.totalInstallments
-      });
+      } as any);
       setSelectedItem(null);
     } catch (error) {
       console.error('Validation error:', error);
@@ -416,49 +417,49 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
       </div>
 
       {/* Header & Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl flex items-center justify-center text-indigo-600">
-            <CreditCard className="w-6 h-6" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl flex items-center justify-center text-indigo-600 shrink-0">
+            <CreditCard className="w-4.5 h-4.5" />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">
                 {currentFilters?.viewMode === 'YEAR' ? 'Comprometido (Ano)' : 'Comprometido (Mês)'}
             </p>
-            <h4 className="text-xl font-black text-slate-900 dark:text-white">
+            <h4 className="text-sm font-black text-slate-900 dark:text-white">
               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalMonthly)}
             </h4>
           </div>
         </div>
         
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/20 rounded-2xl flex items-center justify-center text-amber-600">
-            <Clock className="w-6 h-6" />
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 bg-amber-50 dark:bg-amber-900/20 rounded-xl flex items-center justify-center text-amber-600 shrink-0">
+            <Clock className="w-4.5 h-4.5" />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Parcelas Projetadas</p>
-            <h4 className="text-xl font-black text-slate-900 dark:text-white">{monthlyInstallments.length}</h4>
+            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Parcelas Projetadas</p>
+            <h4 className="text-sm font-black text-slate-900 dark:text-white">{monthlyInstallments.length}</h4>
           </div>
         </div>
 
         <button 
           onClick={() => setIsFormOpen(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-[2rem] p-6 shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-3 transition-all active:scale-95"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl p-3.5 shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95 font-extrabold text-xs uppercase tracking-wider"
         >
-          <Plus className="w-6 h-6" />
-          <span className="font-black uppercase text-xs tracking-widest">Novo Parcelamento</span>
+          <Plus className="w-4.5 h-4.5" />
+          <span>Novo Parcelamento</span>
         </button>
       </div>
 
       {/* List */}
-      <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
-        <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
           <div>
-            <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
-              <CalendarCheck className="w-6 h-6 text-indigo-500" />
+            <h2 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+              <CalendarCheck className="w-4.5 h-4.5 text-indigo-500" />
               Contas Parceladas
             </h2>
-            <p className="text-slate-400 text-sm mt-1">Lançamentos divididos projetados para o período.</p>
+            <p className="text-slate-400 text-[10px] mt-0.5">Lançamentos divididos projetados para o período.</p>
           </div>
         </div>
 
@@ -466,32 +467,32 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800">
-                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('status')}>
+                <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('status')}>
                     <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
                 </th>
-                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('dueDate')}>
+                <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('dueDate')}>
                     <div className="flex items-center gap-1">Vencimento <SortIcon field="dueDate" /></div>
                 </th>
-                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('description')}>
+                <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('description')}>
                     <div className="flex items-center gap-1">Descrição <SortIcon field="description" /></div>
                 </th>
-                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('category')}>
+                <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('category')}>
                     <div className="flex items-center gap-1">Categoria <SortIcon field="category" /></div>
                 </th>
-                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('installment')}>
+                <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('installment')}>
                     <div className="flex items-center justify-center gap-1">Parcela <SortIcon field="installment" /></div>
                 </th>
-                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('amount')}>
+                <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('amount')}>
                     <div className="flex items-center justify-end gap-1">Valor <SortIcon field="amount" /></div>
                 </th>
-                <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Ações</th>
+                <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {monthlyInstallments.map((item, idx) => (
                 <tr key={idx} className={`group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${item.status === 'paid' ? 'opacity-50 grayscale' : ''}`}>
-                  <td className="p-4">
-                    <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full ${
+                  <td className="px-3.5 py-2.5">
+                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                       item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                       item.status === 'late' ? 'bg-rose-100 text-rose-700' :
                       'bg-blue-100 text-blue-700'
@@ -499,34 +500,34 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                       {item.status === 'paid' ? 'Pago' : item.status === 'late' ? 'Vencido' : 'A Vencer'}
                     </span>
                   </td>
-                  <td className="p-4 font-bold text-slate-700 dark:text-slate-300">
+                  <td className="px-3.5 py-2.5 font-bold text-xs text-slate-700 dark:text-slate-300">
                     {format(item.dueDate, 'dd/MM/yyyy')}
                   </td>
-                  <td className="p-4 font-bold text-slate-900 dark:text-white">
+                  <td className="px-3.5 py-2.5 font-bold text-xs text-slate-900 dark:text-white">
                     {item.description}
                   </td>
-                  <td className="p-4">
-                    <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg">
+                  <td className="px-3.5 py-2.5">
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
                         {item.category}
                     </span>
                   </td>
-                  <td className="p-4 text-center">
-                    <span className="text-xs font-black bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full text-slate-500">
+                  <td className="px-3.5 py-2.5 text-center">
+                    <span className="text-[10px] font-black bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500">
                       {item.installmentNumber}/{item.totalInstallments}
                     </span>
                   </td>
-                  <td className={`p-4 font-black text-right ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  <td className={`px-3.5 py-2.5 font-black text-xs text-right ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.installmentAmount)}
                   </td>
-                  <td className="p-4">
-                    <div className="flex items-center justify-center gap-2">
+                  <td className="px-3.5 py-2.5">
+                    <div className="flex items-center justify-center gap-1.5">
                       {item.status !== 'paid' ? (
                         <button 
                             onClick={() => handleClick(item)}
-                            className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200 dark:shadow-none"
+                            className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
                             title="Lançar no Extrato"
                         >
-                            <Check className="w-4 h-4" />
+                            <Check className="w-3.5 h-3.5" />
                         </button>
                       ) : (
                          <button 
@@ -535,19 +536,19 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                                     onDeleteTransaction(item.paidTransactionId);
                                 }
                             }}
-                            className="bg-rose-100 text-rose-600 p-2 rounded-xl hover:bg-rose-200 transition-colors"
+                            className="bg-rose-100 text-rose-600 p-1.5 rounded-lg hover:bg-rose-200 transition-colors"
                             title="Estornar Lançamento"
                         >
-                            <ArrowUpDown className="w-4 h-4" />
+                            <ArrowUpDown className="w-3.5 h-3.5" />
                         </button>
                       )}
                       
                        <button 
                         onClick={() => setDeleteGroupConfirmId(item.id)}
-                        className="p-2 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-xl"
+                        className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg"
                         title="Excluir contrato completo"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -555,7 +556,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
               ))}
               {monthlyInstallments.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
                     Nenhuma parcela para este período.
                   </td>
                 </tr>
@@ -564,8 +565,8 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
             {monthlyInstallments.length > 0 && (
               <tfoot className="bg-slate-50 dark:bg-slate-800/50 font-black">
                 <tr>
-                  <td colSpan={5} className="p-4 text-right text-slate-500 uppercase text-[10px]">Total do Período:</td>
-                  <td className="p-4 text-right text-indigo-600 text-lg">
+                  <td colSpan={5} className="px-3.5 py-2 text-right text-slate-500 uppercase text-[9px]">Total do Período:</td>
+                  <td className="px-3.5 py-2 text-right text-indigo-600 text-xs">
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalMonthly)}
                   </td>
                   <td></td>
@@ -573,6 +574,100 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
               </tfoot>
             )}
           </table>
+        </div>
+
+        {/* Mobile View */}
+        <div className="block md:hidden">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {monthlyInstallments.map((item, idx) => (
+              <div 
+                key={idx} 
+                className={`p-4 flex flex-col gap-2.5 transition-colors ${item.status === 'paid' ? 'opacity-60 grayscale' : ''} hover:bg-slate-50 dark:hover:bg-slate-800/25`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1 text-left">
+                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block ${
+                      item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                      item.status === 'late' ? 'bg-rose-100 text-rose-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                      {item.status === 'paid' ? 'Pago' : item.status === 'late' ? 'Vencido' : 'A Vencer'}
+                    </span>
+                    <h4 className="font-extrabold text-xs text-slate-900 dark:text-white leading-snug">
+                      {item.description}
+                    </h4>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[9px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                        {item.category}
+                      </span>
+                      <span className="text-[9px] font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-full">
+                        Parc. {item.installmentNumber}/{item.totalInstallments}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className={`font-black text-xs block ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.installmentAmount)}
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-400 block mt-0.5">
+                      Venc. {format(item.dueDate, 'dd/MM/yyyy')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-50 dark:border-slate-800/40">
+                  <button 
+                    onClick={() => setDeleteGroupConfirmId(item.id)}
+                    className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2"
+                    title="Excluir contrato completo"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Excluir Contrato</span>
+                  </button>
+
+                  {item.status !== 'paid' ? (
+                    <button 
+                      onClick={() => handleClick(item)}
+                      className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-3"
+                      title="Lançar no Extrato"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Lançar</span>
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => {
+                        if (item.paidTransactionId && confirm('Deseja estornar este lançamento do extrato?')) {
+                          onDeleteTransaction(item.paidTransactionId);
+                        }
+                      }}
+                      className="bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 p-1.5 rounded-lg hover:bg-rose-200 transition-colors flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-3"
+                      title="Estornar Lançamento"
+                    >
+                      <ArrowUpDown className="w-3.5 h-3.5" />
+                      <span>Estornar</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {monthlyInstallments.length === 0 && (
+              <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                Nenhuma parcela para este período.
+              </div>
+            )}
+          </div>
+
+          {monthlyInstallments.length > 0 && (
+            <div className="bg-slate-50/50 dark:bg-slate-800/30 p-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center font-black">
+              <span className="text-slate-500 uppercase text-[9px]">Total do Período:</span>
+              <span className="text-indigo-600 text-xs">
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalMonthly)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
