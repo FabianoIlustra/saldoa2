@@ -1,65 +1,28 @@
-
 // Force sync
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send, Loader2, BrainCircuit, Mic, MicOff, Volume2, VolumeX, Trash2, AlertCircle } from 'lucide-react';
-import { Transaction, ChatMessage, User, Account } from '../types';
-import { GoogleGenAI, Modality, Type, LiveServerMessage } from "@google/genai";
+import { Transaction, ChatMessage, User, Account, Category } from '../types';
+import { GoogleGenAI } from "@google/genai";
 
 interface AIConsultantProps {
   transactions: Transaction[];
   accounts: Account[];
+  categories: Category[];
   currentUser: User;
   onAddTransaction: (data: any) => void;
   autoStartVoice?: boolean;
   onVoiceHandled?: () => void;
 }
 
-// Auxiliares para Áudio
-function encode(bytes: Uint8Array) {
-  let binary = '';
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-function createBlob(data: Float32Array): any {
-  const l = data.length;
-  const int16 = new Int16Array(l);
-  for (let i = 0; i < l; i++) {
-    int16[i] = data[i] * 32768;
-  }
-  return {
-    data: encode(new Uint8Array(int16.buffer)),
-    mimeType: 'audio/pcm;rate=16000',
-  };
-}
-
-function downsample(data: Float32Array, fromRate: number, toRate: number): Float32Array {
-  if (fromRate === toRate) return data;
-  if (toRate > fromRate) return data; // only downsample
-  const ratio = fromRate / toRate;
-  const newLength = Math.round(data.length / ratio);
-  const result = new Float32Array(newLength);
-  let offsetResult = 0;
-  let offsetData = 0;
-  while (offsetResult < result.length) {
-    const nextOffsetData = Math.round((offsetResult + 1) * ratio);
-    let accum = 0;
-    let count = 0;
-    for (let i = offsetData; i < nextOffsetData && i < data.length; i++) {
-      accum += data[i];
-      count++;
-    }
-    result[offsetResult] = count > 0 ? accum / count : 0;
-    offsetResult++;
-    offsetData = nextOffsetData;
-  }
-  return result;
-}
-
-const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, currentUser, onAddTransaction, autoStartVoice, onVoiceHandled }) => {
+const AIConsultant: React.FC<AIConsultantProps> = ({ 
+  transactions, 
+  accounts, 
+  categories,
+  currentUser, 
+  onAddTransaction, 
+  autoStartVoice, 
+  onVoiceHandled 
+}) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -67,39 +30,26 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
   const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'processing' | 'responding'>('idle');
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [showMicPermission, setShowMicPermission] = useState(false);
+  const [transcribedText, setTranscribedText] = useState('');
+  
   const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState<boolean>(() => {
     return localStorage.getItem('finan_ai_voice_output_enabled') !== 'false';
   });
+
   const scrollRef = useRef<HTMLDivElement>(null);
   
-  // Refs para sessão de voz
-  const sessionRef = useRef<any>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  // Web Speech API refs
+  const recognitionRef = useRef<any>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const audioQueueRef = useRef<Int16Array[]>([]);
-  const isPlayingRef = useRef(false);
-  const lastSpeechTimeRef = useRef<number>(Date.now());
-  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const transactionAddedRef = useRef<boolean>(false);
+  const silenceTimerRef = useRef<any>(null);
+  const isVoiceActiveRef = useRef(false);
 
   const toggleVoiceOutput = () => {
     const newValue = !isVoiceOutputEnabled;
     setIsVoiceOutputEnabled(newValue);
     localStorage.setItem('finan_ai_voice_output_enabled', String(newValue));
-    
     if (!newValue) {
-      audioQueueRef.current = [];
-      if (activeSourceRef.current) {
-        try {
-          activeSourceRef.current.stop();
-        } catch (e) {
-          // ignore
-        }
-        activeSourceRef.current = null;
-      }
-      if (isVoiceActive) {
-        setVoiceState('listening');
-      }
+      window.speechSynthesis.cancel();
     }
   };
 
@@ -109,288 +59,270 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
     }
   }, [messages, loading]);
 
+  // Handle automatic voice starting from Dashboard redirect
   useEffect(() => {
     if (autoStartVoice) {
-      // Just clear and reset for a fresh voice recording session, waiting for user to click
       setMessages([]);
-      stopVoice();
+      const hasPermission = localStorage.getItem('finan_ai_mic_permission') === 'true';
+      if (hasPermission) {
+        startVoice();
+      } else {
+        setShowMicPermission(true);
+      }
       onVoiceHandled?.();
     }
   }, [autoStartVoice]);
 
-  const playAudioQueue = async () => {
-    if (!isVoiceOutputEnabled) {
-      audioQueueRef.current = [];
-      if (isVoiceActive) {
-        setVoiceState('listening');
-      }
-      return;
-    }
-    if (isPlayingRef.current || audioQueueRef.current.length === 0 || !audioContextRef.current) return;
-    
-    isPlayingRef.current = true;
-    setVoiceState('responding');
-    const audioCtx = audioContextRef.current;
+  // Clean up speech and timers on unmount
+  useEffect(() => {
+    return () => {
+      stopVoiceStreamOnly();
+      window.speechSynthesis.cancel();
+    };
+  }, []);
 
-    while (audioQueueRef.current.length > 0 && audioCtx.state !== 'closed' && isVoiceOutputEnabled) {
-      const data = audioQueueRef.current.shift()!;
-      const float32 = new Float32Array(data.length);
-      for (let i = 0; i < data.length; i++) {
-        float32[i] = data[i] / 32768;
+  const speakMessage = (text: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!isVoiceOutputEnabled) {
+        resolve();
+        return;
       }
+      
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'pt-BR';
+      utterance.onend = () => {
+        resolve();
+      };
+      utterance.onerror = () => {
+        resolve();
+      };
+      window.speechSynthesis.speak(utterance);
+    });
+  };
 
-      const buffer = audioCtx.createBuffer(1, float32.length, 24000); // Correct sample rate for Gemini's output
-      buffer.getChannelData(0).set(float32);
-      
-      const source = audioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioCtx.destination);
-      activeSourceRef.current = source;
-      
-      await new Promise<void>((resolve) => {
-        source.onended = () => {
-          activeSourceRef.current = null;
-          resolve();
-        };
-        source.start();
-      });
+  const stopVoiceStreamOnly = () => {
+    if (streamRef.current) {
+      try {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      } catch (e) {}
+      streamRef.current = null;
     }
-    
-    isPlayingRef.current = false;
-    if (transactionAddedRef.current) {
-      transactionAddedRef.current = false;
-      stopVoice();
-    } else {
-      setVoiceState('listening');
-      lastSpeechTimeRef.current = Date.now();
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onstart = null;
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.stop();
+      } catch (e) {}
+      recognitionRef.current = null;
     }
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  };
+
+  const stopVoice = () => {
+    isVoiceActiveRef.current = false;
+    setIsVoiceActive(false);
+    setVoiceState('idle');
+    stopVoiceStreamOnly();
   };
 
   const startVoice = async () => {
     setIsVoiceActive(true);
     setVoiceState('listening');
     setVoiceError(null);
+    setTranscribedText('');
+    isVoiceActiveRef.current = true;
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("Chave de API não configurada. Adicione GEMINI_API_KEY nas Configurações.");
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        throw new Error("Reconhecimento de voz não suportado neste navegador. Use o Google Chrome ou Safari.");
       }
-      const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
-      
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (audioCtx.state === 'suspended') {
-        await audioCtx.resume();
-      }
-      audioContextRef.current = audioCtx;
-      
+
+      // Request browser microphone stream to guarantee permission inside iframes
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(err => {
-        if (err.name === 'NotAllowedError') throw new Error("Permissão de microfone negada.");
+        if (err.name === 'NotAllowedError') throw new Error("Permissão de microfone negada pelo navegador.");
         throw err;
       });
-
       streamRef.current = stream;
 
-      const registrarTransacaoTool = {
-        name: 'registrar_transacao',
-        parameters: {
-          type: Type.OBJECT,
-          description: 'Registra uma nova transação financeira (receita ou despesa).',
-          properties: {
-            description: { type: Type.STRING, description: 'Breve descrição do gasto ou ganho.' },
-            amount: { type: Type.NUMBER, description: 'Valor numérico.' },
-            type: { type: Type.STRING, enum: ['INCOME', 'EXPENSE'], description: 'Se é Entrada (INCOME) ou Saída (EXPENSE).' },
-            category: { type: Type.STRING, description: 'Categoria sugerida (ex: Alimentação, Lazer).' },
-          },
-          required: ['description', 'amount', 'type', 'category'],
-        },
+      const rec = new SpeechRecognition();
+      rec.lang = 'pt-BR';
+      rec.continuous = true;
+      rec.interimResults = true;
+
+      let accumulatedText = '';
+
+      rec.onstart = () => {
+        setVoiceState('listening');
       };
 
-      const registrarTransferenciaTool = {
-        name: 'registrar_transferencia',
-        parameters: {
-          type: Type.OBJECT,
-          description: 'Registra uma transferência interna entre duas contas do usuário.',
-          properties: {
-            description: { type: Type.STRING, description: 'Descrição da transferência (ex: Transferência para reserva).' },
-            amount: { type: Type.NUMBER, description: 'Valor da transferência.' },
-            fromAccount: { type: Type.STRING, description: 'Nome ou ID da conta de origem.' },
-            toAccount: { type: Type.STRING, description: 'Nome ou ID da conta de destino.' },
-          },
-          required: ['description', 'amount', 'fromAccount', 'toAccount'],
-        },
-      };
+      rec.onresult = (event: any) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
 
-      const sessionPromise = ai.live.connect({
-        model: 'gemini-3.1-flash-live-preview',
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: "Charon"
-              }
-            }
-          },
-          tools: [{ functionDeclarations: [registrarTransacaoTool, registrarTransferenciaTool] }],
-          systemInstruction: `Você é o assistente de voz do Saldo A2. 
-          Você está falando com ${currentUser.name}.
-          Sua tarefa é ouvir o usuário e ajudá-lo a registrar transações ou transferências. 
-          Quando o usuário disser algo como "Gastei 10 reais com café", chame registrar_transacao.
-          Quando o usuário disser algo como "Transfira 50 reais da conta Corrente para a Poupança", chame registrar_transferencia.
-          Sempre confirme verbalmente com uma frase curta e simpática.`
-        },
-        callbacks: {
-          onopen: () => {
-            const source = audioCtx.createMediaStreamSource(stream);
-            const scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
-            scriptProcessor.onaudioprocess = (e) => {
-              const inputData = e.inputBuffer.getChannelData(0);
-              
-              // VAD / Speech detection to trigger "Processando..." state
-              let sum = 0;
-              for (let i = 0; i < inputData.length; i++) {
-                sum += inputData[i] * inputData[i];
-              }
-              const rms = Math.sqrt(sum / inputData.length);
-              
-              if (rms > 0.008) {
-                lastSpeechTimeRef.current = Date.now();
-                if (!isPlayingRef.current) {
-                  setVoiceState('listening');
-                }
-              } else {
-                if (Date.now() - lastSpeechTimeRef.current > 1500 && !isPlayingRef.current) {
-                  setVoiceState('processing');
-                }
-              }
-
-              // Downsample input from native sampleRate to 16000Hz for Gemini Live API
-              const downsampled = downsample(inputData, audioCtx.sampleRate, 16000);
-              const pcmBlob = createBlob(downsampled);
-              sessionPromise.then(session => session.sendRealtimeInput({
-                audio: { 
-                  mimeType: 'audio/pcm;rate=16000',
-                  data: pcmBlob.data
-                }
-              }));
-            };
-            source.connect(scriptProcessor);
-            scriptProcessor.connect(audioCtx.destination);
-          },
-          onmessage: async (message: LiveServerMessage) => {
-            // Set voiceState to processing when a message begins or a tool is called
-            setVoiceState('processing');
-
-            // Audio response from AI
-            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-            if (base64Audio) {
-              const binary = atob(base64Audio);
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) {
-                bytes[i] = binary.charCodeAt(i);
-              }
-              const int16 = new Int16Array(bytes.buffer);
-              audioQueueRef.current.push(int16);
-              playAudioQueue();
-            }
-
-            if (message.toolCall) {
-              for (const fc of message.toolCall.functionCalls) {
-                if (fc.name === 'registrar_transacao') {
-                  const data = fc.args as any;
-                  const targetAccount = accounts[0]?.id || 'default';
-                  
-                  onAddTransaction({
-                    ...data,
-                    userId: currentUser.id,
-                    accountId: targetAccount,
-                    date: new Date().toISOString().split('T')[0],
-                    recurrence: 'NONE'
-                  });
-                  
-                  setMessages(prev => [...prev, { 
-                    role: 'model', 
-                    text: `✅ Entendido! Registrei: ${data.description} (R$ ${data.amount}) na categoria ${data.category}.` 
-                  }]);
-
-                  sessionPromise.then(session => {
-                    session.sendToolResponse({
-                      functionResponses: [{ id: fc.id, name: fc.name, response: { result: "Transação registrada!" } }]
-                    });
-                  });
-
-                  transactionAddedRef.current = true;
-                  if (!isVoiceOutputEnabled) {
-                    setTimeout(() => {
-                      stopVoice();
-                    }, 1500);
-                  }
-                } else if (fc.name === 'registrar_transferencia') {
-                   const data = fc.args as any;
-                   onAddTransaction({
-                     description: data.description,
-                     amount: data.amount,
-                     type: 'TRANSFER',
-                     category: 'Transferência',
-                     userId: currentUser.id,
-                     date: new Date().toISOString().split('T')[0],
-                     recurrence: 'NONE'
-                   });
-
-                   setMessages(prev => [...prev, { 
-                    role: 'model', 
-                    text: `✅ Entendido! Preparei a transferência de R$ ${data.amount}. Verifique os detalhes das contas.` 
-                  }]);
-
-                  sessionPromise.then(session => {
-                    session.sendToolResponse({
-                      functionResponses: [{ id: fc.id, name: fc.name, response: { result: "Transferência preparada!" } }]
-                    });
-                  });
-
-                  transactionAddedRef.current = true;
-                  if (!isVoiceOutputEnabled) {
-                    setTimeout(() => {
-                      stopVoice();
-                    }, 1500);
-                  }
-                }
-              }
-            }
-          },
-          onerror: (e) => {
-            console.error("Erro voz:", e);
-            setVoiceError("Ocorreu um erro na conexão de voz.");
-            stopVoice();
-          },
-          onclose: () => stopVoice()
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
         }
-      });
 
-      sessionRef.current = await sessionPromise;
+        const currentText = (accumulatedText + finalTranscript + interimTranscript).trim();
+        setTranscribedText(currentText);
+
+        // Reset silence timer
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+        }
+
+        // If the user says something substantial and then pauses for 2 seconds, process it automatically!
+        if (currentText.length > 3) {
+          silenceTimerRef.current = setTimeout(() => {
+            if (isVoiceActiveRef.current) {
+              processVoiceCommandText(currentText);
+            }
+          }, 2000);
+        }
+      };
+
+      rec.onerror = (e: any) => {
+        console.error("Speech Recognition error:", e);
+        if (e.error !== 'no-speech') {
+          setVoiceError("Erro no microfone: " + e.error);
+          stopVoice();
+        }
+      };
+
+      rec.onend = () => {
+        // Keep listening unless deactivated
+        if (isVoiceActiveRef.current && !silenceTimerRef.current) {
+          try {
+            rec.start();
+          } catch (err) {}
+        }
+      };
+
+      recognitionRef.current = rec;
+      rec.start();
+
     } catch (err: any) {
       console.error("Falha ao iniciar voz:", err);
       setVoiceError(err.message || "Não foi possível acessar o microfone.");
       setIsVoiceActive(false);
+      isVoiceActiveRef.current = false;
     }
   };
 
-  const stopVoice = () => {
-    setIsVoiceActive(false);
-    setVoiceState('idle');
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close().catch(e => console.error("Erro ao fechar AudioContext:", e));
-    }
-    if (sessionRef.current) {
-      try {
-        sessionRef.current.close();
-      } catch (e) {}
-      sessionRef.current = null;
+  const processVoiceCommandText = async (text: string) => {
+    setVoiceState('processing');
+    stopVoiceStreamOnly();
+
+    try {
+      const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Chave de API do Gemini não configurada.");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const prompt = `Você é o interpretador de comandos por voz do Saldo A2, um app financeiro para casais.
+Analise a frase falada pelo usuário e extraia os detalhes da transação ou transferência.
+
+Contas bancárias cadastradas pelo usuário:
+${JSON.stringify(accounts.map(a => ({ id: a.id, name: a.name })))}
+
+Categorias cadastradas pelo usuário (use as existentes se houver proximidade semântica):
+${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name, type: c.type })))}
+
+Frase dita pelo usuário: "${text}"
+
+Responda ESTRITAMENTE em formato JSON com o seguinte schema (sem tags markdown):
+{
+  "isTransaction": boolean, // true se descreveu um ganho/despesa ou transferência com valor monetário e descrição identificável.
+  "description": string, // Descrição simples e direta capitalizada (ex: "Almoço", "Uber", "Salário", "Supermercado").
+  "amount": number, // Valor numérico positivo.
+  "type": "INCOME" | "EXPENSE" | "TRANSFER", // INCOME para receitas/ganhos, EXPENSE para despesas/gastos, TRANSFER para transferências.
+  "category": string, // Nome de uma categoria existente ou uma sugerida adequada.
+  "accountId": string, // ID da conta correspondente se mencionada. Caso contrário, deixe em branco.
+  "toAccountId": string, // ID da conta destino se for TRANSFER.
+  "responseMessage": string // Mensagem em português amigável e direta confirmando o registro (ex: "Tudo pronto! Registrei sua despesa de 25 reais em Alimentação.") ou dizendo que não compreendeu o valor/descrição.
+}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        }
+      });
+
+      const parsedJson = JSON.parse(response.text?.trim() || '{}');
+
+      if (parsedJson.isTransaction && parsedJson.amount > 0) {
+        const targetAccountId = parsedJson.accountId || accounts[0]?.id || 'default';
+
+        onAddTransaction({
+          description: parsedJson.description || 'Lançamento por voz',
+          amount: parsedJson.amount,
+          type: parsedJson.type || 'EXPENSE',
+          category: parsedJson.category || 'Outros',
+          accountId: targetAccountId,
+          toAccountId: parsedJson.type === 'TRANSFER' ? parsedJson.toAccountId : undefined,
+          userId: currentUser.id,
+          date: new Date().toISOString().split('T')[0],
+          recurrence: 'NONE'
+        });
+
+        const confirmMsg = parsedJson.responseMessage || `Feito! Registrei ${parsedJson.description} de R$ ${parsedJson.amount}.`;
+        
+        setMessages(prev => [
+          ...prev,
+          { role: 'user', text: `🎙️ ${text}` },
+          { role: 'model', text: confirmMsg }
+        ]);
+
+        setVoiceState('responding');
+        await speakMessage(confirmMsg.replace('✅', '').trim());
+        
+        // Deactivate voice mode completely as the transaction was successfully processed!
+        setIsVoiceActive(false);
+        setVoiceState('idle');
+
+      } else {
+        const answer = parsedJson.responseMessage || "Desculpe, não consegui entender o valor ou a descrição. Pode repetir?";
+        
+        setMessages(prev => [
+          ...prev,
+          { role: 'user', text: `🎙️ ${text}` },
+          { role: 'model', text: answer }
+        ]);
+
+        setVoiceState('responding');
+        await speakMessage(answer);
+        
+        // Restart voice to keep listening! As requested: "ele precisa ficar escutando e esperando o comando"
+        startVoice();
+      }
+
+    } catch (err: any) {
+      console.error("Erro no processamento da voz por Gemini:", err);
+      setMessages(prev => [
+        ...prev,
+        { role: 'user', text: `🎙️ ${text}` },
+        { role: 'model', text: "Ocorreu um erro ao processar seu comando de voz. Por favor, tente novamente." }
+      ]);
+      setVoiceError("Erro ao processar comando de voz.");
+      setIsVoiceActive(false);
+      setVoiceState('idle');
     }
   };
 
@@ -424,14 +356,74 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
         return;
       }
       const ai = new GoogleGenAI({ apiKey });
-      const context = `Você está ajudando ${currentUser.name}. Contexto financeiro (últimas 20 transações): ${JSON.stringify(transactions.slice(0, 20))}. Pergunta: ${userMessage}`;
+
+      // First check if user message is a text-based transaction command!
+      const commandPrompt = `Você é o interpretador do Saldo A2. Verifique se o usuário deseja realizar um lançamento/registro financeiro ou transferência na frase: "${userMessage}".
+Responda APENAS em JSON:
+{
+  "isTransaction": boolean,
+  "description": string,
+  "amount": number,
+  "type": "INCOME" | "EXPENSE" | "TRANSFER",
+  "category": string,
+  "accountId": string,
+  "toAccountId": string,
+  "responseMessage": string
+}
+Se for apenas conversa, dúvidas ou perguntas, responda "isTransaction": false.
+
+Contas cadastradas: ${JSON.stringify(accounts.map(a => ({ id: a.id, name: a.name })))}
+Categorias: ${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name, type: c.type })))}`;
+
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
-        contents: context,
+        contents: commandPrompt,
+        config: {
+          responseMimeType: "application/json"
+        }
       });
-      setMessages(prev => [...prev, { role: 'model', text: response.text || "Não entendi, pode repetir?" }]);
+
+      const parsed = JSON.parse(response.text?.trim() || '{}');
+
+      if (parsed.isTransaction && parsed.amount > 0) {
+        const targetAccountId = parsed.accountId || accounts[0]?.id || 'default';
+
+        onAddTransaction({
+          description: parsed.description || 'Lançamento por chat',
+          amount: parsed.amount,
+          type: parsed.type || 'EXPENSE',
+          category: parsed.category || 'Outros',
+          accountId: targetAccountId,
+          toAccountId: parsed.type === 'TRANSFER' ? parsed.toAccountId : undefined,
+          userId: currentUser.id,
+          date: new Date().toISOString().split('T')[0],
+          recurrence: 'NONE'
+        });
+
+        const confirmMsg = parsed.responseMessage || `Pronto! Lancei ${parsed.description} de R$ ${parsed.amount} na categoria ${parsed.category}.`;
+        setMessages(prev => [...prev, { role: 'model', text: confirmMsg }]);
+        speakMessage(confirmMsg.replace('✅', '').trim());
+
+      } else {
+        // Fall back to general assistant conversation
+        const context = `Você é o consultor de IA do Saldo A2, um aplicativo de controle financeiro para casais.
+        Você está ajudando ${currentUser.name}.
+        Aqui está o histórico recente de transações: ${JSON.stringify(transactions.slice(0, 15))}.
+        Discorra de forma breve, simpática e objetiva sobre a dúvida: ${userMessage}`;
+
+        const generalResponse = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: context,
+        });
+
+        const answerText = generalResponse.text || "Desculpe, não entendi.";
+        setMessages(prev => [...prev, { role: 'model', text: answerText }]);
+        speakMessage(answerText);
+      }
+
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'model', text: "Erro na conexão com IA." }]);
+      console.error(err);
+      setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar sua solicitação." }]);
     } finally {
       setLoading(false);
     }
@@ -516,7 +508,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
                   ))}
                 </div>
                 <p className="text-emerald-600 dark:text-emerald-400 font-bold text-lg">A2Bot Respondendo...</p>
-                <p className="text-slate-400 dark:text-slate-500 text-sm text-center">Ouça a confirmação do seu assistente de voz.</p>
+                <p className="text-slate-400 dark:text-slate-500 text-sm text-center font-medium italic">"{transcribedText}"</p>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-4">
@@ -526,11 +518,19 @@ const AIConsultant: React.FC<AIConsultantProps> = ({ transactions, accounts, cur
                   ))}
                 </div>
                 <p className="text-indigo-600 dark:text-indigo-400 font-bold text-lg animate-pulse">Ouvindo você...</p>
-                <p className="text-slate-400 dark:text-slate-500 text-sm text-center leading-relaxed">
-                  Fale seu comando agora...<br />
-                  Ex: <span className="font-semibold text-indigo-500">"Gastei 15 reais com almoço"</span> ou<br />
-                  <span className="font-semibold text-indigo-500">"Recebi R$ 2500 de salário"</span>
-                </p>
+                
+                {transcribedText ? (
+                  <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40 p-4 rounded-2xl max-w-md text-center">
+                    <p className="text-indigo-950 dark:text-indigo-200 font-semibold text-base italic">"{transcribedText}"</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">Aguardando comando completo ou faça silêncio para processar...</p>
+                  </div>
+                ) : (
+                  <p className="text-slate-400 dark:text-slate-500 text-sm text-center leading-relaxed">
+                    Fale seu comando agora...<br />
+                    Ex: <span className="font-semibold text-indigo-500">"Gastei 15 reais com almoço"</span> ou<br />
+                    <span className="font-semibold text-indigo-500">"Recebi R$ 2500 de salário"</span>
+                  </p>
+                )}
               </div>
             )}
           </div>
