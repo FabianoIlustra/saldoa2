@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users, ArrowUpCircle, ShieldCheck, Sparkles } from 'lucide-react';
+import { LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users, ArrowUpCircle, ShieldCheck, Sparkles, Bell } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TransactionList from './components/TransactionList';
 import TransactionForm from './components/TransactionForm';
@@ -18,6 +18,8 @@ import TransactionValidation from './components/TransactionValidation';
 import InstallmentsView from './components/InstallmentsView';
 import AdminPanel from './components/AdminPanel';
 import SubscriptionModal from './components/SubscriptionModal';
+import InviteFamilyModal from './components/InviteFamilyModal';
+import RemindersModal from './components/RemindersModal';
 import { Transaction } from './types';
 import { addMonths, format, parseISO } from 'date-fns';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -73,12 +75,17 @@ const AppContent: React.FC = () => {
   const [isCoupleMode, setIsCoupleMode] = useState<boolean>(() => localStorage.getItem('finan_ai_couple_mode') === 'true');
   const [toast, setToast] = useState<{message: string, type: 'success' | 'info'} | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [settingsInitialSection, setSettingsInitialSection] = useState<string | undefined>(undefined);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [shouldAutoStartVoice, setShouldAutoStartVoice] = useState(false);
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isRemindersOpen, setIsRemindersOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [lastNotificationCount, setLastNotificationCount] = useState(-1);
 
   const showToast = (message: string, type: 'success' | 'info' = 'success') => {
     setToast({ message, type });
@@ -90,6 +97,12 @@ const AppContent: React.FC = () => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('finan_ai_couple_mode', String(isCoupleMode));
   }, [theme, isCoupleMode]);
+
+  useEffect(() => {
+    if (activeTab !== 'settings') {
+      setSettingsInitialSection(undefined);
+    }
+  }, [activeTab]);
 
   // Calculate Account Balances dynamically
   const accounts = useMemo(() => {
@@ -110,6 +123,53 @@ const AppContent: React.FC = () => {
       };
     });
   }, [rawAccounts, transactions]);
+
+  // Tomorrow's Reminders calculation
+  const tomorrowReminders = useMemo(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = format(tomorrow, 'yyyy-MM-dd');
+    const tomorrowDay = tomorrow.getDate();
+
+    const list: { id: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; description: string; amount: number; isRecurring: boolean; category: string }[] = [];
+
+    // 1. Recurring Transactions due tomorrow
+    recurringTransactions.forEach(rt => {
+      if (rt.active && rt.dayOfMonth === tomorrowDay) {
+        list.push({
+          id: `rec-${rt.id}`,
+          type: rt.type,
+          description: rt.description,
+          amount: rt.amount,
+          isRecurring: true,
+          category: rt.category
+        });
+      }
+    });
+
+    // 2. Installment templates & scheduled payments due tomorrow
+    transactions.forEach(t => {
+      if (t.date === tomorrowStr) {
+        list.push({
+          id: `trans-${t.id}`,
+          type: t.type,
+          description: t.isTemplate ? `${t.description} (${t.installmentNumber}/${t.totalInstallments})` : t.description,
+          amount: t.amount,
+          isRecurring: false,
+          category: t.category
+        });
+      }
+    });
+
+    return list;
+  }, [recurringTransactions, transactions]);
+
+  useEffect(() => {
+    if (tomorrowReminders.length !== lastNotificationCount) {
+      setUnreadCount(tomorrowReminders.length);
+      setLastNotificationCount(tomorrowReminders.length);
+    }
+  }, [tomorrowReminders, lastNotificationCount]);
 
   // Check for recurring transactions - REMOVED AUTO-GENERATION
   // Now handled by TransactionValidation component manually
@@ -173,9 +233,26 @@ const AppContent: React.FC = () => {
               </div>
               <span className="font-extrabold text-xl tracking-tighter block leading-none">Saldo A2</span>
             </div>
-            <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
-              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-            </button>
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => {
+                  setUnreadCount(0);
+                  setIsRemindersOpen(true);
+                }} 
+                className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all relative"
+                title="Lembretes de amanhã"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-pulse">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" title="Mudar cor da tela">
+                {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
 
           <nav className="space-y-2">
@@ -183,7 +260,7 @@ const AppContent: React.FC = () => {
               const menuItems = [
                 { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
                 { id: 'transactions', icon: History, label: 'Meu Extrato' },
-                { id: 'cashflow', icon: TrendingUp, label: 'Fluxo de Caixa' },
+                { id: 'cashflow', icon: TrendingUp, label: 'Resumo' },
                 { id: 'validation', icon: CalendarCheck, label: 'Recorrentes' },
                 { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
                 { id: 'visuals', icon: CreditCard, label: 'Gráficos' },
@@ -214,10 +291,26 @@ const AppContent: React.FC = () => {
         </div>
         
         <div className="p-6 border-t border-slate-50 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/50">
-          <button onClick={() => setActiveTab('settings')} className="w-full mb-4 flex items-center justify-center gap-2 py-2.5 rounded-2xl font-bold transition-all border bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-500 hover:text-indigo-600 text-sm">
-            <Users className="w-4 h-4" />
-            Gerenciar Usuários
-          </button>
+          <div className="mb-4 bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/30 p-4 rounded-2xl flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-[9px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">Plano Atual</p>
+                <p className="text-sm font-black text-indigo-900 dark:text-indigo-200 uppercase">
+                  {currentUserProfile?.tier === 'premium' ? '👑 Premium' :
+                   currentUserProfile?.tier === 'medio' ? '⭐ Médio' :
+                   currentUserProfile?.tier === 'basico' ? '✨ Básico' : '🆓 Grátis'}
+                </p>
+              </div>
+              {currentUserProfile?.tier !== 'premium' && (
+                <button 
+                  onClick={() => setIsSubscriptionOpen(true)}
+                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm transition-all animate-pulse"
+                >
+                  Upgrade
+                </button>
+              )}
+            </div>
+          </div>
 
           <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl flex items-center gap-3 border border-slate-100 dark:border-slate-700">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black" style={{ backgroundColor: displayUser.avatarColor }}>
@@ -237,8 +330,8 @@ const AppContent: React.FC = () => {
       </aside>
 
       <main className="flex-1 p-4 md:p-12 max-w-[1400px] mx-auto w-full pb-24 md:pb-12 overflow-x-hidden">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 md:mb-12 print:hidden">
-          <div className="flex items-center justify-between md:block">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-12 print:hidden">
+          <div className="flex items-center justify-between md:block w-full">
             <div>
               <div className="flex items-center gap-2 md:hidden mb-2">
                 <div className="w-6 h-6 bg-indigo-600 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden">
@@ -253,7 +346,7 @@ const AppContent: React.FC = () => {
               <h1 className="text-3xl md:text-4xl font-black tracking-tight">
               {activeTab === 'dashboard' ? 'Lançamentos' : 
                activeTab === 'transactions' ? 'Meu Extrato' :
-               activeTab === 'cashflow' ? 'Fluxo de Caixa' :
+               activeTab === 'cashflow' ? 'Resumo' :
                activeTab === 'validation' ? 'Recorrentes' :
                activeTab === 'parcelados' ? 'Parcelamentos' :
                activeTab === 'visuals' ? 'Gráficos' :
@@ -261,31 +354,35 @@ const AppContent: React.FC = () => {
                activeTab === 'settings' ? 'Configurações' :
                activeTab === 'admin' ? 'Painel Admin' :
                activeTab === 'ai' ? 'Consultoria IA' : 'Financeiro'}
-            </h1>
-            <p className="text-slate-400 font-medium">Gerencie suas contas e transações em um só lugar.</p>
-          </div>
-          </div>
+             </h1>
+             <p className="hidden md:block text-slate-400 font-medium">Gerencie suas contas e transações em um só lugar.</p>
+            </div>
 
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setIsCoupleMode(!isCoupleMode)} 
-              className={`flex items-center gap-2 px-4 md:px-6 py-2.5 md:py-3 rounded-2xl font-bold transition-all border text-[10px] md:text-sm shadow-sm ${
-                isCoupleMode 
-                ? 'bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-900/20 dark:border-rose-900/30' 
-                : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'
-              }`}
-            >
-              <Heart className={`w-3 h-3 md:w-4 md:h-4 ${isCoupleMode ? 'fill-rose-500' : ''}`} />
-              <span className="hidden xs:inline">{isCoupleMode ? 'Modo Família Ativo' : 'Ativar Família'}</span>
-              <span className="xs:hidden">{isCoupleMode ? 'Família' : 'Pessoal'}</span>
-            </button>
-            
-            <button 
-              onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
-              className="md:hidden p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 transition-all"
-            >
-              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-            </button>
+            {/* Botão de mudar cor da tela (tema) no cantinho da tela em cima no modo mobile */}
+            <div className="md:hidden flex items-center gap-2">
+              <button 
+                onClick={() => {
+                  setUnreadCount(0);
+                  setIsRemindersOpen(true);
+                }} 
+                className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 transition-all active:scale-95 shadow-sm relative"
+                title="Lembretes de amanhã"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-pulse shadow-sm">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              <button 
+                onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
+                className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 transition-all active:scale-95 shadow-sm"
+                title="Mudar cor da tela"
+              >
+                {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -299,6 +396,11 @@ const AppContent: React.FC = () => {
             onManageAccounts={() => setActiveTab('settings')}
             onViewVisuals={() => setActiveTab('visuals')}
             spendingCeiling={currentUserProfile?.spendingCeiling}
+            currentUserProfile={currentUserProfile}
+            onUpgradeClick={() => setIsSubscriptionOpen(true)}
+            onInviteClick={() => setIsInviteModalOpen(true)}
+            recurringTransactions={recurringTransactions}
+            allRawTransactions={transactions}
           />
         )}
 
@@ -329,6 +431,8 @@ const AppContent: React.FC = () => {
             }}
             onUpdateRecurring={updateRecurring}
             onDeleteRecurring={deleteRecurring}
+            onAddRecurring={addRecurring}
+            currentUserProfile={currentUserProfile}
             currentDate={new Date()} // Could be state for month navigation
             categories={categories}
             accounts={accounts}
@@ -475,6 +579,7 @@ const AppContent: React.FC = () => {
             importRules={importRules}
             onDeleteImportRule={deleteImportRule}
             onClearImportRules={clearImportRules}
+            initialOpenSection={settingsInitialSection}
           />
         )}
 
@@ -490,9 +595,9 @@ const AppContent: React.FC = () => {
             { id: 'dashboard', icon: LayoutDashboard, label: 'Lançamentos' },
             { id: 'transactions', icon: History, label: 'Extrato' },
             { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
+            { id: 'validation', icon: CalendarCheck, label: 'Recorrente' },
             { id: 'visuals', icon: TrendingUp, label: 'Gráficos' },
-            { id: 'cashflow', icon: ArrowUpCircle, label: 'Fluxo' },
-            { id: 'validation', icon: CalendarCheck, label: 'Contas' },
+            { id: 'cashflow', icon: ArrowUpCircle, label: 'Resumo' },
             { id: 'ai', icon: MessageSquareCode, label: 'IA' },
             { id: 'settings', icon: Settings, label: 'Ajustes' },
           ];
@@ -623,6 +728,37 @@ const AppContent: React.FC = () => {
           onClose={() => setIsSubscriptionOpen(false)} 
           currentUser={currentUserProfile}
           onTierUpdated={fetchData}
+        />
+      )}
+
+      {isInviteModalOpen && (
+        <InviteFamilyModal
+          isOpen={isInviteModalOpen}
+          onClose={() => setIsInviteModalOpen(false)}
+          currentUserProfile={currentUserProfile}
+          users={users}
+          onLinkUser={(code) => {
+            linkUser(code);
+            showToast('Família conectada com sucesso!');
+          }}
+          onUnlinkUser={(id) => {
+            unlinkUser(id);
+            showToast('Membro removido da família.');
+          }}
+          isCoupleMode={isCoupleMode}
+          onToggleCoupleMode={setIsCoupleMode}
+          onUpdateProfile={(updates) => {
+            updateUserProfile(updates);
+            showToast('Nome de exibição atualizado!');
+          }}
+        />
+      )}
+
+      {isRemindersOpen && (
+        <RemindersModal 
+          isOpen={isRemindersOpen}
+          onClose={() => setIsRemindersOpen(false)}
+          reminders={tomorrowReminders}
         />
       )}
     </div>
