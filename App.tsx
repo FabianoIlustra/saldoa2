@@ -400,7 +400,7 @@ const AppContent: React.FC = () => {
             onUpgradeClick={() => setIsSubscriptionOpen(true)}
             onInviteClick={() => setIsInviteModalOpen(true)}
             recurringTransactions={recurringTransactions}
-            allRawTransactions={transactions}
+            allRawTransactions={filteredRawTransactions}
           />
         )}
 
