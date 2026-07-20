@@ -175,7 +175,7 @@ const AppContent: React.FC = () => {
   // Now handled by TransactionValidation component manually
 
   const handleVoiceAction = () => {
-    setShouldAutoStartVoice(true);
+    setShouldAutoStartVoice(false);
     setActiveTab('ai');
   };
 
@@ -519,6 +519,7 @@ const AppContent: React.FC = () => {
           <AIConsultant 
             transactions={filteredTransactions} 
             accounts={accounts}
+            categories={categories}
             currentUser={displayUser} 
             onAddTransaction={addTransaction}
             autoStartVoice={shouldAutoStartVoice}
