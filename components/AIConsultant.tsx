@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send, Loader2, BrainCircuit, Mic, MicOff, Volume2, VolumeX, Trash2, AlertCircle } from 'lucide-react';
 import { Transaction, ChatMessage, User, Account, Category } from '../types';
-import { GoogleGenAI } from "@google/genai";
 
 interface AIConsultantProps {
   transactions: Transaction[];
@@ -229,50 +228,18 @@ const AIConsultant: React.FC<AIConsultantProps> = ({
     stopVoiceStreamOnly();
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("Chave de API do Gemini não configurada.");
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const prompt = `Você é o interpretador de comandos por voz do Saldo A2, um app financeiro para casais.
-Analise a frase falada pelo usuário e extraia os detalhes da transação ou transferência.
-
-Contas bancárias cadastradas pelo usuário:
-${JSON.stringify(accounts.map(a => ({ id: a.id, name: a.name })))}
-
-Categorias cadastradas pelo usuário (use as existentes se houver proximidade semântica):
-${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name, type: c.type })))}
-
-Frase dita pelo usuário: "${text}"
-
-Responda ESTRITAMENTE em formato JSON com o seguinte schema (sem tags markdown):
-{
-  "isTransaction": boolean, // true se descreveu um ganho/despesa ou transferência com valor monetário e descrição identificável.
-  "description": string, // Descrição simples e direta capitalizada (ex: "Almoço", "Uber", "Salário", "Supermercado").
-  "amount": number, // Valor numérico positivo.
-  "type": "INCOME" | "EXPENSE" | "TRANSFER", // INCOME para receitas/ganhos, EXPENSE para despesas/gastos, TRANSFER para transferências.
-  "category": string, // Nome de uma categoria existente ou uma sugerida adequada.
-  "accountId": string, // ID da conta correspondente se mencionada. Caso contrário, deixe em branco.
-  "toAccountId": string, // ID da conta destino se for TRANSFER.
-  "responseMessage": string // Mensagem em português amigável e direta confirmando o registro (ex: "Tudo pronto! Registrei sua despesa de 25 reais em Alimentação.") ou dizendo que não compreendeu o valor/descrição.
-}`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        }
+      const response = await fetch('/api/voice-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, accounts, categories })
       });
 
-      let cleanText = response.text?.trim() || '{}';
-      if (cleanText.startsWith('```')) {
-        cleanText = cleanText.replace(/^```(?:json)?\s*/i, '');
-        cleanText = cleanText.replace(/\s*```$/, '');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Erro na comunicação com o servidor.");
       }
-      const parsedJson = JSON.parse(cleanText.trim());
+
+      const parsedJson = await response.json();
 
       if (parsedJson.isTransaction && parsedJson.amount > 0) {
         const targetAccountId = parsedJson.accountId || accounts[0]?.id || 'default';
@@ -322,12 +289,13 @@ Responda ESTRITAMENTE em formato JSON com o seguinte schema (sem tags markdown):
 
     } catch (err: any) {
       console.error("Erro no processamento da voz por Gemini:", err);
+      const errMsg = err.message || "Ocorreu um erro ao processar seu comando de voz. Por favor, tente novamente.";
       setMessages(prev => [
         ...prev,
         { role: 'user', text: `🎙️ ${text}` },
-        { role: 'model', text: "Ocorreu um erro ao processar seu comando de voz. Por favor, tente novamente." }
+        { role: 'model', text: `Erro: ${errMsg}` }
       ]);
-      setVoiceError("Erro ao processar comando de voz.");
+      setVoiceError(errMsg);
       setIsVoiceActive(false);
       setVoiceState('idle');
     }
@@ -360,48 +328,26 @@ Responda ESTRITAMENTE em formato JSON com o seguinte schema (sem tags markdown):
     setLoading(true);
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        setMessages(prev => [...prev, { role: 'model', text: "Chave de API não configurada no ambiente." }]);
-        setLoading(false);
-        return;
-      }
-      const ai = new GoogleGenAI({ apiKey });
-
-      // First check if user message is a text-based transaction command!
-      const commandPrompt = `Você é o interpretador do Saldo A2. Verifique se o usuário deseja realizar um lançamento/registro financeiro ou transferência na frase: "${userMessage}".
-Responda APENAS em JSON:
-{
-  "isTransaction": boolean,
-  "description": string,
-  "amount": number,
-  "type": "INCOME" | "EXPENSE" | "TRANSFER",
-  "category": string,
-  "accountId": string,
-  "toAccountId": string,
-  "responseMessage": string
-}
-Se for apenas conversa, dúvidas ou perguntas, responda "isTransaction": false.
-
-Contas cadastradas: ${JSON.stringify(accounts.map(a => ({ id: a.id, name: a.name })))}
-Categorias: ${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name, type: c.type })))}`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: commandPrompt,
-        config: {
-          responseMimeType: "application/json"
-        }
+      const response = await fetch('/api/chat-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userMessage,
+          accounts,
+          categories,
+          currentUser,
+          transactions
+        })
       });
 
-      let cleanText = response.text?.trim() || '{}';
-      if (cleanText.startsWith('```')) {
-        cleanText = cleanText.replace(/^```(?:json)?\s*/i, '');
-        cleanText = cleanText.replace(/\s*```$/, '');
+      if (!response.ok) {
+        throw new Error("Erro na comunicação com o servidor.");
       }
-      const parsed = JSON.parse(cleanText.trim());
 
-      if (parsed.isTransaction && parsed.amount > 0) {
+      const result = await response.json();
+
+      if (result.isTransaction && result.data) {
+        const parsed = result.data;
         const targetAccountId = parsed.accountId || accounts[0]?.id || 'default';
 
         onAddTransaction({
@@ -421,18 +367,7 @@ Categorias: ${JSON.stringify(categories.map(c => ({ id: c.id, name: c.name, type
         speakMessage(confirmMsg.replace('✅', '').trim());
 
       } else {
-        // Fall back to general assistant conversation
-        const context = `Você é o consultor de IA do Saldo A2, um aplicativo de controle financeiro para casais.
-        Você está ajudando ${currentUser.name}.
-        Aqui está o histórico recente de transações: ${JSON.stringify(transactions.slice(0, 15))}.
-        Discorra de forma breve, simpática e objetiva sobre a dúvida: ${userMessage}`;
-
-        const generalResponse = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: context,
-        });
-
-        const answerText = generalResponse.text || "Desculpe, não entendi.";
+        const answerText = result.answer || "Desculpe, não entendi.";
         setMessages(prev => [...prev, { role: 'model', text: answerText }]);
         speakMessage(answerText);
       }
