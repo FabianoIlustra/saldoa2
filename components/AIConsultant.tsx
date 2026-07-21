@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send, Loader2, BrainCircuit, Mic, MicOff, Volume2, VolumeX, Trash2, AlertCircle } from 'lucide-react';
 import { Transaction, ChatMessage, User, Account, Category } from '../types';
+import { processVoiceCommand, processChatCommand } from '../services/geminiService';
 
 interface AIConsultantProps {
   transactions: Transaction[];
@@ -228,18 +229,7 @@ const AIConsultant: React.FC<AIConsultantProps> = ({
     stopVoiceStreamOnly();
 
     try {
-      const response = await fetch('/api/voice-command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, accounts, categories })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Erro na comunicação com o servidor.");
-      }
-
-      const parsedJson = await response.json();
+      const parsedJson = await processVoiceCommand(text, accounts, categories);
 
       if (parsedJson.isTransaction && parsedJson.amount > 0) {
         const targetAccountId = parsedJson.accountId || accounts[0]?.id || 'default';
@@ -328,23 +318,13 @@ const AIConsultant: React.FC<AIConsultantProps> = ({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/chat-command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userMessage,
-          accounts,
-          categories,
-          currentUser,
-          transactions
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Erro na comunicação com o servidor.");
-      }
-
-      const result = await response.json();
+      const result = await processChatCommand(
+        userMessage,
+        accounts,
+        categories,
+        currentUser,
+        transactions
+      );
 
       if (result.isTransaction && result.data) {
         const parsed = result.data;
