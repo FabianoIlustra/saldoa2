@@ -1,5 +1,29 @@
 import { GoogleGenAI } from "@google/genai";
 import { Transaction, Category, Account, User } from "../types";
+import {
+  parseStatementLocal,
+  processVoiceCommandLocal,
+  processChatCommandLocal,
+  getFinancialInsightsLocal
+} from "./localParserService";
+
+/**
+ * Checks if the system should run in offline local mode (Sem IA).
+ * It will run in local mode by default, or if no API key is configured,
+ * or if VITE_GEMINI_API_KEY is still the placeholder.
+ */
+export const isLocalModeEnabled = (): boolean => {
+  const localSetting = localStorage.getItem("finan_ai_local_only");
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  
+  // If explicitly disabled and a valid key exists, use Gemini AI
+  if (localSetting === "false" && apiKey && apiKey.trim() !== "" && !apiKey.includes("sua-chave") && !apiKey.startsWith("AQ.Ab8RN")) {
+    return false;
+  }
+  
+  // Default to true (Local mode is extremely safe, free, fast, and robust)
+  return true;
+};
 
 // Helper to check if we should force client-side (e.g. on static hosting like pages.dev)
 const isStaticHosting = (): boolean => {
@@ -75,7 +99,15 @@ const executeAI = async <T>(
   }
 };
 
-export const getFinancialInsights = async (transactions: Transaction[]): Promise<any> => {
+export const getFinancialInsights = async (
+  transactions: Transaction[],
+  categories: Category[] = [],
+  currentUser?: User | null
+): Promise<any> => {
+  if (isLocalModeEnabled()) {
+    return getFinancialInsightsLocal(transactions, categories, currentUser);
+  }
+
   return executeAI(
     '/api/insights',
     { transactions },
@@ -103,6 +135,11 @@ export const getFinancialInsights = async (transactions: Transaction[]): Promise
 };
 
 export const parseStatement = async (rawText: string, categories: Category[]): Promise<Partial<Transaction>[]> => {
+  if (isLocalModeEnabled()) {
+    const importRules = JSON.parse(localStorage.getItem('finan_ai_import_rules') || '{}');
+    return parseStatementLocal(rawText, categories, importRules);
+  }
+
   return executeAI(
     '/api/parse-statement',
     { rawText, categories },
@@ -144,6 +181,12 @@ export const parseStatement = async (rawText: string, categories: Category[]): P
 };
 
 export const analyzeReceiptImage = async (base64Image: string, categories: Category[]): Promise<Partial<Transaction>> => {
+  if (isLocalModeEnabled()) {
+    throw new Error(
+      "O escaneador de recibos requer IA (Gemini) para leitura visual de imagem. Por favor, ative o 'Modo IA' em Ajustes ou insira os dados manualmente."
+    );
+  }
+
   return executeAI(
     '/api/analyze-receipt',
     { base64Image, categories },
@@ -186,6 +229,12 @@ export const analyzeReceiptImage = async (base64Image: string, categories: Categ
 };
 
 export const parseStatementFile = async (base64Data: string, mimeType: string, categories: Category[]): Promise<Partial<Transaction>[]> => {
+  if (isLocalModeEnabled()) {
+    throw new Error(
+      "O leitor de arquivos (PDF/Imagem) requer IA (Gemini) para processar documentos. Por favor, copie e cole o extrato como texto para processar localmente ou ative o 'Modo IA' em Ajustes."
+    );
+  }
+
   return executeAI(
     '/api/parse-file',
     { base64Data, mimeType, categories },
@@ -241,51 +290,66 @@ export const parseStatementFile = async (base64Data: string, mimeType: string, c
   );
 };
 
-export const processVoiceCommand = async (spokenText: string, accounts: Account[], categories: Category[]): Promise<any> => {
-  return executeAI(
-    '/api/voice-command',
-    { text: spokenText, accounts, categories },
-    async () => {
-      const ai = getClientAI();
-      const prompt = `Você é o interpretador de comandos por voz do Saldo A2, um app financeiro para casais.
-Analise a frase falada pelo usuário e extraia os detalhes da transação ou transferência.
+export const processVoiceCommand = async (
+  spokenText: string, 
+  accounts: Account[], 
+  categories: Category[],
+  currentUser?: User,
+  transactions: Transaction[] = []
+): Promise<any> => {
+  if (isLocalModeEnabled()) {
+    return processVoiceCommandLocal(spokenText, accounts, categories, currentUser, transactions);
+  }
 
-Contas bancárias cadastradas pelo usuário:
-${JSON.stringify(accounts.map((a: any) => ({ id: a.id, name: a.name })))}
+  try {
+    return await executeAI(
+      '/api/voice-command',
+      { text: spokenText, accounts, categories },
+      async () => {
+        const ai = getClientAI();
+        const prompt = `Você é o interpretador de comandos por voz do Saldo A2, um app financeiro para casais.
+          Analise a frase falada pelo usuário e extraia os detalhes da transação ou transferência.
 
-Categorias cadastradas pelo usuário (use as existentes se houver proximidade semântica):
-${JSON.stringify(categories.map((c: any) => ({ id: c.id, name: c.name, type: c.type })))}
+          Contas bancárias cadastradas pelo usuário:
+          ${JSON.stringify(accounts.map((a: any) => ({ id: a.id, name: a.name })))}
 
-Frase dita pelo usuário: "${spokenText}"
+          Categorias cadastradas pelo usuário (use as existentes se houver proximidade semântica):
+          ${JSON.stringify(categories.map((c: any) => ({ id: c.id, name: c.name, type: c.type })))}
 
-Responda ESTRITAMENTE em formato JSON com o seguinte schema (sem tags markdown):
-{
-  "isTransaction": boolean, // true se descreveu um ganho/despesa ou transferência com valor monetário e descrição identificável.
-  "description": string, // Descrição simples e direta capitalizada (ex: "Almoço", "Uber", "Salário", "Supermercado").
-  "amount": number, // Valor numérico positivo.
-  "type": "INCOME" | "EXPENSE" | "TRANSFER", // INCOME para receitas/ganhos, EXPENSE para despesas/gastos, TRANSFER para transferências.
-  "category": string, // Nome de uma categoria existente ou uma sugerida adequada.
-  "accountId": string, // ID da conta correspondente se mencionada. Caso contrário, deixe em branco.
-  "toAccountId": string, // ID da conta destino se for TRANSFER.
-  "responseMessage": string // Mensagem em português amigável e direta confirmando o registro (ex: "Tudo pronto! Registrei sua despesa de 25 reais em Alimentação.") ou dizendo que não compreendeu o valor/descrição.
-}`;
+          Frase dita pelo usuário: "${spokenText}"
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
+          Responda ESTRITAMENTE em formato JSON com o seguinte schema (sem tags markdown):
+          {
+            "isTransaction": boolean, // true se descreveu um ganho/despesa ou transferência com valor monetário e descrição identificável.
+            "description": string, // Descrição simples e direta capitalizada (ex: "Almoço", "Uber", "Salário", "Supermercado").
+            "amount": number, // Valor numérico positivo.
+            "type": "INCOME" | "EXPENSE" | "TRANSFER", // INCOME para receitas/ganhos, EXPENSE para despesas/gastos, TRANSFER para transferências.
+            "category": string, // Nome de uma categoria existente ou uma sugerida adequada.
+            "accountId": string, // ID da conta correspondente se mencionada. Caso contrário, deixe em branco.
+            "toAccountId": string, // ID da conta destino se for TRANSFER.
+            "responseMessage": string // Mensagem em português amigável e direta confirmando o registro (ex: "Tudo pronto! Registrei sua despesa de 25 reais em Alimentação.") ou dizendo que não compreendeu o valor/descrição.
+          }`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+          }
+        });
+
+        let textResult = response.text?.trim() || '{}';
+        if (textResult.startsWith('```')) {
+          textResult = textResult.replace(/^```(?:json)?\s*/i, '');
+          textResult = textResult.replace(/\s*```$/, '');
         }
-      });
-
-      let textResult = response.text?.trim() || '{}';
-      if (textResult.startsWith('```')) {
-        textResult = textResult.replace(/^```(?:json)?\s*/i, '');
-        textResult = textResult.replace(/\s*```$/, '');
+        return JSON.parse(textResult);
       }
-      return JSON.parse(textResult);
-    }
-  );
+    );
+  } catch (err) {
+    console.warn("AI voice command failed, falling back to local mode:", err);
+    return processVoiceCommandLocal(spokenText, accounts, categories, currentUser, transactions);
+  }
 };
 
 export const processChatCommand = async (
@@ -295,62 +359,71 @@ export const processChatCommand = async (
   currentUser: User,
   transactions: Transaction[]
 ): Promise<any> => {
-  return executeAI(
-    '/api/chat-command',
-    { userMessage, accounts, categories, currentUser, transactions },
-    async () => {
-      const ai = getClientAI();
-      const commandPrompt = `Você é o interpretador do Saldo A2. Verifique se o usuário deseja realizar um lançamento/registro financeiro ou transferência na frase: "${userMessage}".
-Responda APENAS em JSON:
-{
-  "isTransaction": boolean,
-  "description": string,
-  "amount": number,
-  "type": "INCOME" | "EXPENSE" | "TRANSFER",
-  "category": string,
-  "accountId": string,
-  "toAccountId": string,
-  "responseMessage": string
-}
-Se for apenas conversa, dúvidas ou perguntas, responda "isTransaction": false.
+  if (isLocalModeEnabled()) {
+    return processChatCommandLocal(userMessage, accounts, categories, currentUser, transactions);
+  }
 
-Contas cadastradas: ${JSON.stringify(accounts.map((a: any) => ({ id: a.id, name: a.name })))}
-Categorias: ${JSON.stringify(categories.map((c: any) => ({ id: c.id, name: c.name, type: c.type })))}`;
+  try {
+    return await executeAI(
+      '/api/chat-command',
+      { userMessage, accounts, categories, currentUser, transactions },
+      async () => {
+        const ai = getClientAI();
+        const commandPrompt = `Você é o interpretador do Saldo A2. Verifique se o usuário deseja realizar um lançamento/registro financeiro ou transferência na frase: "${userMessage}".
+          Responda APENAS em JSON:
+          {
+            "isTransaction": boolean,
+            "description": string,
+            "amount": number,
+            "type": "INCOME" | "EXPENSE" | "TRANSFER",
+            "category": string,
+            "accountId": string,
+            "toAccountId": string,
+            "responseMessage": string
+          }
+          Se for apenas conversa, dúvidas ou perguntas, responda "isTransaction": false.
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
-        contents: commandPrompt,
-        config: {
-          responseMimeType: 'application/json'
-        }
-      });
+          Contas cadastradas: ${JSON.stringify(accounts.map((a: any) => ({ id: a.id, name: a.name })))}
+          Categorias: ${JSON.stringify(categories.map((c: any) => ({ id: c.id, name: c.name, type: c.type })))}`;
 
-      let textResult = response.text?.trim() || '{}';
-      if (textResult.startsWith('```')) {
-        textResult = textResult.replace(/^```(?:json)?\s*/i, '');
-        textResult = textResult.replace(/\s*```$/, '');
-      }
-
-      const parsed = JSON.parse(textResult);
-
-      if (parsed.isTransaction && parsed.amount > 0) {
-        return { isTransaction: true, data: parsed };
-      } else {
-        const context = `Você é o consultor de IA do Saldo A2, um aplicativo de controle financeiro para casais.
-        Você está ajudando ${currentUser?.name || 'usuário'}.
-        Aqui está o histórico recente de transações: ${JSON.stringify((transactions || []).slice(0, 15))}.
-        Discorra de forma breve, simpática e objetiva sobre a dúvida: ${userMessage}`;
-
-        const generalResponse = await ai.models.generateContent({
+        const response = await ai.models.generateContent({
           model: "gemini-3.1-flash-lite",
-          contents: context,
+          contents: commandPrompt,
+          config: {
+            responseMimeType: 'application/json'
+          }
         });
 
-        return {
-          isTransaction: false,
-          answer: generalResponse.text || 'Desculpe, não entendi.'
-        };
+        let textResult = response.text?.trim() || '{}';
+        if (textResult.startsWith('```')) {
+          textResult = textResult.replace(/^```(?:json)?\s*/i, '');
+          textResult = textResult.replace(/\s*```$/, '');
+        }
+
+        const parsed = JSON.parse(textResult);
+
+        if (parsed.isTransaction && parsed.amount > 0) {
+          return { isTransaction: true, data: parsed };
+        } else {
+          const context = `Você é o consultor de IA do Saldo A2, um aplicativo de controle financeiro para casais.
+            Você está ajudando ${currentUser?.name || 'usuário'}.
+            Aqui está o histórico recente de transações: ${JSON.stringify((transactions || []).slice(0, 15))}.
+            Discorra de forma breve, simpática e objetiva sobre a dúvida: ${userMessage}`;
+
+          const generalResponse = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: context,
+          });
+
+          return {
+            isTransaction: false,
+            answer: generalResponse.text || 'Desculpe, não entendi.'
+          };
+        }
       }
-    }
-  );
+    );
+  } catch (err) {
+    console.warn("AI chat command failed, falling back to local mode:", err);
+    return processChatCommandLocal(userMessage, accounts, categories, currentUser, transactions);
+  }
 };
