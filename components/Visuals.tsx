@@ -358,37 +358,37 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       {/* Unified Summary Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Card 1: Recent Spending */}
-        <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 p-5 md:p-6 rounded-2xl text-white shadow-xl shadow-indigo-100 dark:shadow-none relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-5 opacity-10 group-hover:scale-110 transition-transform">
-            <Zap className="w-24 h-24" />
+        <div className="bg-purple-100/90 dark:bg-purple-900/40 p-5 md:p-6 rounded-3xl border border-purple-200 dark:border-purple-800/60 text-slate-800 dark:text-slate-100 shadow-xs relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-5 opacity-5 dark:opacity-10 group-hover:scale-110 transition-transform">
+            <Zap className="w-24 h-24 text-purple-600 dark:text-purple-400" />
           </div>
           
           <div className="flex justify-between items-start mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-xl">
-                <History className="w-5 h-5 text-white" />
+              <div className="p-2 bg-white/80 dark:bg-purple-900/50 border border-purple-200/80 dark:border-purple-700/60 rounded-xl text-purple-800 dark:text-purple-200 shadow-2xs">
+                <History className="w-5 h-5" />
               </div>
-              <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Resumo de Gastos</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-purple-900 dark:text-purple-200">Resumo de Gastos</span>
             </div>
-            <button onClick={() => setHelpId('spending-summary')} className="p-1 hover:bg-white/20 rounded-full transition-colors text-white/60 hover:text-white">
+            <button onClick={() => setHelpId('spending-summary')} className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-purple-600">
               <HelpCircle className="w-5 h-5" />
             </button>
           </div>
 
           <div className="space-y-6 relative z-10">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Gasto de Hoje</p>
-              <p className="text-3xl font-black">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(advancedStats.daySpent)}</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1">Gasto de Hoje</p>
+              <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight truncate">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(advancedStats.daySpent)}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-6 pt-6 border-t border-white/10">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Desta Semana</p>
-                <p className="text-xl font-black">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(advancedStats.weekSpent)}</p>
+            <div className="grid grid-cols-2 gap-4 sm:gap-6 pt-6 border-t border-purple-200/80 dark:border-slate-800 min-w-0">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1 truncate">Desta Semana</p>
+                <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight truncate">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(advancedStats.weekSpent)}</p>
               </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Deste Mês</p>
-                <p className="text-xl font-black">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(advancedStats.monthSpent)}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1 truncate">Deste Mês</p>
+                <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight truncate">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(advancedStats.monthSpent)}</p>
               </div>
             </div>
           </div>

@@ -5,6 +5,20 @@ import { Category, Account, RecurringTransaction, TransactionType, Transaction, 
 import { Plus, Trash2, Tag, Download, Upload, ShieldCheck, CreditCard, Wallet, Banknote, Pencil, X, AlertTriangle, Calendar, Repeat, Users, Copy, LogOut, CheckCircle, Brain, Heart, Moon, Sun, Target, ChevronDown, Lock, Sparkles } from 'lucide-react';
 import { getRandomColor } from '../constants';
 
+export const BANK_PRESETS = [
+  { name: 'Nubank', color: '#8A05BE', logoUrl: 'https://cdn.simpleicons.org/nubank/8A05BE' },
+  { name: 'Itaú', color: '#EC7000', logoUrl: 'https://cdn.simpleicons.org/itau/EC7000' },
+  { name: 'Bradesco', color: '#CC092F', logoUrl: 'https://cdn.simpleicons.org/bradesco/CC092F' },
+  { name: 'Santander', color: '#E30613', logoUrl: 'https://cdn.simpleicons.org/santander/E30613' },
+  { name: 'Banco do Brasil', color: '#003399', logoUrl: 'https://cdn.simpleicons.org/bancodobrasil/003399' },
+  { name: 'Caixa', color: '#005CA9', logoUrl: 'https://cdn.simpleicons.org/caixa/005CA9' },
+  { name: 'Inter', color: '#FF7A00', logoUrl: 'https://cdn.simpleicons.org/inter/FF7A00' },
+  { name: 'C6 Bank', color: '#242424', logoUrl: 'https://cdn.simpleicons.org/c6bank/242424' },
+  { name: 'XP', color: '#000000', logoUrl: 'https://cdn.simpleicons.org/xpinvestimentos/000000' },
+  { name: 'Mercado Pago', color: '#009EE3', logoUrl: 'https://cdn.simpleicons.org/mercadopago/009EE3' },
+  { name: 'PicPay', color: '#21C25E', logoUrl: 'https://cdn.simpleicons.org/picpay/21C25E' },
+];
+
 interface SettingsViewProps {
   categories: Category[];
   accounts: Account[];
@@ -118,11 +132,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [joinCode, setJoinCode] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState(currentUserProfile?.name || '');
+  const [localMode, setLocalMode] = useState(() => {
+    return localStorage.getItem('finan_ai_local_only') !== 'false';
+  });
   
   // Estados para nova conta
   const [accName, setAccName] = useState('');
   const [accType, setAccType] = useState<Account['type']>('Corrente');
   const [accBalance, setAccBalance] = useState('');
+  const [accLogoUrl, setAccLogoUrl] = useState('');
+  const [accColor, setAccColor] = useState('');
 
   // Estados para nova recorrência
   const [recDesc, setRecDesc] = useState('');
@@ -143,6 +162,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [editName, setEditName] = useState('');
   const [editType, setEditType] = useState<Account['type']>('Corrente');
   const [editCurrentBalance, setEditCurrentBalance] = useState('');
+  const [editLogoUrl, setEditLogoUrl] = useState('');
+  const [editColor, setEditColor] = useState('');
 
   const [categoryToEdit, setCategoryToEdit] = useState<Category | null>(null);
   const [editCatName, setEditCatName] = useState('');
@@ -170,10 +191,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       name: accName,
       type: accType,
       initialBalance: parseFloat(accBalance),
-      color: getRandomColor()
+      color: accColor || getRandomColor(),
+      logoUrl: accLogoUrl.trim() || undefined
     });
     setAccName('');
     setAccBalance('');
+    setAccLogoUrl('');
+    setAccColor('');
   };
 
   const handleAddRecurring = (e: React.FormEvent) => {
@@ -215,6 +239,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     setEditName(account.name);
     setEditType(account.type);
     setEditCurrentBalance(account.currentBalance.toString());
+    setEditLogoUrl(account.logoUrl || '');
+    setEditColor(account.color || '#6366f1');
   };
 
   const openEditCategoryModal = (cat: Category) => {
@@ -243,11 +269,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const saveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (accountToEdit && editName && editCurrentBalance) {
-      // Update name and type
+      // Update name, type, color, logoUrl
       onUpdateAccount({
         ...accountToEdit,
         name: editName,
-        type: editType
+        type: editType,
+        color: editColor || accountToEdit.color,
+        logoUrl: editLogoUrl.trim() || undefined
       });
       // Update balance separately
       onUpdateAccountBalance(accountToEdit.id, parseFloat(editCurrentBalance));
@@ -296,95 +324,46 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* Gestão de Contas Bancárias */}
+      {/* Plano & Assinatura */}
       <CollapsibleSection 
-        title="Minhas Contas Bancárias" 
-        icon={<CreditCard className="w-5 h-5" />}
+        title="Plano & Assinatura" 
+        icon={<Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />}
         defaultOpen={true}
       >
-        <form onSubmit={handleAddAccount} className="flex flex-col md:grid md:grid-cols-4 gap-3 mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
-          <div className="md:col-span-2">
-            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Nome do Banco/Conta</label>
-            <input 
-              type="text" 
-              placeholder="Ex: Nubank, Itaú, Carteira..." 
-              value={accName}
-              onChange={e => setAccName(e.target.value)}
-              className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs"
-            />
+        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <div className="text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider">Seu Plano Financeiro</div>
+            <h3 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+              Plano Ativo: <span className="text-indigo-600 dark:text-indigo-400 uppercase font-black">{currentUserProfile?.tier || 'gratis'}</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed">
+              {currentUserProfile?.tier === 'premium' ? 'Parabéns! Você tem acesso completo e ilimitado a todas as ferramentas, automações recorrentes, modo família e comando de voz.' : 
+               currentUserProfile?.tier === 'medio' ? 'Excelente! Seu plano Médio libera automações recorrentes, controle inteligente por voz e sincronização em tempo real de casal.' :
+               currentUserProfile?.tier === 'basico' ? 'Seu plano Básico libera controle por voz para lançar transações rapidamente com áudio.' :
+               'Você está utilizando o plano Grátis. Faça um upgrade para liberar lançamentos por voz, metas personalizadas extras, cadastro de contas recorrentes e conexão de casal!'}
+            </p>
           </div>
-          <div>
-            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Tipo</label>
-            <select 
-              value={accType}
-              onChange={e => setAccType(e.target.value as any)}
-              className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs"
-            >
-              <option>Corrente</option>
-              <option>Poupança</option>
-              <option>Investimento</option>
-              <option>Dinheiro</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Saldo Inicial (R$)</label>
-            <div className="flex gap-2">
-              <input 
-                type="number" 
-                step="0.01"
-                placeholder="0.00" 
-                value={accBalance}
-                onChange={e => setAccBalance(e.target.value)}
-                className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs min-w-0"
-              />
-              <button type="submit" className="bg-indigo-600 text-white p-2.5 rounded-lg hover:bg-indigo-700 transition-all shadow-sm shrink-0 flex items-center justify-center">
-                <Plus className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </form>
-
-        <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
-          {accounts.map(acc => (
-            <div key={acc.id} className="p-3 flex items-center justify-between group transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 gap-3">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0" style={{ backgroundColor: acc.color }}>
-                  <Banknote className="w-4.5 h-4.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-slate-800 dark:text-white truncate text-xs">{acc.name}</p>
-                  <span className="text-[9px] font-black uppercase text-slate-400">{acc.type}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 shrink-0">
-                <p className="font-black text-indigo-600 text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(acc.currentBalance)}</p>
-                <div className="flex gap-1">
-                  <button onClick={() => openEditModal(acc)} className="p-1 text-slate-400 hover:text-indigo-500 transition-colors" title="Editar">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => openDeleteModal(acc.id)} className="p-1 text-slate-400 hover:text-rose-500 transition-colors" title="Excluir">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-          {accounts.length === 0 && (
-            <div className="p-4 text-center text-slate-400 text-xs">
-              Nenhuma conta cadastrada.
-            </div>
-          )}
+          <button 
+            type="button"
+            onClick={() => {
+              const modalBtn = document.getElementById('trigger-subscription-modal');
+              if (modalBtn) modalBtn.click();
+            }}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] tracking-widest uppercase rounded-lg shadow-sm transition-all shrink-0 self-start md:self-auto"
+          >
+            Alterar Assinatura
+          </button>
         </div>
       </CollapsibleSection>
 
       {/* Gestão de Usuários */}
       <CollapsibleSection 
-        title="Gestão de Usuários e Preferências" 
+        title="Gestão de Usuários" 
         icon={<Users className="w-5 h-5" />}
         defaultOpen={initialOpenSection === 'gestao'}
       >
-        {/* Preferências de Visualização */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+        <div className="grid grid-cols-1 gap-4">
+            {/* Modo Família Toggle */}
             <button 
                 onClick={() => {
                   const isBlocked = !currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico';
@@ -419,25 +398,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${isCoupleMode ? 'left-4.5' : 'left-0.5'}`} />
                 </div>
             </button>
-
-            <button 
-                onClick={onToggleTheme}
-                className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 transition-all"
-            >
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-slate-200 dark:bg-slate-700 rounded-lg">
-                        {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                    </div>
-                    <div className="text-left">
-                        <p className="font-black text-xs uppercase tracking-wider">Tema do Sistema</p>
-                        <p className="text-[10px] opacity-75">Alternar entre claro e escuro</p>
-                    </div>
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-widest bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-md">{theme === 'light' ? 'Claro' : 'Escuro'}</span>
-            </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             {/* Convidar Pessoa */}
             <div className={`bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 relative ${(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') ? 'min-h-[180px]' : ''}`}>
                 {(!currentUserProfile?.tier || currentUserProfile.tier === 'gratis' || currentUserProfile.tier === 'basico') && (
@@ -568,35 +531,136 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </CollapsibleSection>
 
-      {/* Plano & Assinatura */}
+      {/* Gestão de Contas Bancárias */}
       <CollapsibleSection 
-        title="Plano & Assinatura" 
-        icon={<Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />}
-        defaultOpen={true}
+        title="Minhas Contas Bancárias" 
+        icon={<CreditCard className="w-5 h-5" />}
+        defaultOpen={false}
       >
-        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-0.5">
-            <div className="text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider">Seu Plano Financeiro</div>
-            <h3 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">
-              Plano Ativo: <span className="text-indigo-600 dark:text-indigo-400 uppercase font-black">{currentUserProfile?.tier || 'gratis'}</span>
-            </h3>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed">
-              {currentUserProfile?.tier === 'premium' ? 'Parabéns! Você tem acesso completo e ilimitado a todas as ferramentas, automações recorrentes, modo família e comando de voz.' : 
-               currentUserProfile?.tier === 'medio' ? 'Excelente! Seu plano Médio libera automações recorrentes, controle inteligente por voz e sincronização em tempo real de casal.' :
-               currentUserProfile?.tier === 'basico' ? 'Seu plano Básico libera controle por voz para lançar transações rapidamente com áudio.' :
-               'Você está utilizando o plano Grátis. Faça um upgrade para liberar lançamentos por voz, metas personalizadas extras, cadastro de contas recorrentes e conexão de casal!'}
-            </p>
+        {/* Atalhos Rápidos para Bancos */}
+        <div className="mb-4 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+          <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2 block">
+            Bancos Populares (Clique para selecionar rápido)
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {BANK_PRESETS.map((bank) => (
+              <button
+                key={bank.name}
+                type="button"
+                onClick={() => {
+                  setAccName(bank.name);
+                  setAccLogoUrl(bank.logoUrl);
+                  setAccColor(bank.color);
+                }}
+                className={`px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  accName.toLowerCase() === bank.name.toLowerCase()
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
+                }`}
+              >
+                <img src={bank.logoUrl} alt={bank.name} className="w-3.5 h-3.5 object-contain" />
+                <span>{bank.name}</span>
+              </button>
+            ))}
           </div>
-          <button 
-            type="button"
-            onClick={() => {
-              const modalBtn = document.getElementById('trigger-subscription-modal');
-              if (modalBtn) modalBtn.click();
-            }}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] tracking-widest uppercase rounded-lg shadow-sm transition-all shrink-0 self-start md:self-auto"
-          >
-            Alterar Assinatura
-          </button>
+        </div>
+
+        <form onSubmit={handleAddAccount} className="flex flex-col md:grid md:grid-cols-4 gap-3 mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+          <div className="md:col-span-1">
+            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Nome do Banco/Conta</label>
+            <input 
+              type="text" 
+              placeholder="Ex: Nubank, Itaú..." 
+              value={accName}
+              onChange={e => setAccName(e.target.value)}
+              className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs"
+            />
+          </div>
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">URL da Logo (Opcional)</label>
+            <input 
+              type="text" 
+              placeholder="https://... logo.png" 
+              value={accLogoUrl}
+              onChange={e => setAccLogoUrl(e.target.value)}
+              className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-medium text-xs"
+            />
+          </div>
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Tipo</label>
+            <select 
+              value={accType}
+              onChange={e => setAccType(e.target.value as any)}
+              className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs"
+            >
+              <option>Corrente</option>
+              <option>Poupança</option>
+              <option>Investimento</option>
+              <option>Dinheiro</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Saldo Inicial (R$)</label>
+            <div className="flex gap-2">
+              <input 
+                type="number" 
+                step="0.01"
+                placeholder="0.00" 
+                value={accBalance}
+                onChange={e => setAccBalance(e.target.value)}
+                className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs min-w-0"
+              />
+              <button type="submit" className="bg-indigo-600 text-white p-2.5 rounded-lg hover:bg-indigo-700 transition-all shadow-sm shrink-0 flex items-center justify-center">
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+          {accounts.map(acc => (
+            <div key={acc.id} className="p-3 flex items-center justify-between group transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div 
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 overflow-hidden shadow-2xs border border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 p-1" 
+                  style={{ backgroundColor: acc.color || '#6366f1' }}
+                >
+                  {acc.logoUrl ? (
+                    <img 
+                      src={acc.logoUrl} 
+                      alt={acc.name} 
+                      className="w-full h-full object-contain rounded-md bg-white/90 p-0.5" 
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <Banknote className="w-4.5 h-4.5 text-white" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-slate-800 dark:text-white truncate text-xs">{acc.name}</p>
+                  <span className="text-[9px] font-black uppercase text-slate-400">{acc.type}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 shrink-0">
+                <p className="font-black text-indigo-600 text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(acc.currentBalance)}</p>
+                <div className="flex gap-1">
+                  <button onClick={() => openEditModal(acc)} className="p-1 text-slate-400 hover:text-indigo-500 transition-colors" title="Editar">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => openDeleteModal(acc.id)} className="p-1 text-slate-400 hover:text-rose-500 transition-colors" title="Excluir">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {accounts.length === 0 && (
+            <div className="p-4 text-center text-slate-400 text-xs">
+              Nenhuma conta cadastrada.
+            </div>
+          )}
         </div>
       </CollapsibleSection>
 
@@ -887,9 +951,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       {/* Edit Account Modal */}
       {accountToEdit && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100 dark:border-slate-800">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Editar Conta</h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center overflow-hidden p-1 shadow-2xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" style={{ backgroundColor: editColor }}>
+                  {editLogoUrl ? (
+                    <img src={editLogoUrl} alt="Logo" className="w-full h-full object-contain rounded-md bg-white/90 p-0.5" />
+                  ) : (
+                    <Banknote className="w-4 h-4 text-white" />
+                  )}
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Editar Conta Bancária</h3>
+              </div>
               <button onClick={() => setAccountToEdit(null)} className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                 <X className="w-4 h-4" />
               </button>
@@ -899,17 +972,55 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               <div>
                 <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-0.5 mb-1 block">Nome da Conta</label>
                 <input 
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold text-xs" 
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold text-xs" 
                   value={editName} 
                   onChange={e => setEditName(e.target.value)} 
                 />
               </div>
+
+              {/* Bank Presets Selector inside Edit Modal */}
+              <div>
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-0.5 mb-1 block">Logos de Bancos Populares</label>
+                <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-100 dark:border-slate-800">
+                  {BANK_PRESETS.map((bank) => (
+                    <button
+                      key={bank.name}
+                      type="button"
+                      onClick={() => {
+                        setEditName(bank.name);
+                        setEditLogoUrl(bank.logoUrl);
+                        setEditColor(bank.color);
+                      }}
+                      className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 border transition-all ${
+                        editLogoUrl === bank.logoUrl
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
+                      }`}
+                    >
+                      <img src={bank.logoUrl} alt={bank.name} className="w-3 h-3 object-contain" />
+                      <span>{bank.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-0.5 mb-1 block">URL da Logo do Banco</label>
+                <input 
+                  type="text"
+                  placeholder="https://... logo.png"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-medium text-xs" 
+                  value={editLogoUrl} 
+                  onChange={e => setEditLogoUrl(e.target.value)} 
+                />
+              </div>
+
               <div>
                 <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-0.5 mb-1 block">Tipo</label>
                 <select 
                   value={editType}
                   onChange={e => setEditType(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold text-xs"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold text-xs"
                 >
                   <option>Corrente</option>
                   <option>Poupança</option>
@@ -917,12 +1028,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                   <option>Dinheiro</option>
                 </select>
               </div>
+
               <div>
                 <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-0.5 mb-1 block">Saldo Atual (R$)</label>
                 <input 
                   type="number" 
                   step="0.01"
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold text-xs" 
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold text-xs" 
                   value={editCurrentBalance} 
                   onChange={e => setEditCurrentBalance(e.target.value)} 
                 />

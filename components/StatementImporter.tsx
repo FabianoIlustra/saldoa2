@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { X, FileText, Upload, Check, AlertCircle, Loader2, Clipboard, FileCode, CreditCard } from 'lucide-react';
 import { Category, Account } from '../types';
-import { parseStatement, parseStatementFile } from '../services/geminiService';
+import { parseStatement, parseStatementFile, isLocalModeEnabled } from '../services/geminiService';
 
 interface StatementImporterProps {
   categories: Category[];
@@ -261,8 +261,19 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
               <FileText className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-black">Importar Extrato</h2>
-              <p className="text-indigo-100 text-xs font-medium">Suporta OFX (Banco/Cartão), CSV ou Texto (IA)</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black">Importar Extrato</h2>
+                {isLocalModeEnabled() && (
+                  <span className="bg-emerald-500 text-white px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                    Leitor Local 🟢
+                  </span>
+                )}
+              </div>
+              <p className="text-indigo-100 text-xs font-medium">
+                {isLocalModeEnabled() 
+                  ? 'Processamento local rápido e seguro (Sem necessidade de chaves de IA)' 
+                  : 'Suporta OFX (Banco/Cartão), CSV ou Texto (IA)'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-xl transition-colors"><X /></button>
@@ -424,8 +435,23 @@ const StatementImporter: React.FC<StatementImporterProps> = ({
                               <option value="Outros">Outros</option>
                           </select>
                         </td>
-                        <td className={`px-4 py-4 font-black whitespace-nowrap text-right ${item.type === 'INCOME' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                          {item.type === 'INCOME' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
+                        <td className="px-4 py-4 w-32 text-right">
+                          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-xl focus-within:ring-2 focus-within:ring-indigo-500">
+                            <span className={`font-black text-xs ${item.type === 'INCOME' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                              {item.type === 'INCOME' ? '+' : '-'}
+                            </span>
+                            <input 
+                              type="number" 
+                              step="0.01"
+                              value={item.amount || ''}
+                              onChange={(e) => {
+                                  const newPreview = [...preview];
+                                  newPreview[i].amount = Number(e.target.value) || 0;
+                                  setPreview(newPreview);
+                              }}
+                              className="w-full bg-transparent border-none outline-none text-xs font-black text-slate-700 dark:text-slate-200 text-right p-0 focus:ring-0"
+                            />
+                          </div>
                         </td>
                         <td className="px-4 py-4 text-right">
                             <button onClick={() => removeTransaction(i)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
