@@ -92,10 +92,16 @@ export const useFinancialData = () => {
           }
         }
 
-        const currentUser = {
+        const savedAvatarUrl = localStorage.getItem(`user_avatar_url_${user.id}`);
+        const savedAvatarEmoji = localStorage.getItem(`user_avatar_emoji_${user.id}`);
+        const savedAvatarColor = localStorage.getItem(`user_avatar_color_${user.id}`);
+
+        const currentUser: User = {
           id: profile.id,
           name: profile.name || user.email?.split('@')[0] || 'User',
-          avatarColor: profile.avatar_color || '#6366f1',
+          avatarColor: savedAvatarColor || profile.avatar_color || '#6366f1',
+          avatarUrl: savedAvatarUrl || profile.avatar_url || undefined,
+          avatarEmoji: savedAvatarEmoji || profile.avatar_emoji || undefined,
           spendingCeiling: profile.spending_ceiling,
           coupleId: profile.couple_id,
           tier: profileTier as 'gratis' | 'basico' | 'medio' | 'premium',
@@ -1019,6 +1025,26 @@ export const useFinancialData = () => {
   const updateUserProfile = async (updates: Partial<User>) => {
     if (!user || !currentUserProfile) return;
     
+    if (updates.avatarUrl !== undefined) {
+      if (updates.avatarUrl) {
+        localStorage.setItem(`user_avatar_url_${user.id}`, updates.avatarUrl);
+      } else {
+        localStorage.removeItem(`user_avatar_url_${user.id}`);
+      }
+    }
+    if (updates.avatarEmoji !== undefined) {
+      if (updates.avatarEmoji) {
+        localStorage.setItem(`user_avatar_emoji_${user.id}`, updates.avatarEmoji);
+      } else {
+        localStorage.removeItem(`user_avatar_emoji_${user.id}`);
+      }
+    }
+    if (updates.avatarColor !== undefined) {
+      if (updates.avatarColor) {
+        localStorage.setItem(`user_avatar_color_${user.id}`, updates.avatarColor);
+      }
+    }
+
     const dbUpdates: any = {};
     if (updates.spendingCeiling !== undefined) dbUpdates.spending_ceiling = updates.spendingCeiling;
     if (updates.name !== undefined) {
@@ -1029,17 +1055,16 @@ export const useFinancialData = () => {
         });
     }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update(dbUpdates)
-      .eq('id', user.id);
-
-    if (!error) {
-      setCurrentUserProfile(prev => prev ? { ...prev, ...updates } : null);
-    } else {
-        console.error("Error updating profile:", error);
-        // If column missing error, try to alert user (though console log is best we can do here)
+    try {
+      await supabase
+        .from('profiles')
+        .update(dbUpdates)
+        .eq('id', user.id);
+    } catch (e) {
+      console.warn("Could not sync profile DB updates", e);
     }
+
+    setCurrentUserProfile(prev => prev ? { ...prev, ...updates } : null);
   };
 
   const linkUser = async (coupleId: string) => {
