@@ -6,6 +6,8 @@ export interface User {
   id: string;
   name: string;
   avatarColor: string;
+  avatarUrl?: string;
+  avatarEmoji?: string;
   pin?: string;
   spendingCeiling?: number;
   coupleId?: string;
@@ -21,6 +23,7 @@ export interface Account {
   initialBalance: number;
   currentBalance: number;
   color: string;
+  logoUrl?: string;
 }
 
 export interface Category {

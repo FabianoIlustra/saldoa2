@@ -282,27 +282,40 @@ async function startServer() {
       const { text: spokenText, accounts, categories } = req.body;
       const ai = getAI();
 
-      const prompt = `Você é o interpretador de comandos por voz do Saldo A2, um app financeiro para casais.
-Analise a frase falada pelo usuário e extraia os detalhes da transação ou transferência.
+      const prompt = `Você é o especialista em interpretar comandos de voz e texto do aplicativo Saldo A2 (gestão financeira inteligente).
+Analise a frase dita pelo usuário (que pode conter transcrições imperfeitas de áudio) e identifique a transação ou transferência.
 
-Contas bancárias cadastradas pelo usuário:
+Contas bancárias do usuário:
 ${JSON.stringify(accounts.map((a: any) => ({ id: a.id, name: a.name })))}
 
-Categorias cadastradas pelo usuário (use as existentes se houver proximidade semântica):
+Categorias disponíveis:
 ${JSON.stringify(categories.map((c: any) => ({ id: c.id, name: c.name, type: c.type })))}
 
-Frase dita pelo usuário: "${spokenText}"
+Frase do usuário: "${spokenText}"
 
-Responda ESTRITAMENTE em formato JSON com o seguinte schema (sem tags markdown):
+Regras de interpretação:
+1. Identifique valores em reais mesmo se ditos em texto por extenso (ex: "trinta e cinco reais", "cinquenta e vinte", "cem conto", "10 de uber", "2500 de salário").
+2. Se houver um valor numérico e um motivo/item (ex: "gastei 50 no mercado", "15 de uber", "paguei 120 de luz", "recebi 2500 de salário", "transferi 200 pro nubank"):
+   - "isTransaction": true
+   - "amount": valor numérico positivo em reais (ex: 50, 15, 120, 2500).
+   - "type": "EXPENSE" (gastos/compras/contas), "INCOME" (ganhos/salário/receita) ou "TRANSFER" (transferência entre contas).
+   - "description": Nome limpo, curto e capitalizado (ex: "Mercado", "Uber", "Conta de Luz", "Salário").
+   - "category": A categoria mais próxima da lista fornecida (ex: "Alimentação", "Transporte", "Moradia", "Salário").
+   - "accountId": ID da conta se foi mencionada ou deixada implícita.
+   - "toAccountId": ID da conta destino se for TRANSFER.
+   - "responseMessage": Mensagem curta e amigável confirmando a leitura.
+3. Se não houver valor nem transação clara, responda com "isTransaction": false e peça para o usuário dizer o valor.
+
+Responda ESTRITAMENTE em formato JSON sem markdown:
 {
-  "isTransaction": boolean, // true se descreveu um ganho/despesa ou transferência com valor monetário e descrição identificável.
-  "description": string, // Descrição simples e direta capitalizada (ex: "Almoço", "Uber", "Salário", "Supermercado").
-  "amount": number, // Valor numérico positivo.
-  "type": "INCOME" | "EXPENSE" | "TRANSFER", // INCOME para receitas/ganhos, EXPENSE para despesas/gastos, TRANSFER para transferências.
-  "category": string, // Nome de uma categoria existente ou uma sugerida adequada.
-  "accountId": string, // ID da conta correspondente se mencionada. Caso contrário, deixe em branco.
-  "toAccountId": string, // ID da conta destino se for TRANSFER.
-  "responseMessage": string // Mensagem em português amigável e direta confirmando o registro (ex: "Tudo pronto! Registrei sua despesa de 25 reais em Alimentação.") ou dizendo que não compreendeu o valor/descrição.
+  "isTransaction": boolean,
+  "description": string,
+  "amount": number,
+  "type": "INCOME" | "EXPENSE" | "TRANSFER",
+  "category": string,
+  "accountId": string,
+  "toAccountId": string,
+  "responseMessage": string
 }`;
 
       const response = await generateContentWithFallback(ai, {
