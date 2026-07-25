@@ -329,7 +329,7 @@ export const processVoiceCommandLocal = (
 
   if (amount === 0) {
     // Check if user is asking a general question (saldo, teto, extrato, etc.)
-    const chatFallback = processChatCommandLocal(spokenText, accounts, categories, currentUser || { id: '1', name: 'Usuário' }, transactions);
+    const chatFallback = processChatCommandLocal(spokenText, accounts, categories, currentUser || { id: '1', name: 'Usuário', avatarColor: '#6366f1', tier: 'gratis', role: 'user', email: '' }, transactions);
     if (chatFallback.answer && !chatFallback.answer.includes("Não entendi se você quis lançar algo")) {
       return {
         isTransaction: false,

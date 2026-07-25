@@ -304,3 +304,91 @@ export const addAsaasTransaction = (tx: Omit<AsaasTransactionLog, 'id' | 'date'>
   saveAsaasTransactions(txs);
   return newTx;
 };
+
+export interface SiteConfig {
+  whatsappNumber: string;
+  contactEmail: string;
+  youtubeVideoUrl: string;
+  instagramUrl: string;
+  facebookUrl: string;
+  youtubeChannelUrl: string;
+  linkedinUrl: string;
+  // Custom Site Images
+  banner1Image?: string;
+  banner2Image?: string;
+  featureVoiceImage?: string;
+  featureCoupleImage?: string;
+  featureLimitImage?: string;
+  featureGoalsImage?: string;
+  featureChartsImage?: string;
+  featureExtractImage?: string;
+}
+
+export interface UserSuggestion {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  createdAt: string;
+}
+
+const DEFAULT_SITE_CONFIG: SiteConfig = {
+  whatsappNumber: '5511999999999',
+  contactEmail: 'fabianofreitasfoto@hotmail.com',
+  youtubeVideoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+  instagramUrl: 'https://instagram.com',
+  facebookUrl: 'https://facebook.com',
+  youtubeChannelUrl: 'https://youtube.com',
+  linkedinUrl: 'https://linkedin.com',
+  banner1Image: 'https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&q=80&w=1600',
+  banner2Image: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&q=80&w=1600',
+  featureVoiceImage: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&q=80&w=800',
+  featureCoupleImage: 'https://images.unsplash.com/photo-1516585427167-9f4af9627e6c?auto=format&fit=crop&q=80&w=800',
+  featureLimitImage: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?auto=format&fit=crop&q=80&w=800',
+  featureGoalsImage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800',
+  featureChartsImage: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=800',
+  featureExtractImage: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=800',
+};
+
+export const getSiteConfig = (): SiteConfig => {
+  const data = localStorage.getItem('finan_ai_site_config');
+  if (!data) {
+    localStorage.setItem('finan_ai_site_config', JSON.stringify(DEFAULT_SITE_CONFIG));
+    return DEFAULT_SITE_CONFIG;
+  }
+  return { ...DEFAULT_SITE_CONFIG, ...JSON.parse(data) };
+};
+
+export const saveSiteConfig = (config: SiteConfig) => {
+  localStorage.setItem('finan_ai_site_config', JSON.stringify(config));
+};
+
+export const getSiteSuggestions = (): UserSuggestion[] => {
+  const data = localStorage.getItem('finan_ai_suggestions');
+  if (!data) return [];
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    return [];
+  }
+};
+
+export const addSiteSuggestion = (s: { name: string; email: string; message: string }) => {
+  const list = getSiteSuggestions();
+  const newSuggestion: UserSuggestion = {
+    id: `sug_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    name: s.name,
+    email: s.email,
+    message: s.message,
+    createdAt: new Date().toISOString()
+  };
+  list.unshift(newSuggestion);
+  localStorage.setItem('finan_ai_suggestions', JSON.stringify(list));
+  return newSuggestion;
+};
+
+export const deleteSiteSuggestion = (id: string) => {
+  const list = getSiteSuggestions().filter(s => s.id !== id);
+  localStorage.setItem('finan_ai_suggestions', JSON.stringify(list));
+};
+
