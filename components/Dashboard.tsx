@@ -475,11 +475,11 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         
         {/* Left Card: Indicador Principal (Saldo do Mês) */}
-        <div className="bg-purple-100/90 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-800/60 text-slate-800 dark:text-slate-100 rounded-3xl p-5 sm:p-7 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between space-y-4">
+        <div className="bg-blue-100/90 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800/60 text-slate-800 dark:text-slate-100 rounded-3xl p-5 sm:p-7 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-2 text-purple-900 dark:text-purple-200 text-xs sm:text-sm font-extrabold capitalize">
-                <Heart className="w-4 h-4 fill-purple-600/30 text-purple-700 dark:text-purple-400" />
+              <div className="flex items-center gap-2 text-blue-900 dark:text-blue-200 text-xs sm:text-sm font-extrabold capitalize">
+                <Heart className="w-4 h-4 fill-blue-600/30 text-blue-700 dark:text-blue-400" />
                 <span>Saldo do mês · {periodLabel}</span>
               </div>
 
@@ -487,14 +487,14 @@ const Dashboard: React.FC<DashboardProps> = ({
               <div className="flex items-center gap-2 shrink-0">
                 <button 
                   onClick={onManualClick}
-                  className="w-9 h-9 bg-white/80 hover:bg-white dark:bg-purple-900/60 dark:hover:bg-purple-800 text-purple-900 dark:text-purple-200 border border-purple-200/80 dark:border-purple-700/60 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-2xs"
+                  className="w-9 h-9 bg-white/80 hover:bg-white dark:bg-blue-900/60 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-200 border border-blue-200/80 dark:border-blue-700/60 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-2xs"
                   title="Novo Lançamento"
                 >
                   <Plus className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={onVoiceClick}
-                  className="w-9 h-9 bg-white/80 hover:bg-white dark:bg-purple-900/60 dark:hover:bg-purple-800 text-purple-900 dark:text-purple-200 border border-purple-200/80 dark:border-purple-700/60 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-2xs"
+                  className="w-9 h-9 bg-white/80 hover:bg-white dark:bg-blue-900/60 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-200 border border-blue-200/80 dark:border-blue-700/60 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-2xs"
                   title="Lançamento por Voz"
                 >
                   <Mic className="w-4 h-4" />
@@ -513,14 +513,14 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             {/* Inner Cards for Receitas & Despesas */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-purple-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-2xs">
+              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-2xs">
                 <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 text-[11px] font-semibold mb-1">
                   <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>Receitas</span>
                 </div>
                 <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white">{formatCurrency(monthlyIncome)}</p>
               </div>
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-purple-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-2xs">
+              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-2xs">
                 <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 text-[11px] font-semibold mb-1">
                   <ArrowDownRight className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                   <span>Despesas</span>
@@ -531,10 +531,10 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             {/* Spending Ceiling Progress Bar */}
             {spendingCeiling && spendingCeiling > 0 ? (
-              <div className="mt-3 bg-white/90 dark:bg-slate-800/90 border border-purple-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-2xs">
+              <div className="mt-3 bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-2xs">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
                   <span className="flex items-center gap-1.5">
-                    <Target className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                    <Target className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                     <span>Teto de Gastos:</span>
                   </span>
                   <span className="font-extrabold text-slate-900 dark:text-white">
@@ -542,7 +542,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </span>
                 </div>
 
-                <div className="w-full h-2 bg-purple-100 dark:bg-slate-700 rounded-full overflow-hidden p-0.5">
+                <div className="w-full h-2 bg-blue-100 dark:bg-slate-700 rounded-full overflow-hidden p-0.5">
                   <div 
                     className={`h-full rounded-full transition-all duration-500 ${
                       ceilingPercentReal > 100 ? 'bg-rose-500' : ceilingPercentReal >= 85 ? 'bg-amber-500' : 'bg-emerald-500'
@@ -564,20 +564,20 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Ver Contas Toggle Button */}
             <button 
               onClick={() => setIsAccountsOpen(!isAccountsOpen)}
-              className="w-full flex items-center justify-between px-4 py-2.5 bg-white/90 dark:bg-slate-800/90 hover:bg-white dark:hover:bg-slate-800 border border-purple-200/80 dark:border-slate-700/80 rounded-2xl text-xs font-bold text-purple-900 dark:text-purple-200 transition-all active:scale-[0.99]"
+              className="w-full flex items-center justify-between px-4 py-2.5 bg-white/90 dark:bg-slate-800/90 hover:bg-white dark:hover:bg-slate-800 border border-blue-200/80 dark:border-slate-700/80 rounded-2xl text-xs font-bold text-blue-900 dark:text-blue-200 transition-all active:scale-[0.99]"
             >
               <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-purple-700 dark:text-purple-400" />
+                <CreditCard className="w-4 h-4 text-blue-700 dark:text-blue-400" />
                 <span>Ver contas ({accounts.length})</span>
               </div>
-              {isAccountsOpen ? <ChevronUp className="w-4 h-4 text-purple-700 dark:text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-700 dark:text-purple-400" />}
+              {isAccountsOpen ? <ChevronUp className="w-4 h-4 text-blue-700 dark:text-blue-400" /> : <ChevronDown className="w-4 h-4 text-blue-700 dark:text-blue-400" />}
             </button>
 
             {/* Expandable Accounts List */}
             {isAccountsOpen && (
-              <div className="mt-2.5 bg-white/90 dark:bg-slate-800/90 border border-purple-200/80 dark:border-slate-700/80 rounded-2xl p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="mt-2.5 bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 rounded-2xl p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                 {accounts.map(account => (
-                  <div key={account.id} className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-purple-50 dark:hover:bg-slate-700/50 transition-colors">
+                  <div key={account.id} className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-blue-50 dark:hover:bg-slate-700/50 transition-colors">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-black shrink-0 shadow-2xs overflow-hidden p-0.5 bg-white border border-slate-200 dark:border-slate-700" style={{ backgroundColor: account.color || '#8b5cf6' }}>
                         {account.logoUrl ? (
@@ -603,22 +603,22 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Right Card: Resumo de Gastos (Gráfico de Resumo de Gastos) */}
-        <div className="bg-purple-100/90 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-800/60 text-slate-800 dark:text-slate-100 rounded-3xl p-5 sm:p-7 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between space-y-4">
+        <div className="bg-blue-100/90 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800/60 text-slate-800 dark:text-slate-100 rounded-3xl p-5 sm:p-7 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-white/80 dark:bg-purple-900/50 border border-purple-200/80 dark:border-purple-700/60 rounded-xl text-purple-800 dark:text-purple-200 shadow-2xs">
+                <div className="p-2 bg-white/80 dark:bg-blue-900/50 border border-blue-200/80 dark:border-blue-700/60 rounded-xl text-blue-800 dark:text-blue-200 shadow-2xs">
                   <History className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-extrabold uppercase tracking-widest text-purple-900 dark:text-purple-200">Resumo de Gastos</h3>
+                  <h3 className="text-xs font-extrabold uppercase tracking-widest text-blue-900 dark:text-blue-200">Resumo de Gastos</h3>
                   <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Análise periódica de despesas</p>
                 </div>
               </div>
 
               <button 
                 onClick={onViewVisuals}
-                className="text-xs font-bold text-purple-800 dark:text-purple-200 hover:text-purple-950 dark:hover:text-white flex items-center gap-1 transition-colors bg-white/80 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-purple-200/80 dark:border-slate-700 shadow-2xs"
+                className="text-xs font-bold text-blue-800 dark:text-blue-200 hover:text-blue-950 dark:hover:text-white flex items-center gap-1 transition-colors bg-white/80 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-blue-200/80 dark:border-slate-700 shadow-2xs"
               >
                 <span>Gráficos</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -627,24 +627,24 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             {/* Spend Metrics Grid (Hoje, Esta Semana, Este Mês) */}
             <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-4">
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-purple-200/80 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
+              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5 truncate">Hoje</p>
                 <p className="text-[11px] sm:text-xs md:text-sm lg:text-base font-black text-slate-900 dark:text-white tracking-tighter truncate" title={formatCurrency(daySpent)}>{formatCurrency(daySpent)}</p>
               </div>
 
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-purple-200/80 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
+              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5 truncate">Esta Semana</p>
                 <p className="text-[11px] sm:text-xs md:text-sm lg:text-base font-black text-slate-900 dark:text-white tracking-tighter truncate" title={formatCurrency(weekSpent)}>{formatCurrency(weekSpent)}</p>
               </div>
 
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-purple-200/80 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
+              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5 truncate">Este Mês</p>
                 <p className="text-[11px] sm:text-xs md:text-sm lg:text-base font-black text-slate-900 dark:text-white tracking-tighter truncate" title={formatCurrency(monthlyExpense)}>{formatCurrency(monthlyExpense)}</p>
               </div>
             </div>
 
             {/* Category Expense Breakdown Bars / Graph */}
-            <div className="bg-white/90 dark:bg-slate-800/90 border border-purple-200/80 dark:border-slate-700/80 p-3 sm:p-4 rounded-2xl shadow-2xs">
+            <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-3 sm:p-4 rounded-2xl shadow-2xs">
               <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-3 flex items-center justify-between">
                 <span>Maiores Categorias do Mês</span>
                 <span className="text-[10px] text-slate-400">{topExpenseCategories.list.length} ativas</span>
@@ -653,7 +653,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               {topExpenseCategories.list.length > 0 ? (
                 <div className="space-y-3">
                   {topExpenseCategories.list.map((cat, idx) => {
-                    const barColors = ['bg-purple-600', 'bg-indigo-600', 'bg-violet-600', 'bg-rose-500'];
+                    const barColors = ['bg-blue-600', 'bg-sky-600', 'bg-indigo-600', 'bg-rose-500'];
                     const colorClass = barColors[idx % barColors.length];
 
                     return (
@@ -662,10 +662,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                           <span className="font-bold text-slate-800 dark:text-slate-200 truncate min-w-0">{cat.category}</span>
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400">{formatCurrency(cat.amount)}</span>
-                            <span className="text-[10px] font-extrabold text-purple-700 dark:text-purple-300 w-7 text-right">{cat.percent}%</span>
+                            <span className="text-[10px] font-extrabold text-blue-700 dark:text-blue-300 w-7 text-right">{cat.percent}%</span>
                           </div>
                         </div>
-                        <div className="w-full h-2 bg-purple-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div className="w-full h-2 bg-blue-100 dark:bg-slate-700 rounded-full overflow-hidden">
                           <div 
                             className={`h-full rounded-full transition-all duration-500 ${colorClass}`}
                             style={{ width: `${Math.min(100, cat.percent)}%` }}
