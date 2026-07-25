@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 export interface PricingPlan {
   name: string;
   price: number; // as a numeric value, e.g. 19.90
@@ -356,11 +358,43 @@ export const getSiteConfig = (): SiteConfig => {
     localStorage.setItem('finan_ai_site_config', JSON.stringify(DEFAULT_SITE_CONFIG));
     return DEFAULT_SITE_CONFIG;
   }
-  return { ...DEFAULT_SITE_CONFIG, ...JSON.parse(data) };
+  try {
+    return { ...DEFAULT_SITE_CONFIG, ...JSON.parse(data) };
+  } catch (e) {
+    return DEFAULT_SITE_CONFIG;
+  }
 };
 
-export const saveSiteConfig = (config: SiteConfig) => {
+export const fetchSiteConfigAsync = async (): Promise<SiteConfig> => {
+  try {
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('config')
+      .eq('id', 'default')
+      .maybeSingle();
+
+    if (!error && data && data.config) {
+      const mergedConfig = { ...DEFAULT_SITE_CONFIG, ...data.config };
+      localStorage.setItem('finan_ai_site_config', JSON.stringify(mergedConfig));
+      return mergedConfig;
+    }
+  } catch (err) {
+    console.warn('Erro ao carregar site_settings do Supabase:', err);
+  }
+  return getSiteConfig();
+};
+
+export const saveSiteConfig = async (config: SiteConfig) => {
   localStorage.setItem('finan_ai_site_config', JSON.stringify(config));
+  try {
+    await supabase.from('site_settings').upsert({
+      id: 'default',
+      config,
+      updated_at: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Erro ao salvar site_settings no Supabase:', err);
+  }
 };
 
 export const getSiteSuggestions = (): UserSuggestion[] => {
@@ -373,8 +407,31 @@ export const getSiteSuggestions = (): UserSuggestion[] => {
   }
 };
 
-export const addSiteSuggestion = (s: { name: string; email: string; message: string }) => {
-  const list = getSiteSuggestions();
+export const fetchSiteSuggestionsAsync = async (): Promise<UserSuggestion[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('site_suggestions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      const mapped: UserSuggestion[] = data.map(item => ({
+        id: item.id,
+        name: item.name,
+        email: item.email,
+        message: item.message,
+        createdAt: item.created_at || new Date().toISOString()
+      }));
+      localStorage.setItem('finan_ai_suggestions', JSON.stringify(mapped));
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('Erro ao carregar sugestões do Supabase:', err);
+  }
+  return getSiteSuggestions();
+};
+
+export const addSiteSuggestion = async (s: { name: string; email: string; message: string }) => {
   const newSuggestion: UserSuggestion = {
     id: `sug_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     name: s.name,
@@ -382,13 +439,34 @@ export const addSiteSuggestion = (s: { name: string; email: string; message: str
     message: s.message,
     createdAt: new Date().toISOString()
   };
+
+  const list = getSiteSuggestions();
   list.unshift(newSuggestion);
   localStorage.setItem('finan_ai_suggestions', JSON.stringify(list));
+
+  try {
+    await supabase.from('site_suggestions').insert([{
+      id: newSuggestion.id,
+      name: newSuggestion.name,
+      email: newSuggestion.email,
+      message: newSuggestion.message,
+      created_at: newSuggestion.createdAt
+    }]);
+  } catch (err) {
+    console.error('Erro ao salvar sugestão no Supabase:', err);
+  }
+
   return newSuggestion;
 };
 
-export const deleteSiteSuggestion = (id: string) => {
+export const deleteSiteSuggestion = async (id: string) => {
   const list = getSiteSuggestions().filter(s => s.id !== id);
   localStorage.setItem('finan_ai_suggestions', JSON.stringify(list));
+
+  try {
+    await supabase.from('site_suggestions').delete().eq('id', id);
+  } catch (err) {
+    console.error('Erro ao deletar sugestão do Supabase:', err);
+  }
 };
 
