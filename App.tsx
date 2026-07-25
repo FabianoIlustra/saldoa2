@@ -317,7 +317,7 @@ const AppContent: React.FC = () => {
                   onClick={() => setActiveTab(item.id as TabType)}
                   className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
                     activeTab === item.id 
-                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/50' 
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50' 
                       : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
@@ -457,7 +457,7 @@ const AppContent: React.FC = () => {
                             e.stopPropagation();
                             setIsInviteModalOpen(true);
                           }}
-                          className="p-1 rounded-lg bg-purple-100/70 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900 transition-all flex items-center justify-center shrink-0 border border-purple-200/60 dark:border-purple-800/60"
+                          className="p-1 rounded-lg bg-blue-100/70 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900 transition-all flex items-center justify-center shrink-0 border border-blue-200/60 dark:border-blue-800/60"
                           title="Usuários Vinculados & Modo Família"
                         >
                           <Users className="w-3.5 h-3.5" />
@@ -480,52 +480,40 @@ const AppContent: React.FC = () => {
                 )}
               </div>
 
-              {/* Action Buttons (Bell, Theme, Settings/Home) - Static on Mobile */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Action Buttons (Bell, Theme, Settings/Home) - Compact on Mobile */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button 
                   onClick={() => {
                     setUnreadCount(0);
                     setIsRemindersOpen(true);
                   }} 
-                  className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 transition-all active:scale-95 shadow-2xs relative"
+                  className="p-1.5 sm:p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 transition-all active:scale-95 shadow-2xs relative"
                   title="Lembretes de amanhã"
                 >
-                  <Bell className="w-5 h-5" />
+                  <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-pulse shadow-xs">
+                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center animate-pulse shadow-xs">
                       {unreadCount}
                     </span>
                   )}
                 </button>
                 <button 
                   onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
-                  className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 transition-all active:scale-95 shadow-2xs"
+                  className="p-1.5 sm:p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 transition-all active:scale-95 shadow-2xs"
                   title="Mudar cor da tela"
                 >
-                  {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                  {theme === 'light' ? <Moon className="w-4 h-4 sm:w-5 sm:h-5" /> : <Sun className="w-4 h-4 sm:w-5 sm:h-5" />}
                 </button>
                 <button 
                   onClick={() => setActiveTab(activeTab === 'settings' ? 'dashboard' : 'settings')} 
-                  className={`p-2.5 rounded-2xl border transition-all active:scale-95 shadow-2xs ${
+                  className={`p-1.5 sm:p-2 rounded-xl border transition-all active:scale-95 shadow-2xs ${
                     activeTab === 'settings'
-                      ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-500/20'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
                       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
                   }`}
                   title={activeTab === 'settings' ? "Início" : "Configurações"}
                 >
-                  {activeTab === 'settings' ? <Home className="w-5 h-5" /> : <Settings className="w-5 h-5" />}
-                </button>
-                <button 
-                  onClick={() => {
-                    if (confirm('Tem certeza que deseja sair da conta?')) {
-                      signOut();
-                      navigate('/');
-                    }
-                  }} 
-                  className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 transition-all active:scale-95 shadow-2xs"
-                  title="Sair da conta"
-                >
-                  <LogOut className="w-5 h-5" />
+                  {activeTab === 'settings' ? <Home className="w-4 h-4 sm:w-5 sm:h-5" /> : <Settings className="w-4 h-4 sm:w-5 sm:h-5" />}
                 </button>
               </div>
             </div>
@@ -938,7 +926,7 @@ const AppContent: React.FC = () => {
               onClick={() => setActiveTab(item.id as TabType)}
               className={`flex flex-col items-center justify-center gap-1 transition-all rounded-xl py-1.5 px-1 flex-1 max-w-[68px] ${
                 activeTab === item.id 
-                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 font-bold' 
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-bold' 
                   : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
