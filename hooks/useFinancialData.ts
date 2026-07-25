@@ -42,13 +42,18 @@ export const useFinancialData = () => {
       // If no profile exists, let's auto-create it
       if (!profile) {
         const isOwner = user.email === 'fabianofreitasfoto@hotmail.com';
+        const now = new Date();
+        const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const defaultProfile = {
           id: user.id,
           name: user.user_metadata?.name || user.email?.split('@')[0] || 'Usuário',
           avatar_color: user.user_metadata?.avatar_color || '#6366f1',
-          tier: isOwner ? 'premium' : 'gratis',
+          tier: 'premium', // Default 7-day trial of Premium
           role: isOwner ? 'admin' : 'user',
-          email: user.email || ''
+          email: user.email || '',
+          created_at: now.toISOString(),
+          trial_ends_at: trialEndsAt,
+          is_trial: !isOwner
         };
 
         try {
@@ -71,12 +76,55 @@ export const useFinancialData = () => {
       }
 
       if (profile) {
-        let profileTier = profile.tier || 'gratis';
         let profileRole = profile.role || 'user';
         let profileEmail = profile.email || user.email || '';
+        const isOwner = user.email === 'fabianofreitasfoto@hotmail.com';
+        const localIsPaid = localStorage.getItem(`user_paid_${user.id}`) === 'true';
+        const isPaid = isOwner || profile.is_paid === true || localIsPaid;
 
-        // Auto-promote our specific owner to Admin and Premium
-        if (user.email === 'fabianofreitasfoto@hotmail.com' && (profileRole !== 'admin' || profileTier !== 'premium')) {
+        const createdAtIso = profile.created_at || user.created_at || new Date().toISOString();
+        let trialEndsAtIso = profile.trial_ends_at;
+        if (!trialEndsAtIso) {
+          trialEndsAtIso = new Date(new Date(createdAtIso).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        }
+
+        const now = new Date();
+        const trialEndsDate = new Date(trialEndsAtIso);
+
+        let profileTier = profile.tier || 'premium';
+        let isTrial = false;
+        let trialDaysRemaining = 0;
+
+        if (isOwner) {
+          profileRole = 'admin';
+          profileTier = 'premium';
+          isTrial = false;
+        } else if (isPaid) {
+          isTrial = false;
+          profileTier = profile.tier || 'premium';
+        } else {
+          // Unpaid user - check trial expiry
+          if (now > trialEndsDate) {
+            profileTier = 'gratis';
+            isTrial = false;
+            trialDaysRemaining = 0;
+            if (profile.tier !== 'gratis' || profile.is_trial) {
+              try {
+                await supabase.from('profiles').update({ tier: 'gratis', is_trial: false }).eq('id', user.id);
+              } catch (err) {
+                console.warn("Could not downgrade profile tier in DB:", err);
+              }
+            }
+          } else {
+            profileTier = 'premium';
+            isTrial = true;
+            const diffMs = trialEndsDate.getTime() - now.getTime();
+            trialDaysRemaining = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+          }
+        }
+
+        // Auto-promote owner to Admin and Premium
+        if (isOwner && (profileRole !== 'admin' || profileTier !== 'premium')) {
           profileRole = 'admin';
           profileTier = 'premium';
           try {
@@ -96,9 +144,18 @@ export const useFinancialData = () => {
         const savedAvatarEmoji = localStorage.getItem(`user_avatar_emoji_${user.id}`);
         const savedAvatarColor = localStorage.getItem(`user_avatar_color_${user.id}`);
 
+        let localMeta: any = {};
+        try {
+          localMeta = JSON.parse(localStorage.getItem(`saldo_a2_user_meta_${user.id}`) || '{}');
+        } catch (e) {}
+
         const currentUser: User = {
           id: profile.id,
-          name: profile.name || user.email?.split('@')[0] || 'User',
+          name: profile.name || profile.full_name || localMeta.name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          fullName: profile.full_name || profile.name || localMeta.full_name || user.user_metadata?.full_name || '',
+          cpf: profile.cpf || localMeta.cpf || user.user_metadata?.cpf || '',
+          phone: profile.phone || localMeta.phone || user.user_metadata?.phone || '',
+          address: profile.address || localMeta.address || user.user_metadata?.address || '',
           avatarColor: savedAvatarColor || profile.avatar_color || '#6366f1',
           avatarUrl: savedAvatarUrl || profile.avatar_url || undefined,
           avatarEmoji: savedAvatarEmoji || profile.avatar_emoji || undefined,
@@ -106,7 +163,12 @@ export const useFinancialData = () => {
           coupleId: profile.couple_id,
           tier: profileTier as 'gratis' | 'basico' | 'medio' | 'premium',
           role: profileRole as 'user' | 'admin',
-          email: profileEmail
+          email: profileEmail,
+          createdAt: createdAtIso,
+          trialEndsAt: trialEndsAtIso,
+          isTrial,
+          trialDaysRemaining,
+          isPaid
         };
         setCurrentUserProfile(currentUser);
 
@@ -293,17 +355,32 @@ export const useFinancialData = () => {
       }
 
       // Fetch Goals
+      const localGoalHistories: Record<string, any[]> = JSON.parse(localStorage.getItem('finan_ai_goals_history') || '{}');
       const { data: gs } = await supabase.from('goals').select('*').in('user_id', userIds);
       if (gs) {
-        setGoals(gs.map(g => ({
-          id: g.id,
-          userId: g.user_id,
-          name: g.name || (g as any).title, // Handle title/name mismatch
-          targetAmount: Number(g.target_amount),
-          currentAmount: Number(g.current_amount),
-          deadline: g.deadline,
-          color: g.color || '#10b981'
-        })));
+        setGoals(gs.map(g => {
+          let historyList: any[] = [];
+          if (g.history) {
+            if (typeof g.history === 'string') {
+              try { historyList = JSON.parse(g.history); } catch (e) {}
+            } else if (Array.isArray(g.history)) {
+              historyList = g.history;
+            }
+          }
+          if ((!historyList || historyList.length === 0) && localGoalHistories[g.id]) {
+            historyList = localGoalHistories[g.id];
+          }
+          return {
+            id: g.id,
+            userId: g.user_id,
+            name: g.name || (g as any).title, // Handle title/name mismatch
+            targetAmount: Number(g.target_amount),
+            currentAmount: Number(g.current_amount),
+            deadline: g.deadline,
+            color: g.color || '#10b981',
+            history: historyList
+          };
+        }));
       }
 
       // Fetch Recurring
@@ -587,31 +664,84 @@ export const useFinancialData = () => {
     setAccounts(prev => prev.filter(a => a.id !== id));
   };
 
-  const addGoal = async (g: Omit<Goal, 'id' | 'userId'>) => {
-    if (!user) return;
-    const { data } = await supabase.from('goals').insert({
-      user_id: user.id,
-      name: g.name,
-      target_amount: g.targetAmount,
-      current_amount: g.currentAmount,
-      deadline: g.deadline,
-      color: g.color
-    }).select().single();
-
-    if (data) {
-      setGoals(prev => [...prev, { ...g, id: data.id, userId: user.id }]);
+  const saveLocalGoalHistory = (goalId: string, history: any[]) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('finan_ai_goals_history') || '{}');
+      existing[goalId] = history;
+      localStorage.setItem('finan_ai_goals_history', JSON.stringify(existing));
+    } catch (e) {
+      console.warn('Error saving local goal history', e);
     }
   };
 
+  const addGoal = async (g: Omit<Goal, 'id' | 'userId'>) => {
+    if (!user) return;
+    let createdGoalId = '';
+    const historyData = g.history || [];
+
+    try {
+      const { data, error } = await supabase.from('goals').insert({
+        user_id: user.id,
+        name: g.name,
+        target_amount: g.targetAmount,
+        current_amount: g.currentAmount,
+        deadline: g.deadline,
+        color: g.color,
+        history: JSON.stringify(historyData)
+      }).select().single();
+
+      if (error) {
+        const fallback = await supabase.from('goals').insert({
+          user_id: user.id,
+          name: g.name,
+          target_amount: g.targetAmount,
+          current_amount: g.currentAmount,
+          deadline: g.deadline,
+          color: g.color
+        }).select().single();
+        if (fallback.data) {
+          createdGoalId = fallback.data.id;
+        }
+      } else if (data) {
+        createdGoalId = data.id;
+      }
+    } catch (e) {
+      console.warn('Error inserting goal', e);
+    }
+
+    const newGoalId = createdGoalId || Math.random().toString(36).substr(2, 9);
+    saveLocalGoalHistory(newGoalId, historyData);
+    setGoals(prev => [...prev, { ...g, id: newGoalId, userId: user.id, history: historyData }]);
+  };
+
   const updateGoal = async (g: Goal) => {
-    await supabase.from('goals').update({
-      name: g.name,
-      target_amount: g.targetAmount,
-      current_amount: g.currentAmount,
-      deadline: g.deadline,
-      color: g.color
-    }).eq('id', g.id);
-    setGoals(prev => prev.map(goal => goal.id === g.id ? g : goal));
+    const historyData = g.history || [];
+    saveLocalGoalHistory(g.id, historyData);
+
+    try {
+      const { error } = await supabase.from('goals').update({
+        name: g.name,
+        target_amount: g.targetAmount,
+        current_amount: g.currentAmount,
+        deadline: g.deadline,
+        color: g.color,
+        history: JSON.stringify(historyData)
+      }).eq('id', g.id);
+
+      if (error) {
+        await supabase.from('goals').update({
+          name: g.name,
+          target_amount: g.targetAmount,
+          current_amount: g.currentAmount,
+          deadline: g.deadline,
+          color: g.color
+        }).eq('id', g.id);
+      }
+    } catch (e) {
+      console.warn('Error updating goal', e);
+    }
+
+    setGoals(prev => prev.map(goal => goal.id === g.id ? { ...g, history: historyData } : goal));
   };
 
   const deleteGoal = async (id: string) => {
@@ -824,6 +954,25 @@ export const useFinancialData = () => {
         type: c.type || 'EXPENSE'
       }).eq('id', c.id);
     }
+
+    // Also sync all existing non-transfer transactions for this category to match the new category type
+    if (c.type && (c.type === 'INCOME' || c.type === 'EXPENSE')) {
+      try {
+        await supabase.from('transactions')
+          .update({ type: c.type })
+          .eq('category', c.name)
+          .neq('type', 'TRANSFER');
+      } catch (e) {
+        console.warn('Error updating transaction types for category:', e);
+      }
+      setTransactions(prev => prev.map(t => {
+        if (t.category === c.name && t.type !== 'TRANSFER') {
+          return { ...t, type: c.type as 'INCOME' | 'EXPENSE' };
+        }
+        return t;
+      }));
+    }
+
     setCategories(prev => prev.map(cat => cat.id === c.id ? c : cat));
   };
 
@@ -1049,10 +1198,22 @@ export const useFinancialData = () => {
     if (updates.spendingCeiling !== undefined) dbUpdates.spending_ceiling = updates.spendingCeiling;
     if (updates.name !== undefined) {
         dbUpdates.name = updates.name;
-        // Also update auth metadata for consistency
+        dbUpdates.full_name = updates.fullName || updates.name;
         await supabase.auth.updateUser({
-            data: { full_name: updates.name }
+            data: { name: updates.name, full_name: updates.fullName || updates.name }
         });
+    }
+    if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
+    if (updates.cpf !== undefined) dbUpdates.cpf = updates.cpf;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+    if (updates.address !== undefined) dbUpdates.address = updates.address;
+    if (updates.email !== undefined && updates.email.trim() && updates.email !== currentUserProfile.email) {
+        dbUpdates.email = updates.email.trim();
+        try {
+          await supabase.auth.updateUser({ email: updates.email.trim() });
+        } catch (authErr) {
+          console.warn("Error updating auth email:", authErr);
+        }
     }
 
     try {
@@ -1062,6 +1223,29 @@ export const useFinancialData = () => {
         .eq('id', user.id);
     } catch (e) {
       console.warn("Could not sync profile DB updates", e);
+    }
+
+    // Also sync local metadata cache for admin and immediate offline access
+    try {
+      const metaKey = `saldo_a2_user_meta_${user.id}`;
+      const existingMeta = JSON.parse(localStorage.getItem(metaKey) || '{}');
+      const updatedMeta = {
+        ...existingMeta,
+        name: updates.name || existingMeta.name,
+        full_name: updates.fullName || updates.name || existingMeta.full_name,
+        cpf: updates.cpf !== undefined ? updates.cpf : existingMeta.cpf,
+        phone: updates.phone !== undefined ? updates.phone : existingMeta.phone,
+        address: updates.address !== undefined ? updates.address : existingMeta.address,
+        email: updates.email || existingMeta.email,
+      };
+      localStorage.setItem(metaKey, JSON.stringify(updatedMeta));
+
+      // Also update in all_registered_users list
+      const allUsers = JSON.parse(localStorage.getItem('saldo_a2_all_registered_users') || '[]');
+      const updatedAll = allUsers.map((u: any) => u.id === user.id ? { ...u, ...updatedMeta } : u);
+      localStorage.setItem('saldo_a2_all_registered_users', JSON.stringify(updatedAll));
+    } catch (e) {
+      console.warn("Could not update local storage user meta:", e);
     }
 
     setCurrentUserProfile(prev => prev ? { ...prev, ...updates } : null);
