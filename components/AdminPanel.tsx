@@ -15,7 +15,7 @@ import {
   getCouponsConfig, saveCouponsConfig, 
   getAsaasConfig, saveAsaasConfig, 
   getAsaasTransactions, saveAsaasTransactions,
-  getSiteConfig, saveSiteConfig, getSiteSuggestions, deleteSiteSuggestion,
+  getSiteConfig, saveSiteConfig, getSiteSuggestions, fetchSiteConfigAsync, fetchSiteSuggestionsAsync, deleteSiteSuggestion,
   PricingPlan, PromoPackage, DiscountCoupon, AsaasConfig, AsaasTransactionLog, SiteConfig, UserSuggestion
 } from '../services/adminSettings';
 import { getTermsText, saveTermsText, DEFAULT_TERMS_TEXT } from '../services/termsService';
@@ -218,6 +218,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     setCoupons(getCouponsConfig());
     setPromos(getPromoConfig());
     setSuggestionsList(getSiteSuggestions());
+
+    fetchSiteConfigAsync().then((cfg) => setSiteConfigState(cfg));
+    fetchSiteSuggestionsAsync().then((sugs) => setSuggestionsList(sugs));
 
     // Initialize editing states for selected plan
     const initialPlan = pricing['basico'];
@@ -1826,7 +1829,9 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                   </div>
                   <button
                     type="button"
-                    onClick={() => setSuggestionsList(getSiteSuggestions())}
+                    onClick={() => {
+                      fetchSiteSuggestionsAsync().then(sugs => setSuggestionsList(sugs));
+                    }}
                     className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-all"
                     title="Atualizar lista"
                   >
@@ -1853,9 +1858,10 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                             </span>
                             <button
                               type="button"
-                              onClick={() => {
-                                deleteSiteSuggestion(sug.id);
-                                setSuggestionsList(getSiteSuggestions());
+                              onClick={async () => {
+                                await deleteSiteSuggestion(sug.id);
+                                const sugs = await fetchSiteSuggestionsAsync();
+                                setSuggestionsList(sugs);
                               }}
                               className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
                               title="Excluir sugestão"

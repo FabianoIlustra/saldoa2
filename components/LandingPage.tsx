@@ -6,7 +6,7 @@ import {
   BarChart3, Users, ShieldCheck, Send, Mail, MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getPricingConfig, getSiteConfig, addSiteSuggestion, PricingPlan, SiteConfig } from '../services/adminSettings';
+import { getPricingConfig, getSiteConfig, fetchSiteConfigAsync, addSiteSuggestion, PricingPlan, SiteConfig } from '../services/adminSettings';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -61,6 +61,9 @@ const LandingPage: React.FC = () => {
   useEffect(() => {
     setPricingConfig(getPricingConfig());
     setSiteConfig(getSiteConfig());
+    fetchSiteConfigAsync().then((cfg) => {
+      setSiteConfig(cfg);
+    });
   }, []);
 
   // Auto-advance banner every 8 seconds
