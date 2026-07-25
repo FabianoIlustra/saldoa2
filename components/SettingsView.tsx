@@ -537,34 +537,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         icon={<CreditCard className="w-5 h-5" />}
         defaultOpen={false}
       >
-        {/* Atalhos Rápidos para Bancos */}
-        <div className="mb-4 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-          <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2 block">
-            Bancos Populares (Clique para selecionar rápido)
-          </label>
-          <div className="flex flex-wrap gap-1.5">
-            {BANK_PRESETS.map((bank) => (
-              <button
-                key={bank.name}
-                type="button"
-                onClick={() => {
-                  setAccName(bank.name);
-                  setAccLogoUrl(bank.logoUrl);
-                  setAccColor(bank.color);
-                }}
-                className={`px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all ${
-                  accName.toLowerCase() === bank.name.toLowerCase()
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
-                }`}
-              >
-                <img src={bank.logoUrl} alt={bank.name} className="w-3.5 h-3.5 object-contain" />
-                <span>{bank.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
         <form onSubmit={handleAddAccount} className="flex flex-col md:grid md:grid-cols-4 gap-3 mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
           <div className="md:col-span-1">
             <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Nome do Banco/Conta</label>
@@ -976,32 +948,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                   value={editName} 
                   onChange={e => setEditName(e.target.value)} 
                 />
-              </div>
-
-              {/* Bank Presets Selector inside Edit Modal */}
-              <div>
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-0.5 mb-1 block">Logos de Bancos Populares</label>
-                <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-100 dark:border-slate-800">
-                  {BANK_PRESETS.map((bank) => (
-                    <button
-                      key={bank.name}
-                      type="button"
-                      onClick={() => {
-                        setEditName(bank.name);
-                        setEditLogoUrl(bank.logoUrl);
-                        setEditColor(bank.color);
-                      }}
-                      className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 border transition-all ${
-                        editLogoUrl === bank.logoUrl
-                          ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
-                      }`}
-                    >
-                      <img src={bank.logoUrl} alt={bank.name} className="w-3 h-3 object-contain" />
-                      <span>{bank.name}</span>
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <div>

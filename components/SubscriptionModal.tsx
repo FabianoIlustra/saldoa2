@@ -153,10 +153,11 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, 
     if (!selectedPlan) return;
     setIsSubmitting(true);
     try {
+      localStorage.setItem(`user_paid_${currentUser.id}`, 'true');
       // Direct update in supabase
       const { error } = await supabase
         .from('profiles')
-        .update({ tier: selectedPlan })
+        .update({ tier: selectedPlan, is_paid: true, is_trial: false })
         .eq('id', currentUser.id);
 
       if (error) throw error;
@@ -204,7 +205,14 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, 
             </div>
             <div>
               <h3 className="text-lg font-black text-slate-800 dark:text-white">Planos de Acesso</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Seu plano atual: <span className="font-bold text-indigo-600 dark:text-indigo-400 uppercase">{currentTier}</span></p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 flex-wrap">
+                <span>Seu plano atual: <strong className="font-extrabold text-indigo-600 dark:text-indigo-400 uppercase">{currentTier}</strong></span>
+                {currentUser.isTrial && (
+                  <span className="font-extrabold text-amber-700 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-950/60 px-2.5 py-0.5 rounded-full text-[10px] border border-amber-200/80 dark:border-amber-800/60 flex items-center gap-1">
+                    👑 Teste Premium ({currentUser.trialDaysRemaining ?? 7}d restantes)
+                  </span>
+                )}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
@@ -217,6 +225,34 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose, 
           
           {checkoutStep === 'plans' && (
             <div className="space-y-8">
+              {currentUser.isTrial && (
+                <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white p-5 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 bg-amber-400/20 text-amber-300 rounded-2xl flex items-center justify-center shrink-0 border border-amber-400/30">
+                      <Sparkles className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-extrabold flex items-center gap-2">
+                        <span>Você está no Teste Grátis de 7 Dias do Plano Premium!</span>
+                      </h4>
+                      <p className="text-xs text-purple-200 mt-0.5">
+                        Restam <strong className="text-amber-300 font-black">{currentUser.trialDaysRemaining ?? 7} dias</strong> para testar todos os recursos ilimitados de IA e robô A2. Assine agora para manter seu acesso sem interrupções.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!currentUser.isTrial && !currentUser.isPaid && currentUser.tier === 'gratis' && (
+                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 p-5 rounded-3xl flex items-center gap-3.5 text-amber-800 dark:text-amber-300">
+                  <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <div className="text-xs">
+                    <strong className="block font-black text-sm text-amber-900 dark:text-amber-200 mb-0.5">Seu teste Premium de 7 dias expirou!</strong>
+                    Você foi alterado para o Plano Grátis. Escolha um dos planos abaixo para reativar o Consultor IA, Robô de Voz A2 e sincronização em tempo real.
+                  </div>
+                </div>
+              )}
+
               <div className="text-center max-w-2xl mx-auto space-y-2">
                 <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-800 dark:text-white">Escolha o plano perfeito para você</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">

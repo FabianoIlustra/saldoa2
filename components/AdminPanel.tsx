@@ -6,7 +6,8 @@ import {
   Filter, Check, RefreshCw, Clipboard, Database, AlertCircle, TrendingUp,
   Settings, Key, Globe, Eye, EyeOff, Save, Receipt, QrCode, CreditCard, Clock,
   Plus, Trash2, Calendar, Percent, FileText, ToggleLeft, ToggleRight, Ticket,
-  Cpu, CheckSquare, ListPlus
+  Cpu, CheckSquare, ListPlus, X, Phone, MapPin, CheckCircle2, UserCheck,
+  Mail, MessageSquare, Inbox
 } from 'lucide-react';
 import { 
   getPricingConfig, savePricingConfig, 
@@ -14,8 +15,10 @@ import {
   getCouponsConfig, saveCouponsConfig, 
   getAsaasConfig, saveAsaasConfig, 
   getAsaasTransactions, saveAsaasTransactions,
-  PricingPlan, PromoPackage, DiscountCoupon, AsaasConfig, AsaasTransactionLog
+  getSiteConfig, saveSiteConfig, getSiteSuggestions, deleteSiteSuggestion,
+  PricingPlan, PromoPackage, DiscountCoupon, AsaasConfig, AsaasTransactionLog, SiteConfig, UserSuggestion
 } from '../services/adminSettings';
+import { getTermsText, saveTermsText, DEFAULT_TERMS_TEXT } from '../services/termsService';
 
 interface AdminPanelProps {
   currentUser: User;
@@ -24,6 +27,12 @@ interface AdminPanelProps {
 interface DBProfile {
   id: string;
   name: string | null;
+  full_name?: string | null;
+  cpf?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  terms_accepted?: boolean | null;
+  terms_accepted_at?: string | null;
   avatar_color: string | null;
   pin: string | null;
   tier: string | null;
@@ -43,7 +52,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   const [copiedSQL, setCopiedSQL] = useState(false);
 
   // Tabs state
-  const [activeTab, setActiveTab] = useState<'usuarios' | 'financeiro' | 'precificacao'>('usuarios');
+  const [activeTab, setActiveTab] = useState<'usuarios' | 'termos' | 'financeiro' | 'precificacao' | 'midia'>('usuarios');
+
+  // Terms of use editor state
+  const [termsContent, setTermsContent] = useState(getTermsText());
+  const [termsSaveSuccess, setTermsSaveSuccess] = useState(false);
+
+  // Site Links & Media Config State
+  const [siteConfig, setSiteConfigState] = useState<SiteConfig>(getSiteConfig());
+  const [siteConfigSaved, setSiteConfigSaved] = useState(false);
+  const [suggestionsList, setSuggestionsList] = useState<UserSuggestion[]>([]);
+
+  // Detail Modal State
+  const [selectedUserProfile, setSelectedUserProfile] = useState<DBProfile | null>(null);
+
 
   // Asaas Configuration state
   const [asaasConfig, setAsaasConfig] = useState<AsaasConfig>({
@@ -102,16 +124,84 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        throw error;
+      // Load local registered users backup
+      let localUsers: any[] = [];
+      try {
+        localUsers = JSON.parse(localStorage.getItem('saldo_a2_all_registered_users') || '[]');
+      } catch (e) {
+        console.warn('Error loading local registered users:', e);
       }
 
-      if (data) {
-        setProfiles(data as DBProfile[]);
+      let merged: DBProfile[] = [];
+
+      if (data && data.length > 0) {
+        merged = data.map((p: any) => {
+          const local = localUsers.find((l: any) => l.id === p.id || l.email === p.email);
+          return {
+            ...p,
+            full_name: p.full_name || local?.full_name || local?.name || p.name,
+            cpf: p.cpf || local?.cpf || null,
+            phone: p.phone || local?.phone || null,
+            address: p.address || local?.address || null,
+            terms_accepted: p.terms_accepted !== undefined ? p.terms_accepted : (local?.terms_accepted ?? true),
+            terms_accepted_at: p.terms_accepted_at || local?.terms_accepted_at || p.created_at,
+          };
+        });
       }
+
+      // Append local users not in DB response
+      localUsers.forEach((l: any) => {
+        if (!merged.some(m => m.id === l.id || m.email === l.email)) {
+          merged.push({
+            id: l.id || `local-${Date.now()}`,
+            name: l.name || l.full_name || 'Usuário',
+            full_name: l.full_name || l.name,
+            cpf: l.cpf || null,
+            phone: l.phone || null,
+            address: l.address || null,
+            terms_accepted: l.terms_accepted ?? true,
+            terms_accepted_at: l.terms_accepted_at || new Date().toISOString(),
+            avatar_color: '#6366f1',
+            pin: null,
+            tier: 'gratis',
+            role: 'user',
+            email: l.email || null,
+            created_at: l.created_at || new Date().toISOString(),
+            couple_id: null,
+          });
+        }
+      });
+
+      setProfiles(merged);
     } catch (err: any) {
       console.error('Error fetching profiles:', err);
-      setErrorState(err.message || 'Row Level Security (RLS) limitou a busca.');
+      // Fallback to local users list if RLS limits
+      let localUsers: any[] = [];
+      try {
+        localUsers = JSON.parse(localStorage.getItem('saldo_a2_all_registered_users') || '[]');
+      } catch (e) {}
+
+      if (localUsers.length > 0) {
+        setProfiles(localUsers.map((l: any) => ({
+          id: l.id,
+          name: l.name || l.full_name,
+          full_name: l.full_name || l.name,
+          cpf: l.cpf || null,
+          phone: l.phone || null,
+          address: l.address || null,
+          terms_accepted: l.terms_accepted ?? true,
+          terms_accepted_at: l.terms_accepted_at || new Date().toISOString(),
+          avatar_color: '#6366f1',
+          pin: null,
+          tier: 'gratis',
+          role: 'user',
+          email: l.email || null,
+          created_at: l.created_at || new Date().toISOString(),
+          couple_id: null,
+        })));
+      } else {
+        setErrorState(err.message || 'Row Level Security (RLS) limitou a busca.');
+      }
     } finally {
       setLoading(false);
     }
@@ -127,6 +217,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     setPricingConfig(pricing);
     setCoupons(getCouponsConfig());
     setPromos(getPromoConfig());
+    setSuggestionsList(getSiteSuggestions());
 
     // Initialize editing states for selected plan
     const initialPlan = pricing['basico'];
@@ -246,12 +337,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   }, [profiles, searchTerm, tierFilter]);
 
   const copySQLCommand = () => {
-    const sql = `-- Execute este comando no editor SQL do Supabase para atualizar as permissões do Admin sem recursão:
+    const sql = `-- Execute este comando no editor SQL do Supabase para atualizar a estrutura de usuários e permissões do Admin:
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'gratis';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cpf TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS terms_accepted BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS terms_accepted_at TEXT;
 
--- Criação da função de verificação segura (evita recursão infinita na RLS do Supabase)
+-- Criação da função de verificação segura para Admin
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -469,10 +566,10 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
       )}
 
       {/* Tabs Menu */}
-      <div className="flex bg-slate-100 dark:bg-slate-950 p-1.5 rounded-2xl max-w-lg gap-1 border border-slate-200/40 dark:border-slate-800/20">
+      <div className="flex bg-slate-100 dark:bg-slate-950 p-1.5 rounded-2xl max-w-2xl gap-1 border border-slate-200/40 dark:border-slate-800/20">
         <button
           onClick={() => setActiveTab('usuarios')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'usuarios'
               ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white shadow-sm border border-slate-200/50 dark:border-slate-800/50'
               : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
@@ -482,8 +579,19 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
           Usuários
         </button>
         <button
+          onClick={() => setActiveTab('termos')}
+          className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            activeTab === 'termos'
+              ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white shadow-sm border border-slate-200/50 dark:border-slate-800/50'
+              : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          Termos de Uso
+        </button>
+        <button
           onClick={() => setActiveTab('financeiro')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'financeiro'
               ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white shadow-sm border border-slate-200/50 dark:border-slate-800/50'
               : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
@@ -494,7 +602,7 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
         </button>
         <button
           onClick={() => setActiveTab('precificacao')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'precificacao'
               ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white shadow-sm border border-slate-200/50 dark:border-slate-800/50'
               : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
@@ -502,6 +610,17 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
         >
           <Award className="w-4 h-4" />
           Precificação
+        </button>
+        <button
+          onClick={() => setActiveTab('midia')}
+          className={`flex-1 py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            activeTab === 'midia'
+              ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white shadow-sm border border-slate-200/50 dark:border-slate-800/50'
+              : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+          }`}
+        >
+          <Globe className="w-4 h-4" />
+          Redes & Mídias
         </button>
       </div>
 
@@ -520,7 +639,7 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                     <input 
                       type="text" 
-                      placeholder="Pesquisar por nome ou e-mail..."
+                      placeholder="Pesquisar por nome, CPF ou e-mail..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-500"
@@ -565,12 +684,12 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                   <table className="w-full border-collapse text-left">
                     <thead>
                       <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-950/20 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        <th className="px-6 py-4">Usuário</th>
-                        <th className="px-6 py-4">E-mail</th>
-                        <th className="px-6 py-4">Tipo de Acesso (Plano)</th>
-                        <th className="px-6 py-4">Status no Banco</th>
-                        <th className="px-6 py-4">Vínculo Casal</th>
-                        <th className="px-6 py-4 text-right">Ações Rápidas</th>
+                        <th className="px-6 py-4">Usuário / Nome</th>
+                        <th className="px-6 py-4">CPF / Celular</th>
+                        <th className="px-6 py-4">Endereço Cadastrado</th>
+                        <th className="px-6 py-4">Aceite dos Termos</th>
+                        <th className="px-6 py-4">Plano</th>
+                        <th className="px-6 py-4 text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50 text-xs">
@@ -578,33 +697,71 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                         const isSelf = p.id === currentUser.id;
                         const tier = p.tier || 'gratis';
                         const role = p.role || 'user';
+                        const displayName = p.full_name || p.name || 'Sem Nome';
+
+                        const termsDateStr = p.terms_accepted_at ? (() => {
+                          try {
+                            const d = new Date(p.terms_accepted_at);
+                            return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                          } catch (e) {
+                            return p.terms_accepted_at;
+                          }
+                        })() : null;
 
                         return (
                           <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
                             {/* Avatar & Name */}
-                            <td className="px-6 py-4 flex items-center gap-3">
-                              <div 
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-extrabold text-xs"
-                                style={{ backgroundColor: p.avatar_color || '#6366f1' }}
-                              >
-                                {(p.name || 'U').charAt(0).toUpperCase()}
-                              </div>
-                              <div>
-                                <p className="font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
-                                  {p.name || 'Sem nome'}
-                                  {isSelf && (
-                                    <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">
-                                      Você
-                                    </span>
-                                  )}
-                                </p>
-                                <p className="text-[10px] text-slate-400 dark:text-slate-500">ID: ...{p.id.substring(p.id.length - 8)}</p>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div 
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-extrabold text-xs shrink-0"
+                                  style={{ backgroundColor: p.avatar_color || '#6366f1' }}
+                                >
+                                  {displayName.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
+                                    {displayName}
+                                    {isSelf && (
+                                      <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">
+                                        Você
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{p.email || 'Sem e-mail'}</p>
+                                </div>
                               </div>
                             </td>
 
-                            {/* Email */}
+                            {/* CPF & Phone */}
                             <td className="px-6 py-4 text-slate-600 dark:text-slate-300 font-medium">
-                              {p.email || <span className="text-slate-400 italic">Desconhecido</span>}
+                              <p className="font-bold text-slate-800 dark:text-slate-200">{p.cpf || <span className="text-slate-400 font-normal italic">Pendente</span>}</p>
+                              <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                <Phone className="w-3 h-3" />
+                                {p.phone || 'Sem celular'}
+                              </p>
+                            </td>
+
+                            {/* Address */}
+                            <td className="px-6 py-4 text-slate-600 dark:text-slate-300 max-w-xs truncate">
+                              <span className="text-[11px] font-medium flex items-center gap-1" title={p.address || ''}>
+                                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                {p.address || <span className="text-slate-400 italic">Não informado</span>}
+                              </span>
+                            </td>
+
+                            {/* Terms Accepted */}
+                            <td className="px-6 py-4">
+                              {p.terms_accepted ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-bold text-[10px] bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  {termsDateStr ? `Aceito (${termsDateStr})` : 'Aceito'}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full font-medium text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-400">
+                                  Pendente
+                                </span>
+                              )}
                             </td>
 
                             {/* Tier Badge */}
@@ -622,54 +779,28 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                               </span>
                             </td>
 
-                            {/* Role Status */}
-                            <td className="px-6 py-4">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-md font-extrabold text-[9px] uppercase ${
-                                role === 'admin'
-                                  ? 'bg-red-50 dark:bg-red-950/10 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/20'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                              }`}>
-                                {role === 'admin' ? 'Admin (Isento)' : 'Usuário'}
-                              </span>
-                            </td>
-
-                            {/* Couple Connection */}
-                            <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
-                              {p.couple_id ? (
-                                <span className="text-emerald-500 font-semibold flex items-center gap-1">
-                                  ● Conectado
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 italic">Individual</span>
-                              )}
-                            </td>
-
                             {/* Actions */}
                             <td className="px-6 py-4 text-right">
                               <div className="inline-flex items-center gap-2">
+                                <button
+                                  onClick={() => setSelectedUserProfile(p)}
+                                  className="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 font-extrabold text-[10px] rounded-lg border border-indigo-200 dark:border-indigo-800/40 transition-colors flex items-center gap-1"
+                                >
+                                  <UserCheck className="w-3 h-3" />
+                                  Ficha
+                                </button>
+
                                 <select
                                   value={tier}
                                   disabled={updatingUserId === p.id}
                                   onChange={(e) => handleUpdateUserTier(p.id, e.target.value as any)}
                                   className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[10px] font-extrabold px-2 py-1.5 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer text-slate-700 dark:text-slate-200 uppercase"
                                 >
-                                  <option value="gratis">Plano Grátis</option>
-                                  <option value="basico">Plano Básico</option>
-                                  <option value="medio">Plano Médio</option>
-                                  <option value="premium">Plano Premium</option>
+                                  <option value="gratis">Grátis</option>
+                                  <option value="basico">Básico</option>
+                                  <option value="medio">Médio</option>
+                                  <option value="premium">Premium</option>
                                 </select>
-
-                                {!isSelf && (
-                                  <select
-                                    value={role}
-                                    disabled={updatingUserId === p.id}
-                                    onChange={(e) => handleUpdateUserRole(p.id, e.target.value as any)}
-                                    className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[10px] font-extrabold px-2 py-1.5 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer text-slate-700 dark:text-slate-200 uppercase"
-                                  >
-                                    <option value="user">Usuário</option>
-                                    <option value="admin">Admin</option>
-                                  </select>
-                                )}
                               </div>
                             </td>
                           </tr>
@@ -679,6 +810,76 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 2: TERMOS DE USO EDITOR */}
+          {activeTab === 'termos' && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 p-6 md:p-8 shadow-sm space-y-6 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-900 dark:text-white text-lg">Termos de Uso e Política de Privacidade</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Edite o texto contratual exibido no cadastro e na página inicial do Saldo A2.
+                    </p>
+                  </div>
+                </div>
+
+                {termsSaveSuccess && (
+                  <div className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-xl font-bold text-xs flex items-center gap-2">
+                    <Check className="w-4 h-4" />
+                    Termos de Uso salvos com sucesso!
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                saveTermsText(termsContent);
+                setTermsSaveSuccess(true);
+                setTimeout(() => setTermsSaveSuccess(false), 3500);
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                    Conteúdo Completo dos Termos (Texto Editável)
+                  </label>
+                  <textarea
+                    rows={18}
+                    value={termsContent}
+                    onChange={(e) => setTermsContent(e.target.value)}
+                    className="w-full p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-mono text-xs focus:ring-2 focus:ring-indigo-500 outline-none leading-relaxed transition-all"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Deseja restaurar os Termos de Uso padrões originais do sistema?')) {
+                        setTermsContent(DEFAULT_TERMS_TEXT);
+                        saveTermsText(DEFAULT_TERMS_TEXT);
+                        setTermsSaveSuccess(true);
+                        setTimeout(() => setTermsSaveSuccess(false), 3500);
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl transition-all"
+                  >
+                    Restaurar Padrão do Sistema
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-indigo-200 dark:shadow-none flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    Salvar Alterações nos Termos
+                  </button>
+                </div>
+              </form>
             </div>
           )}
 
@@ -1351,6 +1552,454 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
             </div>
           )}
 
+          {/* TAB 5: REDES SOCIAIS & MÍDIAS (LANDING PAGE) */}
+          {activeTab === 'midia' && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                    <Globe className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-900 dark:text-white text-base">Configurações da Landing Page</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      Configure o número do WhatsApp, vídeo do YouTube e links das redes sociais exibidos na página inicial.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                
+                {/* WhatsApp, E-mail & Vídeo */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      Número do WhatsApp (Apenas Números com DDD e DDI 55)
+                    </label>
+                    <input 
+                      type="text"
+                      value={siteConfig.whatsappNumber}
+                      onChange={(e) => setSiteConfigState({ ...siteConfig, whatsappNumber: e.target.value })}
+                      placeholder="Ex: 5511999999999"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <span className="text-[10px] text-slate-400 font-medium mt-1 block">
+                      Usado no botão "Conversar no WhatsApp".
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <Mail className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      E-mail para Receber Sugestões do Site
+                    </label>
+                    <input 
+                      type="email"
+                      value={siteConfig.contactEmail || ''}
+                      onChange={(e) => setSiteConfigState({ ...siteConfig, contactEmail: e.target.value })}
+                      placeholder="fabianofreitasfoto@hotmail.com"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <span className="text-[10px] text-slate-400 font-medium mt-1 block">
+                      E-mail do administrador configurado para onde são direcionadas as sugestões da caixa de envio da página inicial.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      Link do Vídeo Demonstrativo (Embed do YouTube)
+                    </label>
+                    <input 
+                      type="text"
+                      value={siteConfig.youtubeVideoUrl}
+                      onChange={(e) => setSiteConfigState({ ...siteConfig, youtubeVideoUrl: e.target.value })}
+                      placeholder="Ex: https://www.youtube.com/embed/dQw4w9WgXcQ"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <span className="text-[10px] text-slate-400 font-medium mt-1 block">
+                      Vídeo rodando diretamente no player do site. Pode usar links no formato embed: https://www.youtube.com/embed/SEU_VIDEO_ID
+                    </span>
+                  </div>
+                </div>
+
+                {/* Redes Sociais */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      URL do Instagram
+                    </label>
+                    <input 
+                      type="text"
+                      value={siteConfig.instagramUrl}
+                      onChange={(e) => setSiteConfigState({ ...siteConfig, instagramUrl: e.target.value })}
+                      placeholder="https://instagram.com/suaconta"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      URL do Facebook
+                    </label>
+                    <input 
+                      type="text"
+                      value={siteConfig.facebookUrl}
+                      onChange={(e) => setSiteConfigState({ ...siteConfig, facebookUrl: e.target.value })}
+                      placeholder="https://facebook.com/suapagina"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      URL do Canal do YouTube
+                    </label>
+                    <input 
+                      type="text"
+                      value={siteConfig.youtubeChannelUrl}
+                      onChange={(e) => setSiteConfigState({ ...siteConfig, youtubeChannelUrl: e.target.value })}
+                      placeholder="https://youtube.com/@seucanal"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      URL do LinkedIn
+                    </label>
+                    <input 
+                      type="text"
+                      value={siteConfig.linkedinUrl}
+                      onChange={(e) => setSiteConfigState({ ...siteConfig, linkedinUrl: e.target.value })}
+                      placeholder="https://linkedin.com/company/suaempresa"
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+              </div>
+
+              {/* SEÇÃO CONFIGURAÇÃO DE FOTOS DO SITE */}
+              <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-6">
+                <div>
+                  <h4 className="font-extrabold text-slate-900 dark:text-white text-sm uppercase tracking-wider">
+                    🖼️ Fotos & Imagens da Landing Page
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                    Insira aqui as URLs das suas imagens personalizadas para os banners do topo e os 6 cards de recursos do site.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Banners */}
+                  <div className="space-y-4 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                    <h5 className="font-bold text-xs text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                      Imagens dos Banners (Topo)
+                    </h5>
+                    
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        URL Foto Banner 1
+                      </label>
+                      <input 
+                        type="text"
+                        value={siteConfig.banner1Image || ''}
+                        onChange={(e) => setSiteConfigState({ ...siteConfig, banner1Image: e.target.value })}
+                        placeholder="https://sua-imagem.com/banner1.jpg"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        URL Foto Banner 2
+                      </label>
+                      <input 
+                        type="text"
+                        value={siteConfig.banner2Image || ''}
+                        onChange={(e) => setSiteConfigState({ ...siteConfig, banner2Image: e.target.value })}
+                        placeholder="https://sua-imagem.com/banner2.jpg"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Cards de Recursos (1 a 6) */}
+                  <div className="space-y-3 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                    <h5 className="font-bold text-xs text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                      Imagens dos 6 Cards de Recursos
+                    </h5>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Card 1 - Lançamento por Voz
+                      </label>
+                      <input 
+                        type="text"
+                        value={siteConfig.featureVoiceImage || ''}
+                        onChange={(e) => setSiteConfigState({ ...siteConfig, featureVoiceImage: e.target.value })}
+                        placeholder="https://sua-imagem.com/voz.jpg"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Card 2 - Modo Casal Sincronizado
+                      </label>
+                      <input 
+                        type="text"
+                        value={siteConfig.featureCoupleImage || ''}
+                        onChange={(e) => setSiteConfigState({ ...siteConfig, featureCoupleImage: e.target.value })}
+                        placeholder="https://sua-imagem.com/casal.jpg"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Card 3 - Teto de Gastos
+                      </label>
+                      <input 
+                        type="text"
+                        value={siteConfig.featureLimitImage || ''}
+                        onChange={(e) => setSiteConfigState({ ...siteConfig, featureLimitImage: e.target.value })}
+                        placeholder="https://sua-imagem.com/limite.jpg"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Card 4 - Metas e Projetos
+                      </label>
+                      <input 
+                        type="text"
+                        value={siteConfig.featureGoalsImage || ''}
+                        onChange={(e) => setSiteConfigState({ ...siteConfig, featureGoalsImage: e.target.value })}
+                        placeholder="https://sua-imagem.com/metas.jpg"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Card 5 - Gráficos e Relatórios
+                      </label>
+                      <input 
+                        type="text"
+                        value={siteConfig.featureChartsImage || ''}
+                        onChange={(e) => setSiteConfigState({ ...siteConfig, featureChartsImage: e.target.value })}
+                        placeholder="https://sua-imagem.com/graficos.jpg"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Card 6 - Extrato Inteligente
+                      </label>
+                      <input 
+                        type="text"
+                        value={siteConfig.featureExtractImage || ''}
+                        onChange={(e) => setSiteConfigState({ ...siteConfig, featureExtractImage: e.target.value })}
+                        placeholder="https://sua-imagem.com/extrato.jpg"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SEÇÃO CAIXA DE SUGESTÕES RECEBIDAS */}
+              <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-extrabold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                      <Inbox className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      Caixa de Entrada: Sugestões Recebidas pelo Site ({suggestionsList.length})
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Sugestões e mensagens enviadas pelos visitantes através da caixa da página inicial.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSuggestionsList(getSiteSuggestions())}
+                    className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-all"
+                    title="Atualizar lista"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {suggestionsList.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800 text-slate-400 text-xs">
+                    Nenhuma sugestão recebida até o momento.
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                    {suggestionsList.map((sug) => (
+                      <div key={sug.id} className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2 relative group">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-slate-800 dark:text-white text-xs">{sug.name}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">({sug.email})</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {new Date(sug.createdAt).toLocaleString('pt-BR')}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                deleteSiteSuggestion(sug.id);
+                                setSuggestionsList(getSiteSuggestions());
+                              }}
+                              className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
+                              title="Excluir sugestão"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-700 dark:text-slate-300 font-medium whitespace-pre-wrap leading-relaxed bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80">
+                          {sug.message}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                {siteConfigSaved ? (
+                  <span className="text-xs font-black text-emerald-500 flex items-center gap-1.5 animate-fadeIn">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Configurações salvas com sucesso!
+                  </span>
+                ) : <span />}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveSiteConfig(siteConfig);
+                    setSiteConfigSaved(true);
+                    setTimeout(() => setSiteConfigSaved(false), 3000);
+                  }}
+                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  Salvar Links & Mídias
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* USER DETAILS MODAL (FICHA DO USUÁRIO) */}
+      {selectedUserProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden p-6 space-y-6">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-base shadow-md"
+                  style={{ backgroundColor: selectedUserProfile.avatar_color || '#6366f1' }}
+                >
+                  {(selectedUserProfile.full_name || selectedUserProfile.name || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 dark:text-white text-base">Ficha Cadastral do Usuário</h3>
+                  <p className="text-xs text-slate-400 font-mono">ID: {selectedUserProfile.id}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedUserProfile(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Nome Completo</span>
+                  <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">
+                    {selectedUserProfile.full_name || selectedUserProfile.name || 'Não informado'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-800">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-slate-400 block">E-mail</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300 font-mono">
+                      {selectedUserProfile.email || 'Não informado'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-slate-400 block">CPF</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {selectedUserProfile.cpf || 'Pendente'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-800">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-slate-400 block">Celular / WhatsApp</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {selectedUserProfile.phone || 'Pendente'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-slate-400 block">Plano Atual</span>
+                    <span className="font-black text-indigo-600 dark:text-indigo-400 uppercase">
+                      {selectedUserProfile.tier || 'gratis'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/50 dark:border-slate-800">
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Endereço Completo</span>
+                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                    {selectedUserProfile.address || 'Não informado'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Termos de Uso Status */}
+              <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200/80 dark:border-emerald-800/50 space-y-1">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-black text-xs">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Aceite do Termo de Uso e Política de Privacidade
+                </div>
+                <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-medium">
+                  Status: <strong>{selectedUserProfile.terms_accepted ? 'Aceito pelo Usuário' : 'Não Aceito'}</strong>
+                </p>
+                {selectedUserProfile.terms_accepted_at && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                    Data e Hora do Registro: {new Date(selectedUserProfile.terms_accepted_at).toLocaleString('pt-BR')}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setSelectedUserProfile(null)}
+                className="w-full py-2.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-black text-xs rounded-xl hover:opacity-90 transition-all"
+              >
+                Fechar Ficha
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
     </div>

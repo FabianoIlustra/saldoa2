@@ -102,6 +102,13 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
 
   const normalizedTransactions = useMemo(() => {
     return filteredTransactions.map(t => {
+        let effectiveType = t.type;
+        if (t.type !== 'TRANSFER') {
+            const cat = categories.find(c => c.name === t.category);
+            if (cat && cat.type) {
+                effectiveType = cat.type;
+            }
+        }
         if (t.type === 'TRANSFER' && currentFilters?.accounts.length === 1) {
             const accId = currentFilters.accounts[0];
             if (t.accountId === accId) {
@@ -110,9 +117,9 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
                 return { ...t, type: 'INCOME' as const };
             }
         }
-        return t;
+        return { ...t, type: effectiveType };
     });
-  }, [filteredTransactions, currentFilters]);
+  }, [filteredTransactions, currentFilters, categories]);
 
   const monthsCount = useMemo(() => {
     if (!currentFilters) return 1;

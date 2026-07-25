@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Transaction, User, Account, Category } from '../types';
-import { Trash2, Search, ShoppingCart, Home, Car, Utensils, Heart, Briefcase, GraduationCap, Repeat, User as UserIcon, Filter, ArrowUpCircle, ArrowDownCircle, Wallet, Printer, Upload, Edit2, Tag, ArrowRightLeft, ArrowRight as ArrowRightIcon, AlertCircle, X } from 'lucide-react';
+import { Trash2, Search, ShoppingCart, Home, Car, Utensils, Heart, Briefcase, GraduationCap, Repeat, User as UserIcon, Filter, ArrowUpCircle, ArrowDownCircle, Wallet, Printer, Upload, Edit2, Tag, ArrowRightLeft, ArrowRight as ArrowRightIcon, AlertCircle, X, Plus } from 'lucide-react';
 import { format, isWithinInterval, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import FilterBar, { FilterState } from './FilterBar';
@@ -14,6 +14,7 @@ interface TransactionListProps {
   categories: Category[];
   onDelete: (id: string) => void;
   onOpenImporter: () => void;
+  onOpenManualForm?: () => void;
   onEdit?: (transaction: Transaction) => void;
   onBulkDelete?: (ids: string[]) => void;
 }
@@ -33,7 +34,7 @@ const getCategoryIcon = (category: string, type?: string) => {
   }
 };
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, accounts, categories, onDelete, onOpenImporter, onEdit, onBulkDelete }) => {
+const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, accounts, categories, onDelete, onOpenImporter, onOpenManualForm, onEdit, onBulkDelete }) => {
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Transaction | 'createdAt' | 'userName' | 'accountName'; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -328,13 +329,24 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                 </div>
             )}
          </div>
-         <button 
-            onClick={onOpenImporter}
-            className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 dark:shadow-none flex items-center gap-2"
-          >
-            <Upload className="w-4 h-4" />
-            <span>Importar Extrato</span>
-          </button>
+         <div className="flex items-center gap-2">
+            {onOpenManualForm && (
+              <button 
+                onClick={onOpenManualForm}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg shadow-purple-100 dark:shadow-none flex items-center gap-2 active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Lançar</span>
+              </button>
+            )}
+            <button 
+              onClick={onOpenImporter}
+              className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 dark:shadow-none flex items-center gap-2 active:scale-95"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Importar Extrato</span>
+            </button>
+         </div>
       </div>
 
       {/* Desktop Table View */}
@@ -454,9 +466,9 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
         </table>
       </div>
 
-      {/* Mobile Cards View */}
-      <div className="md:hidden space-y-4 print:hidden">
-        <div className="flex items-center justify-between px-2 mb-2">
+      {/* Mobile Compact List View */}
+      <div className="md:hidden space-y-2 print:hidden">
+        <div className="flex items-center justify-between px-2 mb-1">
             <div className="flex items-center gap-2">
                 <input 
                     type="checkbox" 
@@ -469,90 +481,79 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
                     Selecionar Todos
                 </label>
             </div>
+            <span className="text-[10px] font-bold text-slate-400">{filteredTransactions.length} lançamentos</span>
         </div>
         {filteredTransactions.length === 0 ? (
           <div className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
             Nenhum resultado encontrado
           </div>
         ) : (
-          filteredTransactions.map((t) => (
-            <div 
-              key={t.id} 
-              className={`bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden transition-all active:scale-[0.98] ${selectedIds.has(t.id) ? 'ring-2 ring-indigo-500 ring-inset' : ''}`}
-              onClick={() => handleToggleSelect(t.id)}
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-xl ${t.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : t.type === 'TRANSFER' ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-600'}`}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800/80 overflow-hidden shadow-2xs">
+            {filteredTransactions.map((t) => (
+              <div 
+                key={t.id} 
+                className={`px-3 py-2.5 flex items-center justify-between gap-2.5 transition-all hover:bg-slate-50 dark:hover:bg-slate-800/60 active:bg-slate-100/80 dark:active:bg-slate-800 ${selectedIds.has(t.id) ? 'bg-indigo-50/60 dark:bg-indigo-950/30' : ''}`}
+                onClick={() => handleToggleSelect(t.id)}
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                    checked={selectedIds.has(t.id)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      handleToggleSelect(t.id);
+                    }}
+                  />
+                  <div className={`p-1.5 rounded-lg shrink-0 ${t.type === 'INCOME' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' : t.type === 'TRANSFER' ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'}`}>
                     {getCategoryIcon(t.category, t.type)}
                   </div>
-                  <div>
-                    <h4 className="font-black text-slate-900 dark:text-white line-clamp-1 text-sm">{t.description}</h4>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.category} • {format(parseISO(t.date), 'dd/MM/yyyy')}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="font-bold text-slate-900 dark:text-white truncate text-xs">{t.description}</h4>
+                      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getUserColor(t.userId) }} title={users.find(u => u.id === t.userId)?.name} />
+                    </div>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+                      {format(parseISO(t.date), 'dd/MM/yy')} • {t.category} • {t.type === 'TRANSFER' ? `${getAccountName(t.accountId)} ➔ ${getAccountName(t.toAccountId || '')}` : getAccountName(t.accountId)}
+                    </p>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="checkbox" 
-                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                      checked={selectedIds.has(t.id)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleToggleSelect(t.id);
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
 
-              <div className="flex justify-between items-end">
-                <div className="flex items-center gap-2">
-                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getUserColor(t.userId) }} />
-                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                     {t.type === 'TRANSFER' ? (
-                        <span className="flex items-center gap-1">
-                           {getAccountName(t.accountId)} <ArrowRightIcon className="w-2 h-2" /> {getAccountName(t.toAccountId || '')}
-                        </span>
-                     ) : (
-                        getAccountName(t.accountId)
-                     )}
-                   </span>
-                </div>
-                <div className="flex flex-col items-end">
-                   <p className={`text-lg font-black ${
-                      t.type === 'INCOME' ? 'text-emerald-500' : 
-                      t.type === 'EXPENSE' ? 'text-rose-500' : 'text-blue-500'
-                   }`}>
-                      {t.type === 'INCOME' ? '+' : 
-                       t.type === 'EXPENSE' ? '-' : ''} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
-                   </p>
-                   <div className="flex gap-4 mt-2">
-                      {onEdit && (
-                          <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onEdit(t);
-                              }}
-                              className="text-[10px] font-black uppercase tracking-widest text-indigo-600"
-                          >
-                              Editar
-                          </button>
-                      )}
+                <div className="flex items-center gap-2 shrink-0">
+                  <p className={`text-xs font-black whitespace-nowrap ${
+                    t.type === 'INCOME' ? 'text-emerald-500' : 
+                    t.type === 'EXPENSE' ? 'text-rose-500' : 'text-blue-500'
+                  }`}>
+                    {t.type === 'INCOME' ? '+' : t.type === 'EXPENSE' ? '-' : ''} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(t.amount)}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    {onEdit && (
                       <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirmId(t.id);
-                          }}
-                          className="text-[10px] font-black uppercase tracking-widest text-rose-500"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(t);
+                        }}
+                        className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
+                        title="Editar"
                       >
-                          Excluir
+                        <Edit2 className="w-3 h-3" />
                       </button>
-                   </div>
+                    )}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirmId(t.id);
+                      }}
+                      className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                      title="Excluir"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
