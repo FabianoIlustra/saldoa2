@@ -5,6 +5,10 @@ export type RecurrenceType = 'NONE' | 'MONTHLY';
 export interface User {
   id: string;
   name: string;
+  fullName?: string;
+  cpf?: string;
+  phone?: string;
+  address?: string;
   avatarColor: string;
   avatarUrl?: string;
   avatarEmoji?: string;

@@ -515,6 +515,18 @@ const AppContent: React.FC = () => {
                 >
                   {activeTab === 'settings' ? <Home className="w-5 h-5" /> : <Settings className="w-5 h-5" />}
                 </button>
+                <button 
+                  onClick={() => {
+                    if (confirm('Tem certeza que deseja sair da conta?')) {
+                      signOut();
+                      navigate('/');
+                    }
+                  }} 
+                  className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 transition-all active:scale-95 shadow-2xs"
+                  title="Sair da conta"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
               </div>
             </div>
           </div>
@@ -1086,6 +1098,11 @@ const AppContent: React.FC = () => {
           onSave={(updates) => {
             updateUserProfile(updates);
             showToast('Perfil atualizado com sucesso!');
+          }}
+          onLogout={() => {
+            setIsEditProfileOpen(false);
+            signOut();
+            navigate('/');
           }}
         />
       )}
