@@ -267,7 +267,7 @@ const AppContent: React.FC = () => {
   
   // Protected Route Logic
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/login" replace />;
   }
 
   // Use currentUserProfile or fallback
@@ -278,36 +278,18 @@ const AppContent: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
       <aside className="hidden md:flex w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex-col sticky top-0 h-screen shadow-sm z-30 transition-colors print:hidden">
         <div className="p-8 flex-1">
-          <div className="flex items-center justify-between mb-12">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 dark:shadow-none relative overflow-hidden group">
+          <div className="flex items-center mb-12">
+            <div className="flex items-center gap-2.5 shrink-0">
+              <div className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center shrink-0 relative overflow-hidden group">
                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-indigo-700"></div>
-                <svg viewBox="0 0 24 24" className="w-6 h-6 text-white relative z-10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  <text x="12" y="17" textAnchor="middle" fill="currentColor" stroke="none" fontSize="10" fontWeight="bold">$</text>
+                <svg viewBox="0 0 24 24" className="w-6 h-6 text-white relative z-10" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9.5L12 2.5L21 9.5V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V9.5Z" />
+                  <text x="12" y="16.5" textAnchor="middle" fill="currentColor" stroke="none" fontSize="9.5" fontWeight="900" fontFamily="sans-serif">$</text>
                 </svg>
               </div>
-              <span className="font-extrabold text-xl tracking-tighter block leading-none">Saldo A2</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button 
-                onClick={() => {
-                  setUnreadCount(0);
-                  setIsRemindersOpen(true);
-                }} 
-                className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all relative"
-                title="Lembretes de amanhã"
-              >
-                <Bell className="w-5 h-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-pulse">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-              <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all" title="Mudar cor da tela">
-                {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-              </button>
+              <span className="font-extrabold text-xl sm:text-2xl tracking-tight block leading-none text-slate-900 dark:text-white whitespace-nowrap">
+                Saldo A<span className="text-indigo-600 dark:text-indigo-400">2</span>
+              </span>
             </div>
           </div>
 
@@ -353,19 +335,23 @@ const AppContent: React.FC = () => {
               <div>
                 <p className="text-[9px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">Plano Atual</p>
                 <p className="text-sm font-black text-indigo-900 dark:text-indigo-200 uppercase">
-                  {currentUserProfile?.tier === 'premium' ? '👑 Premium' :
+                  {currentUserProfile?.isTrial ? '👑 Teste Premium' :
+                   currentUserProfile?.tier === 'premium' ? '👑 Premium' :
                    currentUserProfile?.tier === 'medio' ? '⭐ Médio' :
                    currentUserProfile?.tier === 'basico' ? '✨ Básico' : '🆓 Grátis'}
                 </p>
+                {currentUserProfile?.isTrial && (
+                  <p className="text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
+                    Restam {currentUserProfile.trialDaysRemaining ?? 7} dias
+                  </p>
+                )}
               </div>
-              {currentUserProfile?.tier !== 'premium' && (
-                <button 
-                  onClick={() => setIsSubscriptionOpen(true)}
-                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm transition-all animate-pulse"
-                >
-                  Upgrade
-                </button>
-              )}
+              <button 
+                onClick={() => setIsSubscriptionOpen(true)}
+                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm transition-all animate-pulse"
+              >
+                {currentUserProfile?.isTrial ? 'Garantir' : 'Upgrade'}
+              </button>
             </div>
           </div>
 
@@ -392,22 +378,26 @@ const AppContent: React.FC = () => {
           <div className="md:hidden flex flex-col gap-3 w-full py-1">
             {/* Mobile Row 1: Brand + Plano Badge */}
             <div className="flex items-center justify-between w-full gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 bg-indigo-600 rounded-xl flex items-center justify-center shadow-sm relative overflow-hidden shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center relative overflow-hidden shrink-0">
                   <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-indigo-700"></div>
-                  <svg viewBox="0 0 24 24" className="w-4 h-4 text-white relative z-10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <text x="12" y="17" textAnchor="middle" fill="currentColor" stroke="none" fontSize="10" fontWeight="bold">$</text>
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 text-white relative z-10" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 9.5L12 2.5L21 9.5V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V9.5Z" />
+                    <text x="12" y="16.5" textAnchor="middle" fill="currentColor" stroke="none" fontSize="9.5" fontWeight="900" fontFamily="sans-serif">$</text>
                   </svg>
                 </div>
-                <span className="font-extrabold text-base tracking-tight text-indigo-950 dark:text-indigo-100">Saldo A2</span>
+                <span className="font-black text-lg sm:text-xl tracking-tight text-indigo-950 dark:text-indigo-100 whitespace-nowrap">
+                  Saldo A<span className="text-indigo-600 dark:text-indigo-400">2</span>
+                </span>
               </div>
 
               {/* Plan Badge + Upgrade */}
               <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 px-2.5 py-1 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 shadow-2xs">
                 <span className="text-[10px] uppercase font-black text-slate-400">Plano</span>
                 <span className="text-indigo-600 dark:text-indigo-400 uppercase font-black text-xs">
-                  {currentUserProfile?.tier || 'gratis'}
+                  {currentUserProfile?.isTrial 
+                    ? `👑 Teste (${currentUserProfile.trialDaysRemaining ?? 7}d)`
+                    : (currentUserProfile?.tier || 'gratis')}
                 </span>
                 <button 
                   type="button"
@@ -605,7 +595,9 @@ const AppContent: React.FC = () => {
               <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 px-3 py-1.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 shadow-xs">
                 <span className="text-[10px] uppercase font-black text-slate-400">Plano</span>
                 <span className="text-indigo-600 dark:text-indigo-400 uppercase font-black text-xs">
-                  {currentUserProfile?.tier || 'gratis'}
+                  {currentUserProfile?.isTrial 
+                    ? `👑 Teste Premium (${currentUserProfile.trialDaysRemaining ?? 7}d)`
+                    : (currentUserProfile?.tier || 'gratis')}
                 </span>
                 <button 
                   type="button"
@@ -656,6 +648,55 @@ const AppContent: React.FC = () => {
             </div>
           </div>
         </header>
+
+        {/* Global Trial Status Banner */}
+        {currentUserProfile?.isTrial && (
+          <div className="mb-6 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-4 md:p-5 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl border border-purple-800/50 print:hidden">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 bg-amber-400/20 text-amber-300 rounded-2xl flex items-center justify-center shrink-0 border border-amber-400/30">
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md uppercase tracking-wider">7 Dias de Teste Grátis</span>
+                  <span className="text-xs text-purple-200 font-extrabold">Plano Premium Libero</span>
+                </div>
+                <p className="text-xs text-slate-200 mt-1">
+                  Restam <strong className="text-amber-300 font-black">{currentUserProfile.trialDaysRemaining ?? 7} dias</strong> do seu período de teste. Aproveite todas as ferramentas de IA e robô de voz.
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsSubscriptionOpen(true)}
+              className="w-full md:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all active:scale-95 shrink-0 flex items-center justify-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Garantir Plano Definitivo</span>
+            </button>
+          </div>
+        )}
+
+        {!currentUserProfile?.isTrial && !currentUserProfile?.isPaid && currentUserProfile?.tier === 'gratis' && (
+          <div className="mb-6 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 p-4 md:p-5 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 text-amber-900 dark:text-amber-200 shadow-sm print:hidden">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/50 rounded-2xl flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400 font-black">
+                ⌛
+              </div>
+              <div>
+                <h4 className="text-sm font-black">Seu teste Premium de 7 dias expirou!</h4>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+                  Seu usuário foi ajustado para o Plano Grátis. Escolha um dos planos para liberar o Consultor IA, robô A2 e recursos em grupo.
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setIsSubscriptionOpen(true)}
+              className="w-full md:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center"
+            >
+              Assinar um Plano
+            </button>
+          </div>
+        )}
 
         {activeTab === 'dashboard' && (
           <Dashboard 

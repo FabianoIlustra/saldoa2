@@ -14,6 +14,11 @@ export interface User {
   tier?: 'gratis' | 'basico' | 'medio' | 'premium';
   role?: 'user' | 'admin';
   email?: string;
+  createdAt?: string;
+  trialEndsAt?: string;
+  isTrial?: boolean;
+  trialDaysRemaining?: number;
+  isPaid?: boolean;
 }
 
 export interface Account {
