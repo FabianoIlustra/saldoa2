@@ -119,14 +119,27 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, users, 
     const expense = filteredTransactions
       .filter(t => t.type === 'EXPENSE')
       .reduce((acc, t) => acc + t.amount, 0);
+
+    let accountTotal = 0;
+    if (accounts && accounts.length > 0) {
+      if (currentFilters?.accounts && currentFilters.accounts.length > 0) {
+        accountTotal = accounts
+          .filter(a => currentFilters.accounts.includes(a.id))
+          .reduce((acc, a) => acc + a.currentBalance, 0);
+      } else {
+        accountTotal = accounts.reduce((acc, a) => acc + a.currentBalance, 0);
+      }
+    } else {
+      accountTotal = income - expense;
+    }
     
     // Fix floating point precision
     return {
       income: Math.round(income * 100) / 100,
       expense: Math.round(expense * 100) / 100,
-      total: Math.round((income - expense) * 100) / 100
+      total: Math.round(accountTotal * 100) / 100
     };
-  }, [filteredTransactions]);
+  }, [filteredTransactions, accounts, currentFilters]);
 
   const handlePrint = () => {
     setIsPrintModalOpen(true);
