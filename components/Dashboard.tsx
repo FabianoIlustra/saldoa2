@@ -58,9 +58,18 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, []);
 
   const totalBalance = useMemo(() => {
-    const total = accounts.reduce((acc, a) => acc + a.currentBalance, 0);
-    return Math.round(total * 100) / 100;
-  }, [accounts]);
+    if (accounts.length > 0) {
+      const total = accounts.reduce((acc, a) => acc + a.currentBalance, 0);
+      return Math.round(total * 100) / 100;
+    }
+    const income = transactions
+      .filter(t => !t.isTemplate && t.type === 'INCOME')
+      .reduce((acc, t) => acc + t.amount, 0);
+    const expense = transactions
+      .filter(t => !t.isTemplate && t.type === 'EXPENSE')
+      .reduce((acc, t) => acc + t.amount, 0);
+    return Math.round((income - expense) * 100) / 100;
+  }, [accounts, transactions]);
   
   // Monthly calculations
   const { monthlyIncome, monthlyExpense } = useMemo(() => {
@@ -480,7 +489,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2 text-blue-900 dark:text-blue-200 text-xs sm:text-sm font-extrabold capitalize">
                 <Heart className="w-4 h-4 fill-blue-600/30 text-blue-700 dark:text-blue-400" />
-                <span>Saldo do mês · {periodLabel}</span>
+                <span>Saldo Total em Conta</span>
               </div>
 
               {/* Action buttons (+ and Mic) with soft style */}
@@ -504,10 +513,10 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             <div className="mb-4">
               <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-900 dark:text-white mb-1">
-                {formatCurrency(netMonthlyBalance)}
+                {formatCurrency(totalBalance)}
               </h2>
               <p className="text-slate-600 dark:text-slate-400 text-xs font-semibold">
-                {monthlyTransactionsCount} {monthlyTransactionsCount === 1 ? 'transação neste mês' : 'transações neste mês'}
+                {monthlyTransactionsCount} {monthlyTransactionsCount === 1 ? 'transação neste mês' : 'transações neste mês'} · {periodLabel}
               </p>
             </div>
 
