@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Camera, Check, User as UserIcon, Trash2, LogOut, Mail, Phone, CreditCard, MapPin, DollarSign, ShieldCheck } from 'lucide-react';
+import { X, Camera, Check, User as UserIcon, Trash2, LogOut, Mail, Phone, CreditCard, MapPin, DollarSign, ShieldCheck, Loader2 } from 'lucide-react';
 import { User } from '../types';
+import { supabase } from '../services/supabase';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -12,6 +13,53 @@ interface EditProfileModalProps {
 
 const EMOJI_OPTIONS = ['👤', '🦊', '🚀', '💎', '🦁', '👑', '🦄', '⚡', '🎨', '🌟', '💼', '🎯', '🐱', '🐼', '🔥', '🏆', '⚽', '🎸', '🏖️', '☕'];
 const COLOR_OPTIONS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#06b6d4', '#64748b'];
+
+// Helper to compress/resize image to max 300x300 JPEG to avoid heavy uploads
+const compressImage = (file: File, maxWidth = 300, maxHeight = 300, quality = 0.82): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas context unavailable'));
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Blob creation failed'));
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
 
 export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   isOpen,
@@ -31,6 +79,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [avatarEmoji, setAvatarEmoji] = useState<string | undefined>(undefined);
   const [avatarColor, setAvatarColor] = useState('#6366f1');
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (userProfile) {
@@ -68,21 +117,58 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     setPhone(value);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Por favor escolha uma imagem menor que 5MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Por favor escolha uma imagem menor que 10MB.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setAvatarUrl(reader.result as string);
-      setAvatarEmoji(undefined); // Clear emoji if photo chosen
-    };
-    reader.readAsDataURL(file);
+    try {
+      setIsUploading(true);
+      // Compress image client-side to max 300x300 (~30KB)
+      const compressedBlob = await compressImage(file, 300, 300, 0.82);
+      const userId = userProfile?.id || 'avatar';
+      const fileExt = 'jpg';
+      const fileName = `${userId}-${Date.now()}.${fileExt}`;
+      const compressedFile = new File([compressedBlob], fileName, { type: 'image/jpeg' });
+
+      // Try uploading to Supabase Storage 'avatars' bucket
+      const { data, error } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, compressedFile, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (!error && data?.path) {
+        const { data: publicData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(data.path);
+
+        if (publicData?.publicUrl) {
+          setAvatarUrl(publicData.publicUrl);
+          setAvatarEmoji(undefined);
+          setIsUploading(false);
+          return;
+        }
+      }
+
+      // Fallback: If bucket is not created or permissions error, convert compressed blob to small Data URL
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatarUrl(reader.result as string);
+        setAvatarEmoji(undefined);
+        setIsUploading(false);
+      };
+      reader.readAsDataURL(compressedFile);
+
+    } catch (err) {
+      console.error('Erro ao processar avatar:', err);
+      setIsUploading(false);
+    }
   };
 
   const handleRemovePhoto = () => {
@@ -186,15 +272,20 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
               <label 
                 htmlFor="avatar-upload"
-                className="absolute bottom-0 right-0 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full cursor-pointer shadow-md transition-transform active:scale-90"
+                className="absolute bottom-0 right-0 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full cursor-pointer shadow-md transition-transform active:scale-90 flex items-center justify-center"
                 title="Alterar foto"
               >
-                <Camera className="w-3.5 h-3.5" />
+                {isUploading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Camera className="w-3.5 h-3.5" />
+                )}
                 <input 
                   id="avatar-upload" 
                   type="file" 
                   accept="image/*" 
                   onChange={handleFileChange} 
+                  disabled={isUploading}
                   className="hidden"
                 />
               </label>
