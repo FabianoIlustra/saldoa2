@@ -295,17 +295,6 @@ const AppContent: React.FC = () => {
     return transactions;
   }, [transactions, isCoupleMode, user?.id]);
 
-  if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
-  
-  // Protected Route Logic
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // Use currentUserProfile or fallback
-  const displayUser = currentUserProfile || { id: user.id, name: user.email?.split('@')[0] || 'User', avatarColor: '#6366f1' };
-  const usersList = users.length > 0 ? users : [displayUser]; // For components that expect a list
-
   const activeUserTier = currentUserProfile?.role === 'admin' || currentUserProfile?.isTrial 
     ? 'premium' 
     : (currentUserProfile?.tier || 'gratis');
@@ -329,6 +318,17 @@ const AppContent: React.FC = () => {
       hasReceiptPhoto: false,
     };
   }, [activeUserTier]);
+
+  if (authLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
+  
+  // Protected Route Logic
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Use currentUserProfile or fallback
+  const displayUser = currentUserProfile || { id: user.id, name: user.email?.split('@')[0] || 'User', avatarColor: '#6366f1' };
+  const usersList = users.length > 0 ? users : [displayUser]; // For components that expect a list
 
   const isTabLocked = (tabId: string) => {
     if (currentUserProfile?.role === 'admin' || currentUserProfile?.isTrial) return false;
