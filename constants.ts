@@ -11,7 +11,8 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: '7', name: 'Saúde', type: 'EXPENSE', color: '#ef4444' },
   { id: '8', name: 'Investimentos', type: 'EXPENSE', color: '#06b6d4' },
   { id: '9', name: 'Outros', type: 'EXPENSE', color: '#94a3b8' },
-  { id: '10', name: 'Renda Extra', type: 'INCOME', color: '#8b5cf6' }
+  { id: '10', name: 'Renda Extra', type: 'INCOME', color: '#8b5cf6' },
+  { id: '11', name: 'Pró-labore', type: 'INCOME', color: '#10b981' }
 ];
 
 export const CATEGORIES = DEFAULT_CATEGORIES.map(c => c.name);
