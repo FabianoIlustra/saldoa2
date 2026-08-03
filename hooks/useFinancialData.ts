@@ -1278,6 +1278,9 @@ export const useFinancialData = () => {
     }
 
     const dbUpdates: any = {};
+    if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
+    if (updates.avatarEmoji !== undefined) dbUpdates.avatar_emoji = updates.avatarEmoji;
+    if (updates.avatarColor !== undefined) dbUpdates.avatar_color = updates.avatarColor;
     if (updates.spendingCeiling !== undefined) dbUpdates.spending_ceiling = updates.spendingCeiling;
     if (updates.name !== undefined) {
         dbUpdates.name = updates.name;
