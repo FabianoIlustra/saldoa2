@@ -30,6 +30,19 @@ import { isLocalModeEnabled } from './services/geminiService';
 
 type TabType = 'dashboard' | 'transactions' | 'cashflow' | 'validation' | 'parcelados' | 'goals' | 'ai' | 'settings' | 'scanner' | 'visuals' | 'admin';
 
+const formatDisplayName = (rawName?: string) => {
+  if (!rawName) return 'Usuário';
+  const trimmed = rawName.trim();
+  if (trimmed === trimmed.toUpperCase() && trimmed.length > 1) {
+    return trimmed
+      .toLowerCase()
+      .split(' ')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
+  return trimmed;
+};
+
 const LockedFeatureCard: React.FC<{ featureName: string; onUpgrade: () => void }> = ({
   featureName,
   onUpgrade
@@ -295,6 +308,16 @@ const AppContent: React.FC = () => {
     return transactions;
   }, [transactions, isCoupleMode, user?.id]);
 
+  const isLinkedCouple = Boolean(currentUserProfile?.coupleId || (users && users.length > 1));
+  const isPremiumOrAdmin = currentUserProfile?.tier === 'premium' || currentUserProfile?.role === 'admin';
+
+  // Automatically default system to Couple Mode if user is linked in a couple/family account
+  useEffect(() => {
+    if (isLinkedCouple) {
+      setIsCoupleMode(true);
+    }
+  }, [isLinkedCouple]);
+
   const activeUserTier = currentUserProfile?.role === 'admin' || currentUserProfile?.isTrial 
     ? 'premium' 
     : (currentUserProfile?.tier || 'gratis');
@@ -420,12 +443,14 @@ const AppContent: React.FC = () => {
                   </p>
                 )}
               </div>
-              <button 
-                onClick={() => setIsSubscriptionOpen(true)}
-                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm transition-all animate-pulse"
-              >
-                {currentUserProfile?.isTrial ? 'Garantir' : 'Upgrade'}
-              </button>
+              {!isPremiumOrAdmin && (
+                <button 
+                  onClick={() => setIsSubscriptionOpen(true)}
+                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm transition-all animate-pulse"
+                >
+                  {currentUserProfile?.isTrial ? 'Garantir' : 'Upgrade'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -473,15 +498,17 @@ const AppContent: React.FC = () => {
                     ? `👑 Teste (${currentUserProfile.trialDaysRemaining ?? 7}d)`
                     : (currentUserProfile?.tier || 'gratis')}
                 </span>
-                <button 
-                  type="button"
-                  onClick={() => setIsSubscriptionOpen(true)}
-                  className="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[10px] font-extrabold uppercase tracking-wider rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1 shrink-0"
-                  title="Clique para ver planos e fazer upgrade"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>Upgrade</span>
-                </button>
+                {!isPremiumOrAdmin && (
+                  <button 
+                    type="button"
+                    onClick={() => setIsSubscriptionOpen(true)}
+                    className="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[10px] font-extrabold uppercase tracking-wider rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1 shrink-0"
+                    title="Clique para ver planos e fazer upgrade"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Upgrade</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -536,6 +563,26 @@ const AppContent: React.FC = () => {
                         >
                           <Users className="w-3.5 h-3.5" />
                         </span>
+                        {isLinkedCouple && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const nextMode = !isCoupleMode;
+                              setIsCoupleMode(nextMode);
+                              showToast(nextMode ? 'Modo Casal ativado!' : 'Modo Individual ativado!');
+                            }}
+                            className={`px-1.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-0.5 transition-all border shrink-0 ${
+                              isCoupleMode
+                                ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
+                                : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                            }`}
+                            title={isCoupleMode ? "Modo Casal Ativo. Clique para alternar" : "Modo Individual Ativo. Clique para alternar"}
+                          >
+                            <Heart className={`w-3 h-3 ${isCoupleMode ? 'fill-rose-500 text-rose-500' : 'text-slate-400'}`} />
+                            <span>{isCoupleMode ? 'Casal' : 'Indiv.'}</span>
+                          </button>
+                        )}
                       </h1>
                     </div>
                   </button>
@@ -595,58 +642,84 @@ const AppContent: React.FC = () => {
 
           {/* Desktop Header Structure */}
           <div className="hidden md:flex items-center justify-between w-full">
-            <div>
+            <div className="flex items-center gap-4">
               {activeTab === 'dashboard' ? (
-                <button 
-                  onClick={() => setIsEditProfileOpen(true)}
-                  className="flex items-center gap-3 p-1 -ml-1 rounded-2xl hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition-all text-left group"
-                  title="Clique para editar seu perfil"
-                >
-                  <div className="relative shrink-0">
-                    {currentUserProfile?.avatarUrl ? (
-                      <img 
-                        src={currentUserProfile.avatarUrl} 
-                        alt="Avatar" 
-                        className="w-12 h-12 rounded-full object-cover ring-2 ring-purple-500/30 group-hover:ring-purple-500 shadow-sm"
-                      />
-                    ) : currentUserProfile?.avatarEmoji ? (
-                      <div 
-                        className="w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-sm ring-2 ring-purple-500/20 group-hover:ring-purple-500 transition-all"
-                        style={{ backgroundColor: currentUserProfile?.avatarColor || '#6366f1' }}
-                      >
-                        {currentUserProfile.avatarEmoji}
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setIsEditProfileOpen(true)}
+                    className="flex items-center gap-3 p-1 -ml-1 rounded-2xl hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition-all text-left group"
+                    title="Clique para editar seu perfil"
+                  >
+                    <div className="relative shrink-0">
+                      {currentUserProfile?.avatarUrl ? (
+                        <img 
+                          src={currentUserProfile.avatarUrl} 
+                          alt="Avatar" 
+                          className="w-12 h-12 rounded-full object-cover ring-2 ring-purple-500/30 group-hover:ring-purple-500 shadow-sm"
+                        />
+                      ) : currentUserProfile?.avatarEmoji ? (
+                        <div 
+                          className="w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-sm ring-2 ring-purple-500/20 group-hover:ring-purple-500 transition-all"
+                          style={{ backgroundColor: currentUserProfile?.avatarColor || '#6366f1' }}
+                        >
+                          {currentUserProfile.avatarEmoji}
+                        </div>
+                      ) : (
+                        <div 
+                          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-black text-lg shadow-sm ring-2 ring-purple-500/20 group-hover:ring-purple-500 transition-all"
+                          style={{ backgroundColor: currentUserProfile?.avatarColor || '#6366f1' }}
+                        >
+                          {(currentUserProfile?.name || displayUser.name || 'U').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-purple-600 text-white rounded-full flex items-center justify-center shadow-xs">
+                        <Edit2 className="w-2.5 h-2.5" />
                       </div>
-                    ) : (
-                      <div 
-                        className="w-12 h-12 rounded-full flex items-center justify-center text-white font-black text-lg shadow-sm ring-2 ring-purple-500/20 group-hover:ring-purple-500 transition-all"
-                        style={{ backgroundColor: currentUserProfile?.avatarColor || '#6366f1' }}
-                      >
-                        {(currentUserProfile?.name || displayUser.name || 'U').charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-purple-600 text-white rounded-full flex items-center justify-center shadow-xs">
-                      <Edit2 className="w-2.5 h-2.5" />
                     </div>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 block">
-                      Bem-vindo(a),
-                    </span>
-                    <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors flex items-center gap-2">
-                      <span>{currentUserProfile?.name || displayUser.name}</span>
-                      <span 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsInviteModalOpen(true);
-                        }}
-                        className="p-1 rounded-lg bg-purple-100/70 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900 transition-all flex items-center justify-center shrink-0 border border-purple-200/60 dark:border-purple-800/60"
-                        title="Usuários Vinculados & Modo Família"
-                      >
-                        <Users className="w-3.5 h-3.5" />
+                    <div>
+                      <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 block">
+                        Bem-vindo(a),
                       </span>
-                    </h1>
-                  </div>
-                </button>
+                      <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors flex items-center gap-2">
+                        <span>{currentUserProfile?.name || displayUser.name}</span>
+                        <span 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsInviteModalOpen(true);
+                          }}
+                          className="p-1 rounded-lg bg-purple-100/70 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900 transition-all flex items-center justify-center shrink-0 border border-purple-200/60 dark:border-purple-800/60"
+                          title="Usuários Vinculados & Modo Família"
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                        </span>
+                      </h1>
+                    </div>
+                  </button>
+
+                  {/* Discrete button to toggle Couple Mode ON/OFF */}
+                  {isLinkedCouple && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const nextMode = !isCoupleMode;
+                        setIsCoupleMode(nextMode);
+                        showToast(nextMode ? 'Modo Casal ativado!' : 'Modo Individual ativado!');
+                      }}
+                      className={`px-3 py-1.5 rounded-2xl text-xs font-bold transition-all border flex items-center gap-1.5 shadow-xs shrink-0 ${
+                        isCoupleMode
+                          ? 'bg-rose-50 text-rose-600 border-rose-200/80 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800'
+                          : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                      }`}
+                      title={isCoupleMode ? "Modo Casal Ativo (Clique para visão individual)" : "Modo Individual Ativo (Clique para visão casal)"}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${isCoupleMode ? 'fill-rose-500 text-rose-500' : 'text-slate-400'}`} />
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider">
+                        {isCoupleMode ? 'Modo Casal ON' : 'Modo Casal OFF'}
+                      </span>
+                    </button>
+                  )}
+                </div>
               ) : (
                 <>
                   <h1 className="text-4xl font-black tracking-tight">
@@ -673,15 +746,17 @@ const AppContent: React.FC = () => {
                     ? `👑 Teste Premium (${currentUserProfile.trialDaysRemaining ?? 7}d)`
                     : (currentUserProfile?.tier || 'gratis')}
                 </span>
-                <button 
-                  type="button"
-                  onClick={() => setIsSubscriptionOpen(true)}
-                  className="ml-1 px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[10px] font-extrabold uppercase tracking-wider rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1"
-                  title="Clique para ver planos e fazer upgrade"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>Upgrade</span>
-                </button>
+                {!isPremiumOrAdmin && (
+                  <button 
+                    type="button"
+                    onClick={() => setIsSubscriptionOpen(true)}
+                    className="ml-1 px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[10px] font-extrabold uppercase tracking-wider rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1"
+                    title="Clique para ver planos e fazer upgrade"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Upgrade</span>
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
