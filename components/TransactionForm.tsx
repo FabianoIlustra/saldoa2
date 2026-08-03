@@ -1,6 +1,6 @@
 
 // Force sync
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Category, TransactionType, RecurrenceType, User, Account, Transaction } from '../types';
 import { X, Plus, Repeat, User as UserIcon, Check, CreditCard, ArrowRightLeft } from 'lucide-react';
 
@@ -40,6 +40,30 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
   const [isJoint, setIsJoint] = useState(initialData?.isJoint ?? true);
   const [installments, setInstallments] = useState(1);
 
+  const handleTypeChange = (newType: TransactionType) => {
+    setType(newType);
+    if (newType === 'TRANSFER') {
+      setCategory('Transferência');
+    } else {
+      const validCategories = categories.filter(cat => !cat.type || cat.type === newType);
+      const isStillValid = validCategories.some(cat => cat.name === category);
+      if (!isStillValid && validCategories.length > 0) {
+        setCategory(validCategories[0].name);
+      }
+    }
+  };
+
+  const availableCategories = useMemo(() => {
+    if (type === 'TRANSFER') return [{ id: 'transf', name: 'Transferência' }];
+    const filtered = categories.filter(cat => !cat.type || cat.type === type);
+    if (category && !filtered.some(cat => cat.name === category)) {
+      const existing = categories.find(cat => cat.name === category);
+      if (existing) return [existing, ...filtered];
+      return [{ id: 'custom', name: category }, ...filtered];
+    }
+    return filtered.length > 0 ? filtered : categories;
+  }, [categories, type, category]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!description || !amount || !selectedAccountId) return;
@@ -78,24 +102,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
           <div className="flex p-1.5 bg-slate-100 dark:bg-slate-800 rounded-2xl">
             <button
               type="button"
-              onClick={() => setType('INCOME')}
+              onClick={() => handleTypeChange('INCOME')}
               className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${type === 'INCOME' ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-400'}`}
             >
               Receita
             </button>
             <button
               type="button"
-              onClick={() => setType('EXPENSE')}
+              onClick={() => handleTypeChange('EXPENSE')}
               className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${type === 'EXPENSE' ? 'bg-white shadow-sm text-rose-600' : 'text-slate-400'}`}
             >
               Despesa
             </button>
             <button
               type="button"
-              onClick={() => {
-                setType('TRANSFER');
-                setCategory('Transferência');
-              }}
+              onClick={() => handleTypeChange('TRANSFER')}
               className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${type === 'TRANSFER' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
             >
               Transf.
@@ -199,9 +220,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
             >
-              {categories
-                .filter(cat => !cat.type || cat.type === type)
-                .map(cat => (
+              {availableCategories.map(cat => (
                 <option key={cat.id} value={cat.name}>{cat.name}</option>
               ))}
             </select>

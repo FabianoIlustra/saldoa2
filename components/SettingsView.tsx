@@ -179,6 +179,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [editRecType, setEditRecType] = useState<TransactionType>('EXPENSE');
   const [editRecCategory, setEditRecCategory] = useState('');
   const [editRecDay, setEditRecDay] = useState('');
+  const [editRecFrequencyType, setEditRecFrequencyType] = useState<'MONTHLY' | 'DAYS'>('MONTHLY');
+  const [editRecIntervalDays, setEditRecIntervalDays] = useState('15');
   const [editRecAccount, setEditRecAccount] = useState('');
   const [editRecToAccount, setEditRecToAccount] = useState('');
   const [editRecIsJoint, setEditRecIsJoint] = useState(true);
@@ -259,7 +261,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     setEditRecAmount(rec.amount.toString());
     setEditRecType(rec.type);
     setEditRecCategory(rec.category);
-    setEditRecDay(rec.dayOfMonth.toString());
+    setEditRecDay(rec.dayOfMonth ? rec.dayOfMonth.toString() : '5');
+    setEditRecFrequencyType(rec.frequencyType || (rec.intervalDays ? 'DAYS' : 'MONTHLY'));
+    setEditRecIntervalDays(rec.intervalDays ? rec.intervalDays.toString() : '15');
     setEditRecAccount(rec.accountId);
     setEditRecToAccount(rec.toAccountId || '');
     setEditRecIsJoint(rec.isJoint);
@@ -305,13 +309,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     if (recurringToEdit && editRecDesc && editRecAmount && editRecAccount) {
       if (editRecType === 'TRANSFER' && !editRecToAccount) return;
 
+      const frequencyType = editRecFrequencyType;
+      const intervalDays = editRecFrequencyType === 'DAYS' ? Math.max(1, parseInt(editRecIntervalDays) || 15) : undefined;
+
       onUpdateRecurring({
         ...recurringToEdit,
         description: editRecDesc,
         amount: parseFloat(editRecAmount),
         type: editRecType,
         category: editRecType === 'TRANSFER' ? 'Transferência' : editRecCategory,
-        dayOfMonth: parseInt(editRecDay),
+        dayOfMonth: parseInt(editRecDay) || 1,
+        frequencyType,
+        intervalDays,
         accountId: editRecAccount,
         toAccountId: editRecType === 'TRANSFER' ? editRecToAccount : undefined,
         isJoint: editRecIsJoint,
