@@ -891,6 +891,93 @@ export const useFinancialData = () => {
     setInstallmentGroups(prev => prev.filter(g => g.id !== id));
   };
 
+  const updateInstallmentGroup = async (group: Partial<InstallmentGroup> & { id: string }) => {
+    const payload: any = {};
+    if (group.accountId !== undefined) payload.account_id = group.accountId;
+    if (group.description !== undefined) payload.description = group.description;
+    if (group.totalAmount !== undefined) payload.total_amount = group.totalAmount;
+    if (group.installmentAmount !== undefined) payload.installment_amount = group.installmentAmount;
+    if (group.totalInstallments !== undefined) payload.total_installments = group.totalInstallments;
+    if (group.startDate !== undefined) payload.start_date = group.startDate;
+    if (group.intervalDays !== undefined) payload.interval_days = group.intervalDays;
+    if (group.category !== undefined) payload.category = group.category;
+    if (group.type !== undefined) payload.type = group.type;
+    if (group.isJoint !== undefined) payload.is_joint = group.isJoint;
+
+    const { error } = await supabase.from('installment_groups').update(payload).eq('id', group.id);
+    if (error) throw error;
+
+    // Update non-paid transaction templates linked to this group
+    const updateTransPayload: any = {};
+    if (group.description !== undefined) updateTransPayload.description = group.description;
+    if (group.installmentAmount !== undefined) updateTransPayload.amount = group.installmentAmount;
+    if (group.category !== undefined) updateTransPayload.category = group.category;
+    if (group.accountId !== undefined) updateTransPayload.account_id = group.accountId;
+
+    if (Object.keys(updateTransPayload).length > 0) {
+      await supabase.from('transactions')
+        .update(updateTransPayload)
+        .eq('installment_group_id', group.id)
+        .eq('is_template', true);
+    }
+
+    await fetchData();
+  };
+
+  const updateSingleInstallment = async (item: {
+    installmentGroupId: string;
+    installmentNumber: number;
+    totalInstallments: number;
+    description: string;
+    amount: number;
+    category: string;
+    accountId: string;
+    date: string;
+    paidTransactionId?: string;
+    userId?: string;
+    type?: string;
+    isJoint?: boolean;
+  }) => {
+    if (item.paidTransactionId) {
+      await supabase.from('transactions').update({
+        description: item.description,
+        amount: item.amount,
+        category: item.category,
+        account_id: item.accountId,
+        date: item.date
+      }).eq('id', item.paidTransactionId);
+    } else {
+      // Find existing template transaction if any
+      const existing = transactions.find(t => t.installmentGroupId === item.installmentGroupId && t.installmentNumber === item.installmentNumber && t.isTemplate);
+      if (existing) {
+        await supabase.from('transactions').update({
+          description: item.description,
+          amount: item.amount,
+          category: item.category,
+          account_id: item.accountId,
+          date: item.date
+        }).eq('id', existing.id);
+      } else {
+        const payload: any = {
+          user_id: item.userId || user?.id,
+          account_id: item.accountId,
+          description: item.description,
+          amount: item.amount,
+          type: item.type || 'EXPENSE',
+          category: item.category,
+          date: item.date,
+          is_joint: item.isJoint,
+          installment_group_id: item.installmentGroupId,
+          installment_number: item.installmentNumber,
+          total_installments: item.totalInstallments,
+          is_template: true
+        };
+        await supabase.from('transactions').insert(payload);
+      }
+    }
+    await fetchData();
+  };
+
   const addCategory = async (c: Omit<Category, 'id'> | Category) => {
     if (!user) return;
     // Remove id if it's a temp one, or let Supabase generate it
@@ -1305,6 +1392,8 @@ export const useFinancialData = () => {
     updateRecurring,
     addInstallmentGroup,
     deleteInstallmentGroup,
+    updateInstallmentGroup,
+    updateSingleInstallment,
     addCategory,
     updateCategory,
     deleteCategory,
