@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Home, LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users, ArrowUpCircle, ShieldCheck, Sparkles, Bell, Edit2 } from 'lucide-react';
+import { Home, LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users, ArrowUpCircle, ShieldCheck, Sparkles, Bell, Edit2, Lock } from 'lucide-react';
+import { getPricingConfig } from './services/adminSettings';
 import Dashboard from './components/Dashboard';
 import TransactionList from './components/TransactionList';
 import TransactionForm from './components/TransactionForm';
@@ -28,6 +29,35 @@ import { useFinancialData } from './hooks/useFinancialData';
 import { isLocalModeEnabled } from './services/geminiService';
 
 type TabType = 'dashboard' | 'transactions' | 'cashflow' | 'validation' | 'parcelados' | 'goals' | 'ai' | 'settings' | 'scanner' | 'visuals' | 'admin';
+
+const LockedFeatureCard: React.FC<{ featureName: string; onUpgrade: () => void }> = ({
+  featureName,
+  onUpgrade
+}) => (
+  <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-8 md:p-12 text-center max-w-xl mx-auto shadow-sm space-y-6 animate-fadeIn my-12">
+    <div className="w-16 h-16 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+      <Lock className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+    </div>
+    <div className="space-y-2">
+      <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-50 dark:bg-amber-950/50 px-3 py-1 rounded-full">
+        Recurso Restrito ao Plano
+      </span>
+      <h3 className="text-xl md:text-2xl font-black text-slate-800 dark:text-white">
+        Aba de {featureName} Bloqueada
+      </h3>
+      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-md mx-auto">
+        Esta aba não está liberada no seu plano atual. Você pode atualizar seu plano para liberar este recurso instantaneamente.
+      </p>
+    </div>
+    <button
+      onClick={onUpgrade}
+      className="w-full py-3.5 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-98"
+    >
+      <Sparkles className="w-4 h-4" />
+      Ver Planos e Fazer Upgrade
+    </button>
+  </div>
+);
 
 const AppContent: React.FC = () => {
   const { user, signOut, loading: authLoading } = useAuth();
@@ -58,6 +88,8 @@ const AppContent: React.FC = () => {
     updateRecurring,
     addInstallmentGroup,
     deleteInstallmentGroup,
+    updateInstallmentGroup,
+    updateSingleInstallment,
     addCategory,
     updateCategory,
     deleteCategory,
@@ -274,6 +306,40 @@ const AppContent: React.FC = () => {
   const displayUser = currentUserProfile || { id: user.id, name: user.email?.split('@')[0] || 'User', avatarColor: '#6366f1' };
   const usersList = users.length > 0 ? users : [displayUser]; // For components that expect a list
 
+  const activeUserTier = currentUserProfile?.role === 'admin' || currentUserProfile?.isTrial 
+    ? 'premium' 
+    : (currentUserProfile?.tier || 'gratis');
+
+  const currentPlanLimits = useMemo(() => {
+    const pricing = getPricingConfig();
+    return pricing[activeUserTier]?.limits || pricing['gratis']?.limits || {
+      accounts: 1,
+      transactions: 15,
+      goals: 1,
+      recurringCount: 2,
+      installmentsCount: 2,
+      hasVoice: false,
+      hasCouple: false,
+      hasImport: false,
+      hasRecurring: false,
+      hasInstallments: false,
+      hasCharts: false,
+      hasGoalsTab: true,
+      hasAiConsultant: false,
+      hasReceiptPhoto: false,
+    };
+  }, [activeUserTier]);
+
+  const isTabLocked = (tabId: string) => {
+    if (currentUserProfile?.role === 'admin' || currentUserProfile?.isTrial) return false;
+    if (tabId === 'validation') return currentPlanLimits.hasRecurring === false;
+    if (tabId === 'parcelados') return currentPlanLimits.hasInstallments === false;
+    if (tabId === 'visuals') return currentPlanLimits.hasCharts === false;
+    if (tabId === 'goals') return currentPlanLimits.hasGoalsTab === false;
+    if (tabId === 'ai') return currentPlanLimits.hasAiConsultant === false;
+    return false;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
       <aside className="hidden md:flex w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex-col sticky top-0 h-screen shadow-sm z-30 transition-colors print:hidden">
@@ -311,20 +377,28 @@ const AppContent: React.FC = () => {
                 menuItems.push({ id: 'admin', icon: ShieldCheck, label: 'Painel Admin' });
               }
 
-              return menuItems.map(item => (
-                <button 
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id as TabType)}
-                  className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-bold transition-all text-sm ${
-                    activeTab === item.id 
-                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50' 
-                      : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  {item.label}
-                </button>
-              ));
+              return menuItems.map(item => {
+                const locked = isTabLocked(item.id);
+                return (
+                  <button 
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id as TabType)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all text-sm ${
+                      activeTab === item.id 
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50' 
+                        : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="flex items-center gap-3.5">
+                      <item.icon className="w-5 h-5" />
+                      {item.label}
+                    </span>
+                    {locked && (
+                      <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" title="Recurso bloqueado para o seu plano" />
+                    )}
+                  </button>
+                );
+              });
             })()}
           </nav>
         </div>
@@ -727,72 +801,104 @@ const AppContent: React.FC = () => {
         )}
 
         {activeTab === 'validation' && (
-          <TransactionValidation 
-            recurringTransactions={recurringTransactions}
-            transactions={filteredTransactions}
-            onValidate={async (t) => {
-              try {
-                await addTransaction(t);
-                showToast('Lançamento confirmado!');
-              } catch (error: any) {
-                console.error('Erro na validação:', error);
-                showToast(`Erro: ${error.message || 'Falha ao confirmar'}`);
-              }
-            }}
-            onDelete={(id) => {
-              deleteTransaction(id);
-              showToast('Lançamento estornado.');
-            }}
-            onUpdateRecurring={updateRecurring}
-            onDeleteRecurring={deleteRecurring}
-            onAddRecurring={addRecurring}
-            currentUserProfile={currentUserProfile}
-            currentDate={new Date()} // Could be state for month navigation
-            categories={categories}
-            accounts={accounts}
-          />
+          isTabLocked('validation') ? (
+            <LockedFeatureCard featureName="Recorrentes" onUpgrade={() => setIsSubscriptionOpen(true)} />
+          ) : (
+            <TransactionValidation 
+              recurringTransactions={recurringTransactions}
+              transactions={filteredTransactions}
+              onValidate={async (t) => {
+                try {
+                  await addTransaction(t);
+                  showToast('Lançamento confirmado!');
+                } catch (error: any) {
+                  console.error('Erro na validação:', error);
+                  showToast(`Erro: ${error.message || 'Falha ao confirmar'}`);
+                }
+              }}
+              onDelete={(id) => {
+                deleteTransaction(id);
+                showToast('Lançamento estornado.');
+              }}
+              onUpdateRecurring={updateRecurring}
+              onDeleteRecurring={deleteRecurring}
+              onAddRecurring={(rec) => {
+                if (recurringTransactions.length >= (currentPlanLimits.recurringCount ?? Infinity)) {
+                  showToast(`Limite de ${currentPlanLimits.recurringCount} recorrentes atingido no plano.`, 'info');
+                  setIsSubscriptionOpen(true);
+                  return;
+                }
+                addRecurring(rec);
+              }}
+              currentUserProfile={currentUserProfile}
+              currentDate={new Date()} // Could be state for month navigation
+              categories={categories}
+              accounts={accounts}
+            />
+          )
         )}
 
         {activeTab === 'parcelados' && (
-          <InstallmentsView 
-            installmentGroups={filteredInstallmentGroups}
-            transactions={filteredRawTransactions} // Pass filtered transactions to show templates for current user/couple
-            onAdd={async (g, customItems) => {
-                await addInstallmentGroup(g, customItems);
-                showToast('Parcelamento criado e lançamentos gerados!');
-            }}
-            onDelete={async (id, deleteTrans) => {
-                await deleteInstallmentGroup(id, deleteTrans);
-                showToast(deleteTrans ? 'Parcelamento e lançamentos excluídos.' : 'Contrato de parcelamento excluído.');
-            }}
-            onValidate={async (t: any) => {
-                try {
-                    if (t.id) {
-                        await updateTransaction({ ...t, isTemplate: false });
-                        showToast('Lançamento confirmado no extrato!');
-                    } else {
-                        await addTransaction(t);
-                        showToast('Lançamento adicionado!');
-                    }
-                } catch (error: any) {
-                    showToast(`Erro ao validar: ${error.message || 'Falha'}`, 'info');
-                }
-            }}
-            onDeleteTransaction={deleteTransaction}
-            accounts={accounts}
-            categories={categories}
-          />
+          isTabLocked('parcelados') ? (
+            <LockedFeatureCard featureName="Compras Parceladas" onUpgrade={() => setIsSubscriptionOpen(true)} />
+          ) : (
+            <InstallmentsView 
+              installmentGroups={filteredInstallmentGroups}
+              transactions={filteredRawTransactions} // Pass filtered transactions to show templates for current user/couple
+              onAdd={async (g, customItems) => {
+                  if (installmentGroups.length >= (currentPlanLimits.installmentsCount ?? Infinity)) {
+                    showToast(`Limite de ${currentPlanLimits.installmentsCount} parcelamentos atingido no plano.`, 'info');
+                    setIsSubscriptionOpen(true);
+                    return;
+                  }
+                  await addInstallmentGroup(g, customItems);
+                  showToast('Parcelamento criado e lançamentos gerados!');
+              }}
+              onDelete={async (id, deleteTrans) => {
+                  await deleteInstallmentGroup(id, deleteTrans);
+                  showToast(deleteTrans ? 'Parcelamento e lançamentos excluídos.' : 'Contrato de parcelamento excluído.');
+              }}
+              onValidate={async (t: any) => {
+                  try {
+                      if (t.id) {
+                          await updateTransaction({ ...t, isTemplate: false });
+                          showToast('Lançamento confirmado no extrato!');
+                      } else {
+                          await addTransaction(t);
+                          showToast('Lançamento adicionado!');
+                      }
+                  } catch (error: any) {
+                      showToast(`Erro ao validar: ${error.message || 'Falha'}`, 'info');
+                  }
+              }}
+              onDeleteTransaction={deleteTransaction}
+              onUpdateGroup={async (group) => {
+                await updateInstallmentGroup(group);
+                showToast('Contrato de parcelamento atualizado!');
+              }}
+              onUpdateSingle={async (item) => {
+                await updateSingleInstallment(item);
+                showToast('Parcela atualizada!');
+              }}
+              accounts={accounts}
+              categories={categories}
+            />
+          )
         )}
 
         {activeTab === 'visuals' && (
-          <Visuals 
-            transactions={filteredTransactions} 
-            categories={categories} 
-            users={usersList} 
-            accounts={accounts}
-            recurringTransactions={recurringTransactions}
-            installmentGroups={installmentGroups}
-          />
+          isTabLocked('visuals') ? (
+            <LockedFeatureCard featureName="Gráficos e Analíticos" onUpgrade={() => setIsSubscriptionOpen(true)} />
+          ) : (
+            <Visuals 
+              transactions={filteredTransactions} 
+              categories={categories} 
+              users={usersList} 
+              accounts={accounts}
+              recurringTransactions={recurringTransactions}
+              installmentGroups={installmentGroups}
+            />
+          )
         )}
 
         {activeTab === 'transactions' && (
@@ -813,33 +919,48 @@ const AppContent: React.FC = () => {
         )}
 
         {activeTab === 'goals' && (
-          <GoalsTrack 
-            goals={goals} 
-            onAddGoal={(goal) => addGoal(goal)}
-            onUpdateAmount={(id, amount) => {
-              const goal = goals.find(g => g.id === id);
-              if (goal) updateGoal({ ...goal, currentAmount: amount });
-            }}
-            onUpdateGoal={updateGoal}
-            onDeleteGoal={(id) => {
-               if (confirm('Tem certeza que deseja excluir esta meta?')) {
-                 deleteGoal(id);
-                 showToast('Meta excluída.');
-               }
-            }}
-          />
+          isTabLocked('goals') ? (
+            <LockedFeatureCard featureName="Metas e Objetivos" onUpgrade={() => setIsSubscriptionOpen(true)} />
+          ) : (
+            <GoalsTrack 
+              goals={goals} 
+              onAddGoal={(goal) => {
+                if (goals.length >= (currentPlanLimits.goals ?? Infinity)) {
+                  showToast(`Limite de ${currentPlanLimits.goals} metas atingido no plano.`, 'info');
+                  setIsSubscriptionOpen(true);
+                  return;
+                }
+                addGoal(goal);
+              }}
+              onUpdateAmount={(id, amount) => {
+                const goal = goals.find(g => g.id === id);
+                if (goal) updateGoal({ ...goal, currentAmount: amount });
+              }}
+              onUpdateGoal={updateGoal}
+              onDeleteGoal={(id) => {
+                 if (confirm('Tem certeza que deseja excluir esta meta?')) {
+                   deleteGoal(id);
+                   showToast('Meta excluída.');
+                 }
+              }}
+            />
+          )
         )}
 
         {activeTab === 'ai' && (
-          <AIConsultant 
-            transactions={filteredTransactions} 
-            accounts={accounts}
-            categories={categories}
-            currentUser={displayUser} 
-            onAddTransaction={addTransaction}
-            autoStartVoice={shouldAutoStartVoice}
-            onVoiceHandled={() => setShouldAutoStartVoice(false)}
-          />
+          isTabLocked('ai') ? (
+            <LockedFeatureCard featureName="Consultor IA (A2Bot)" onUpgrade={() => setIsSubscriptionOpen(true)} />
+          ) : (
+            <AIConsultant 
+              transactions={filteredTransactions} 
+              accounts={accounts}
+              categories={categories}
+              currentUser={displayUser} 
+              onAddTransaction={addTransaction}
+              autoStartVoice={shouldAutoStartVoice}
+              onVoiceHandled={() => setShouldAutoStartVoice(false)}
+            />
+          )
         )}
 
         {activeTab === 'settings' && (
