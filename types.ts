@@ -89,6 +89,8 @@ export interface RecurringTransaction {
   type: TransactionType;
   category: string;
   dayOfMonth: number; // 1-31
+  frequencyType?: 'MONTHLY' | 'DAYS';
+  intervalDays?: number; // Interval in days, e.g. 7, 15, 30
   lastGeneratedDate?: string;
   active: boolean;
   isJoint?: boolean;
