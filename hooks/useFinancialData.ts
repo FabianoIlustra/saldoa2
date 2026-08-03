@@ -395,6 +395,8 @@ export const useFinancialData = () => {
           type: r.type as any,
           category: r.category,
           dayOfMonth: r.day_of_month,
+          frequencyType: r.frequency_type || (r.interval_days ? 'DAYS' : 'MONTHLY'),
+          intervalDays: r.interval_days ? Number(r.interval_days) : undefined,
           lastGeneratedDate: r.last_generated_date,
           active: r.active,
           toAccountId: r.to_account_id || undefined,
@@ -758,7 +760,9 @@ export const useFinancialData = () => {
       amount: r.amount,
       type: r.type,
       category: r.category,
-      day_of_month: r.dayOfMonth,
+      day_of_month: r.dayOfMonth || 1,
+      frequency_type: r.frequencyType || (r.intervalDays ? 'DAYS' : 'MONTHLY'),
+      interval_days: r.intervalDays || null,
       is_joint: r.isJoint,
       active: true,
       start_date: r.startDate || new Date().toISOString().split('T')[0]
@@ -771,14 +775,16 @@ export const useFinancialData = () => {
     const { data, error } = await supabase.from('recurring_transactions').insert(payload).select().single();
 
     if (error) {
+       delete payload.frequency_type;
+       delete payload.interval_days;
        if (error.message.includes('to_account_id') || error.code === '42703') {
           delete payload.to_account_id;
-          const fallback = await supabase.from('recurring_transactions').insert(payload).select().single();
-          if (fallback.error) throw fallback.error;
-          if (fallback.data) {
-             setRecurringTransactions(prev => [...prev, { ...r, id: fallback.data.id, userId: user.id, active: true, toAccountId: undefined }]);
-             throw new Error('Agendamento criado, mas sem vínculo de conta destino (adicione a coluna no banco).');
-          }
+       }
+       const fallback = await supabase.from('recurring_transactions').insert(payload).select().single();
+       if (fallback.error) throw fallback.error;
+       if (fallback.data) {
+          setRecurringTransactions(prev => [...prev, { ...r, id: fallback.data.id, userId: user.id, active: true }]);
+          return;
        }
        throw error;
     }
@@ -805,7 +811,9 @@ export const useFinancialData = () => {
           amount: r.amount,
           type: r.type,
           category: r.category,
-          day_of_month: r.dayOfMonth,
+          day_of_month: r.dayOfMonth || 1,
+          frequency_type: r.frequencyType || (r.intervalDays ? 'DAYS' : 'MONTHLY'),
+          interval_days: r.intervalDays || null,
           last_generated_date: r.lastGeneratedDate,
           active: r.active,
           is_joint: r.isJoint,
@@ -819,13 +827,13 @@ export const useFinancialData = () => {
       const { error } = await supabase.from('recurring_transactions').update(payload).eq('id', r.id);
 
       if (error) {
-        if (error.message.includes('to_account_id') || error.code === '42703') {
-           delete payload.to_account_id;
-           const fallback = await supabase.from('recurring_transactions').update(payload).eq('id', r.id);
-           if (fallback.error) throw fallback.error;
-           throw new Error('Atualizado, mas sem vínculo de conta destino (adicione a coluna no banco).');
-        }
-        throw error;
+         delete payload.frequency_type;
+         delete payload.interval_days;
+         if (error.message.includes('to_account_id') || error.code === '42703') {
+            delete payload.to_account_id;
+         }
+         const fallback = await supabase.from('recurring_transactions').update(payload).eq('id', r.id);
+         if (fallback.error) throw fallback.error;
       }
       setRecurringTransactions(prev => prev.map(rec => rec.id === r.id ? r : rec));
   };
@@ -983,11 +991,14 @@ export const useFinancialData = () => {
     // Remove id if it's a temp one, or let Supabase generate it
     const { id, ...rest } = c as any; 
     
+    const isIncomeName = /prolabore|pro-labore|pró-labore|salário|salario|receita|renda|comissao|comissão|faturamento|lucro/i.test(c.name);
+    const categoryType = c.type || (isIncomeName ? 'INCOME' : 'EXPENSE');
+
     const payload: any = {
       user_id: user.id,
       name: c.name,
       color: c.color,
-      type: c.type || 'EXPENSE'
+      type: categoryType
     };
     if (c.limit !== undefined) payload.limit = c.limit;
     if (c.monitored !== undefined) payload.monitored = c.monitored;
@@ -1003,7 +1014,7 @@ export const useFinancialData = () => {
         user_id: user.id,
         name: c.name,
         color: c.color,
-        type: c.type || 'EXPENSE'
+        type: categoryType
       }).select().single();
       data = res.data;
     }
@@ -1013,7 +1024,7 @@ export const useFinancialData = () => {
         id: data.id,
         name: data.name,
         color: data.color,
-        type: data.type || 'EXPENSE',
+        type: data.type || categoryType,
         limit: data.limit ? Number(data.limit) : undefined,
         monitored: !!data.monitored,
         isEssential: !!data.is_essential
@@ -1022,10 +1033,13 @@ export const useFinancialData = () => {
   };
 
   const updateCategory = async (c: Category) => {
+    const isIncomeName = /prolabore|pro-labore|pró-labore|salário|salario|receita|renda|comissao|comissão|faturamento|lucro/i.test(c.name);
+    const categoryType = c.type || (isIncomeName ? 'INCOME' : 'EXPENSE');
+
     const payload: any = {
       name: c.name,
       color: c.color,
-      type: c.type || 'EXPENSE'
+      type: categoryType
     };
     if (c.limit !== undefined) payload.limit = c.limit;
     if (c.monitored !== undefined) payload.monitored = c.monitored;
@@ -1038,29 +1052,11 @@ export const useFinancialData = () => {
       await supabase.from('categories').update({
         name: c.name,
         color: c.color,
-        type: c.type || 'EXPENSE'
+        type: categoryType
       }).eq('id', c.id);
     }
 
-    // Also sync all existing non-transfer transactions for this category to match the new category type
-    if (c.type && (c.type === 'INCOME' || c.type === 'EXPENSE')) {
-      try {
-        await supabase.from('transactions')
-          .update({ type: c.type })
-          .eq('category', c.name)
-          .neq('type', 'TRANSFER');
-      } catch (e) {
-        console.warn('Error updating transaction types for category:', e);
-      }
-      setTransactions(prev => prev.map(t => {
-        if (t.category === c.name && t.type !== 'TRANSFER') {
-          return { ...t, type: c.type as 'INCOME' | 'EXPENSE' };
-        }
-        return t;
-      }));
-    }
-
-    setCategories(prev => prev.map(cat => cat.id === c.id ? c : cat));
+    setCategories(prev => prev.map(cat => cat.id === c.id ? { ...c, type: categoryType } : cat));
   };
 
   const deleteCategory = async (id: string) => {
