@@ -6,7 +6,7 @@ import { Transaction, Category, User, Account, RecurringTransaction, Installment
 import FilterBar, { FilterState } from './FilterBar';
 import { isWithinInterval, parseISO, format, isBefore, isSameMonth, isSameYear, startOfDay, startOfWeek, endOfMonth, differenceInDays, isSameDay, addMonths as addMonthsDate } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ArrowUpDown, ChevronDown, Clock, CheckCircle, AlertCircle, Calendar, Target, Zap, TrendingDown, Pill, ShoppingBag, History, HelpCircle, X, CreditCard } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, Clock, CheckCircle, AlertCircle, Calendar, Target, Zap, TrendingDown, Pill, ShoppingBag, History, HelpCircle, X, CreditCard, Tag as TagIcon } from 'lucide-react';
 
 interface VisualsProps {
   transactions: Transaction[];
@@ -191,7 +191,7 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       .filter(t => t.type === 'EXPENSE')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    // 2. Map recurring transactions for the month to find Pending and Late
+    // 2. Map recurring transactions for the month
     const monthRecs = recurringTransactions.filter(r => r.active && r.type === 'EXPENSE').map(rec => {
         const isPaid = transactions.some(t => {
             const tDate = parseISO(t.date);
@@ -204,26 +204,96 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
         let status: 'pending' | 'late' | 'paid' = 'pending';
         
         if (isPaid) status = 'paid';
-        else if (isBefore(dueDate, new Date())) status = 'late';
+        else if (isBefore(dueDate, startOfDay(new Date()))) status = 'late';
 
         return { ...rec, status, amount: rec.amount };
     });
 
-    const plannedExpenses = monthRecs
+    const plannedRecurring = monthRecs
         .filter(r => r.status === 'pending')
         .reduce((sum, r) => sum + r.amount, 0);
     
-    const lateExpenses = monthRecs
+    const lateRecurring = monthRecs
         .filter(r => r.status === 'late')
         .reduce((sum, r) => sum + r.amount, 0);
 
+    // 3. Map installments for the target period
+    let plannedInstallments = 0;
+    let lateInstallments = 0;
+
+    installmentGroups.forEach(group => {
+      const baseDate = parseISO(group.startDate);
+      for (let i = 0; i < group.totalInstallments; i++) {
+        const dueDate = new Date(baseDate);
+        dueDate.setDate(baseDate.getDate() + (i * group.intervalDays));
+
+        const isTargetPeriod = currentFilters?.viewMode === 'YEAR'
+          ? dueDate.getFullYear() === targetDate.getFullYear()
+          : (dueDate.getMonth() === targetDate.getMonth() && dueDate.getFullYear() === targetDate.getFullYear());
+
+        if (isTargetPeriod) {
+          const record = transactions.find(t => 
+            String(t.installmentGroupId) === String(group.id) && 
+            Number(t.installmentNumber) === (i + 1)
+          );
+
+          if (!record || record.isTemplate) {
+            if (isBefore(dueDate, startOfDay(new Date()))) {
+              lateInstallments += group.installmentAmount;
+            } else {
+              plannedInstallments += group.installmentAmount;
+            }
+          }
+        }
+      }
+    });
+
+    const plannedExpenses = plannedRecurring + plannedInstallments;
+    const lateExpenses = lateRecurring + lateInstallments;
+
     return {
         paidExpenses,
+        plannedRecurring,
+        plannedInstallments,
+        lateRecurring,
+        lateInstallments,
         plannedExpenses,
         lateExpenses,
         totalCommitment: paidExpenses + plannedExpenses + lateExpenses
     };
-  }, [filteredTransactions, recurringTransactions, transactions, currentFilters]);
+  }, [normalizedTransactions, recurringTransactions, installmentGroups, transactions, currentFilters]);
+
+  const categoryInstallmentCommitments = useMemo(() => {
+    const today = new Date();
+    const map: Record<string, number> = {};
+    let total = 0;
+
+    installmentGroups.forEach(group => {
+      const baseDate = parseISO(group.startDate);
+      for (let i = 0; i < group.totalInstallments; i++) {
+        const dueDate = new Date(baseDate);
+        dueDate.setDate(baseDate.getDate() + (i * group.intervalDays));
+
+        if (!isBefore(dueDate, startOfDay(today)) || isSameMonth(dueDate, today)) {
+          const record = transactions.find(t => 
+            String(t.installmentGroupId) === String(group.id) && 
+            Number(t.installmentNumber) === (i + 1)
+          );
+
+          if (!record || record.isTemplate) {
+            const cat = group.category || 'Outros';
+            map[cat] = (map[cat] || 0) + group.installmentAmount;
+            total += group.installmentAmount;
+          }
+        }
+      }
+    });
+
+    return {
+      total,
+      categories: Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+    };
+  }, [installmentGroups, transactions]);
 
   const advancedStats = useMemo(() => {
     const today = new Date();
@@ -427,12 +497,16 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
 
             <div className="flex flex-col gap-2 pt-4 border-t border-slate-50 dark:border-slate-800">
               <div className="flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2 rounded-lg">
-                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Pagos</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Pagos / Lançados</span>
                 <span className="text-sm font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.paidExpenses)}</span>
               </div>
               <div className="flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2 rounded-lg">
-                <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">Previstos</span>
-                <span className="text-sm font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.plannedExpenses)}</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">Recorrentes Previstas</span>
+                <span className="text-sm font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.plannedRecurring)}</span>
+              </div>
+              <div className="flex justify-between items-center bg-amber-50/50 dark:bg-amber-900/20 px-3 py-2 rounded-lg">
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">Parcelas Previstas</span>
+                <span className="text-sm font-black text-slate-900 dark:text-white">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financialStats.plannedInstallments)}</span>
               </div>
               <div className="flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2 rounded-lg">
                 <span className="text-[10px] font-black uppercase tracking-widest text-rose-500">Atrasados</span>
@@ -822,55 +896,105 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
       </div>
 
       {/* Projeção de Parcelamentos (Novo Gráfico) */}
-      <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
-          <header className="mb-6">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Projeção de Parcelas</h3>
-            <p className="text-xs text-slate-500 font-medium">Comprometimento futuro com compras parceladas</p>
+      <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
+          <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Projeção de Parcelas</h3>
+              <p className="text-xs text-slate-500 font-medium">Comprometimento futuro com compras parceladas</p>
+            </div>
+            <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 px-3 py-2 rounded-xl flex items-center gap-2 text-indigo-700 dark:text-indigo-300 self-start sm:self-auto">
+              <span className="text-[10px] font-black uppercase tracking-wider">Total Futuro:</span>
+              <span className="text-xs font-black">
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(categoryInstallmentCommitments.total)}
+              </span>
+            </div>
           </header>
-          <div className="h-[300px]">
+
+          {/* INDICADOR POR CATEGORIA (Requisito 3) */}
+          {categoryInstallmentCommitments.categories.length > 0 && (
+            <div className="bg-slate-50/80 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-3">
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <TagIcon className="w-3.5 h-3.5 text-indigo-500" />
+                Comprometimento por Categoria (Próximos Meses)
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                {categoryInstallmentCommitments.categories.map((item, idx) => {
+                  const catColor = getCategoryColor(item.name);
+                  const pct = categoryInstallmentCommitments.total > 0 ? (item.value / categoryInstallmentCommitments.total) * 100 : 0;
+                  return (
+                    <div key={idx} className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
+                      <div className="flex items-center gap-1.5 mb-1 truncate">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
+                        <span className="text-[10px] font-extrabold text-slate-700 dark:text-slate-300 truncate" title={item.name}>
+                          {item.name}
+                        </span>
+                      </div>
+                      <p className="text-xs font-black text-slate-900 dark:text-white">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.value)}
+                      </p>
+                      <span className="text-[9px] font-bold text-slate-400 block mt-0.5">
+                        {pct.toFixed(0)}% do total
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="h-[320px]">
              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={(() => {
-                  const data = [];
-                  const today = new Date();
-                  for (let i = 0; i < 6; i++) {
-                    const month = addMonthsDate(today, i);
-                    const monthKey = format(month, 'MMM/yy', { locale: ptBR });
-                    
-                    let total = 0;
-                    installmentGroups.forEach(group => {
-                      const baseDate = parseISO(group.startDate);
-                      for (let j = 0; j < group.totalInstallments; j++) {
-                        const dueDate = new Date(baseDate);
-                        dueDate.setDate(baseDate.getDate() + (j * group.intervalDays));
-                        if (isSameMonth(dueDate, month) && isSameYear(dueDate, month)) {
-                          total += group.installmentAmount;
+                <AreaChart 
+                  data={(() => {
+                    const data = [];
+                    const today = new Date();
+                    for (let i = 0; i < 6; i++) {
+                      const month = addMonthsDate(today, i);
+                      const monthKey = format(month, 'MMM/yy', { locale: ptBR });
+                      
+                      let total = 0;
+                      installmentGroups.forEach(group => {
+                        const baseDate = parseISO(group.startDate);
+                        for (let j = 0; j < group.totalInstallments; j++) {
+                          const dueDate = new Date(baseDate);
+                          dueDate.setDate(baseDate.getDate() + (j * group.intervalDays));
+                          if (isSameMonth(dueDate, month) && isSameYear(dueDate, month)) {
+                            total += group.installmentAmount;
+                          }
                         }
-                      }
-                    });
-                    data.push({ name: monthKey, valor: total });
-                  }
-                  return data;
-                })()}>
+                      });
+                      data.push({ name: monthKey, valor: total });
+                    }
+                    return data;
+                  })()}
+                  margin={{ top: 40, right: 20, left: 20, bottom: 10 }}
+                >
                    <defs>
                       <linearGradient id="colorParcelas" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15}/>
-                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b8" opacity={0.1} />
-                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} dy={10} />
-                   <YAxis hide />
+                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b8" opacity={0.15} />
+                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 'bold'}} dy={10} />
+                   <YAxis domain={[0, (dataMax: number) => Math.max(100, Math.ceil(dataMax * 1.35))]} hide />
                    <Tooltip content={<CustomTooltip />} />
                    <Area 
                       type="monotone" 
                       dataKey="valor" 
                       name="Parcelas"
-                      stroke="#f59e0b" 
+                      stroke="#4f46e5" 
                       fillOpacity={1} 
                       fill="url(#colorParcelas)" 
                       strokeWidth={3}
                     >
-                      <LabelList dataKey="valor" position="top" formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(value)} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#f59e0b' }} />
+                      <LabelList 
+                        dataKey="valor" 
+                        position="top" 
+                        formatter={(value: number) => value > 0 ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(value) : ''} 
+                        style={{ fontSize: '12px', fontWeight: '900', fill: '#4f46e5' }} 
+                        dy={-10}
+                      />
                     </Area>
                 </AreaChart>
              </ResponsiveContainer>
