@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { RecurringTransaction, Transaction, Category, Account } from '../types';
 import { CheckCircle, XCircle, AlertCircle, Calendar, Edit2, Check, X, ArrowUpDown, ArrowUp, ArrowDown, CreditCard, CalendarCheck, Plus, Trash2, Lock, Repeat, Clock, Sparkles } from 'lucide-react';
-import { format, isSameMonth, isSameYear, parseISO, isBefore, isAfter, addMonths } from 'date-fns';
+import { format, isSameMonth, isSameYear, parseISO, isBefore, isAfter, addMonths, addDays, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import FilterBar, { FilterState } from './FilterBar';
 
@@ -19,7 +19,7 @@ interface ValidationProps {
   currentUserProfile?: any;
 }
 
-type SortField = 'dueDate' | 'description' | 'category' | 'amount' | 'status';
+type SortField = 'dueDate' | 'description' | 'category' | 'amount' | 'status' | 'confirmedDate';
 type SortDirection = 'asc' | 'desc';
 
 const TransactionValidation: React.FC<ValidationProps> = ({ 
@@ -55,6 +55,8 @@ const TransactionValidation: React.FC<ValidationProps> = ({
   const [recType, setRecType] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER'>('EXPENSE');
   const [recCategory, setRecCategory] = useState('');
   const [recDay, setRecDay] = useState('10');
+  const [recFrequencyType, setRecFrequencyType] = useState<'MONTHLY' | 'DAYS'>('MONTHLY');
+  const [recIntervalDays, setRecIntervalDays] = useState('15');
   const [recAccount, setRecAccount] = useState('');
   const [recToAccount, setRecToAccount] = useState('');
   const [recIsJoint, setRecIsJoint] = useState(true);
@@ -69,6 +71,8 @@ const TransactionValidation: React.FC<ValidationProps> = ({
     setRecType('EXPENSE');
     setRecCategory(categories[0]?.name || '');
     setRecDay('10');
+    setRecFrequencyType('MONTHLY');
+    setRecIntervalDays('15');
     setRecAccount(accounts[0]?.id || '');
     setRecToAccount('');
     setRecIsJoint(true);
@@ -83,7 +87,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
     setRecAmount(rec.amount.toString());
     setRecType(rec.type);
     setRecCategory(rec.category);
-    setRecDay(rec.dayOfMonth.toString());
+    setRecDay(rec.dayOfMonth ? rec.dayOfMonth.toString() : '10');
+    setRecFrequencyType(rec.frequencyType || (rec.intervalDays ? 'DAYS' : 'MONTHLY'));
+    setRecIntervalDays(rec.intervalDays ? rec.intervalDays.toString() : '15');
     setRecAccount(rec.accountId);
     setRecToAccount(rec.toAccountId || '');
     setRecIsJoint(rec.isJoint);
@@ -96,6 +102,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
     if (!recDesc || !recAmount || !recAccount) return;
     if (recType === 'TRANSFER' && !recToAccount) return;
 
+    const frequencyType = recFrequencyType;
+    const intervalDays = recFrequencyType === 'DAYS' ? Math.max(1, parseInt(recIntervalDays) || 15) : undefined;
+
     if (recurringToEdit) {
       if (onUpdateRecurring) {
         onUpdateRecurring({
@@ -104,7 +113,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
           amount: parseFloat(recAmount),
           type: recType,
           category: recType === 'TRANSFER' ? 'Transferência' : recCategory,
-          dayOfMonth: parseInt(recDay),
+          dayOfMonth: parseInt(recDay) || 1,
+          frequencyType,
+          intervalDays,
           accountId: recAccount,
           toAccountId: recType === 'TRANSFER' ? recToAccount : undefined,
           isJoint: recIsJoint,
@@ -118,7 +129,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
           amount: parseFloat(recAmount),
           type: recType,
           category: recType === 'TRANSFER' ? 'Transferência' : recCategory,
-          dayOfMonth: parseInt(recDay),
+          dayOfMonth: parseInt(recDay) || 1,
+          frequencyType,
+          intervalDays,
           accountId: recAccount,
           toAccountId: recType === 'TRANSFER' ? recToAccount : undefined,
           userId: 'default',
@@ -145,52 +158,139 @@ const TransactionValidation: React.FC<ValidationProps> = ({
     const targetDate = currentFilters ? currentFilters.currentDate : initialDate;
     
     const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+    const monthEnd = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
     
-    return recurringTransactions.filter(r => {
-      if (!r.active) return false;
-      if (r.startDate) {
-        const start = parseISO(r.startDate);
-        const startYear = start.getFullYear();
-        const startMonth = start.getMonth();
-        const targetYear = targetDate.getFullYear();
-        const targetMonth = targetDate.getMonth();
-        
-        if (startYear > targetYear) return false;
-        if (startYear === targetYear && startMonth > targetMonth) return false;
-      }
-      return true;
-    }).map(rec => {
-      // Check if already paid in this month
-      // Use description and amount match since DB column is missing
-      let paidTransactionId: string | undefined;
-      const isPaid = transactions.some(t => {
-        const tDate = parseISO(t.date);
-        const matches = t.description === rec.description && 
-               isSameMonth(tDate, targetDate) &&
-               isSameYear(tDate, targetDate);
-        
-        if (matches) {
-          paidTransactionId = t.id;
+    const result: any[] = [];
+
+    recurringTransactions.forEach(rec => {
+      if (!rec.active) return;
+
+      const isInterval = rec.frequencyType === 'DAYS' || (rec.intervalDays && rec.intervalDays > 0);
+
+      if (isInterval) {
+        const interval = rec.intervalDays || 15;
+        const start = parseISO(rec.startDate || new Date().toISOString().split('T')[0]);
+        const startClean = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+
+        let curr = new Date(startClean.getTime());
+        if (curr < monthStart) {
+          const diffMs = monthStart.getTime() - curr.getTime();
+          const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          const steps = Math.floor(diffDays / interval);
+          if (steps > 0) {
+            curr = addDays(curr, steps * interval);
+          }
         }
-        return matches;
-      });
 
-      // Determine status
-      const dueDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), rec.dayOfMonth);
-      let status: 'pending' | 'late' | 'paid' = 'pending';
-      
-      if (isPaid) status = 'paid';
-      else if (isBefore(dueDate, new Date()) && !isSameMonth(dueDate, new Date())) status = 'late'; 
-      else if (isBefore(dueDate, new Date()) && !isPaid) status = 'late';
+        let safety = 0;
+        while (curr <= monthEnd && safety < 100) {
+          safety++;
+          if (curr >= monthStart && curr >= startClean) {
+            const dueDate = new Date(curr);
+            const dateStr = format(dueDate, 'yyyy-MM-dd');
 
-      return {
-        ...rec,
-        dueDate,
-        status,
-        paidTransactionId
-      };
-    })
-    .filter(item => {
+            let paidTransactionId: string | undefined;
+            let confirmedDate: Date | null = null;
+            const isPaid = transactions.some(t => {
+              if (t.isTemplate) return false;
+              if (t.type !== rec.type) return false;
+
+              const tDesc = t.description.toLowerCase().trim();
+              const recDesc = rec.description.toLowerCase().trim();
+              const isDescMatch = tDesc === recDesc || (tDesc.length > 3 && recDesc.length > 3 && (tDesc.includes(recDesc) || recDesc.includes(tDesc)));
+
+              if (!isDescMatch) return false;
+
+              const tDate = parseISO(t.date);
+              const closeDate = isSameDay(tDate, dueDate) || Math.abs(Math.floor((tDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))) <= 2;
+              const matches = closeDate || isSameMonth(tDate, dueDate);
+              if (matches) {
+                paidTransactionId = t.id;
+                const dStr = t.createdAt ? t.createdAt.split('T')[0] : t.date;
+                try {
+                  confirmedDate = parseISO(dStr);
+                } catch {
+                  confirmedDate = parseISO(t.date);
+                }
+              }
+              return matches;
+            });
+
+            let status: 'pending' | 'late' | 'paid' = 'pending';
+            if (isPaid) status = 'paid';
+            else if (isBefore(dueDate, new Date()) && !isSameDay(dueDate, new Date())) status = 'late';
+
+            result.push({
+              ...rec,
+              id: `${rec.id}-${dateStr}`,
+              originalId: rec.id,
+              dueDate,
+              status,
+              paidTransactionId,
+              confirmedDate,
+              intervalDays: interval
+            });
+          }
+          curr = addDays(curr, interval);
+        }
+      } else {
+        // Monthly
+        if (rec.startDate) {
+          const start = parseISO(rec.startDate);
+          const startYear = start.getFullYear();
+          const startMonth = start.getMonth();
+          const targetYear = targetDate.getFullYear();
+          const targetMonth = targetDate.getMonth();
+          if (startYear > targetYear || (startYear === targetYear && startMonth > targetMonth)) {
+            return;
+          }
+        }
+
+        const actualDay = Math.min(rec.dayOfMonth || 1, monthEnd.getDate());
+        const dueDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), actualDay);
+
+        let paidTransactionId: string | undefined;
+        let confirmedDate: Date | null = null;
+        const isPaid = transactions.some(t => {
+          if (t.isTemplate) return false;
+          if (t.type !== rec.type) return false;
+
+          const tDesc = t.description.toLowerCase().trim();
+          const recDesc = rec.description.toLowerCase().trim();
+          const isDescMatch = tDesc === recDesc || (tDesc.length > 3 && recDesc.length > 3 && (tDesc.includes(recDesc) || recDesc.includes(tDesc)));
+
+          if (!isDescMatch) return false;
+
+          const tDate = parseISO(t.date);
+          const matches = isSameMonth(tDate, targetDate) && isSameYear(tDate, targetDate);
+          if (matches) {
+            paidTransactionId = t.id;
+            const dStr = t.createdAt ? t.createdAt.split('T')[0] : t.date;
+            try {
+              confirmedDate = parseISO(dStr);
+            } catch {
+              confirmedDate = parseISO(t.date);
+            }
+          }
+          return matches;
+        });
+
+        let status: 'pending' | 'late' | 'paid' = 'pending';
+        if (isPaid) status = 'paid';
+        else if (isBefore(dueDate, new Date()) && !isSameMonth(dueDate, new Date())) status = 'late'; 
+        else if (isBefore(dueDate, new Date()) && !isPaid) status = 'late';
+
+        result.push({
+          ...rec,
+          dueDate,
+          status,
+          paidTransactionId,
+          confirmedDate
+        });
+      }
+    });
+
+    return result.filter(item => {
         // Apply FilterBar filters
         if (currentFilters) {
             // Search
@@ -223,6 +323,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         switch (sortField) {
             case 'dueDate':
                 comparison = a.dueDate.getTime() - b.dueDate.getTime();
+                break;
+            case 'confirmedDate':
+                comparison = (a.confirmedDate ? a.confirmedDate.getTime() : 0) - (b.confirmedDate ? b.confirmedDate.getTime() : 0);
                 break;
             case 'description':
                 comparison = a.description.localeCompare(b.description);
@@ -368,6 +471,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
             <thead>
               <tr>
                 <th>Vencimento</th>
+                <th>Confirmado Em</th>
                 <th>Descrição</th>
                 <th>Categoria</th>
                 <th>Status</th>
@@ -378,6 +482,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
               ${expectedTransactions.map(t => `
                 <tr>
                   <td class="text-slate">${format(t.dueDate, 'dd/MM/yyyy')}</td>
+                  <td class="text-slate">${t.confirmedDate ? format(t.confirmedDate, 'dd/MM/yyyy') : '-'}</td>
                   <td class="font-bold">${t.description}</td>
                   <td class="text-slate">${t.category}</td>
                   <td class="status-${t.status}">${t.status === 'paid' ? 'PAGO' : t.status === 'late' ? 'VENCIDO' : 'A VENCER'}</td>
@@ -497,7 +602,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                     </div>
                     <div>
                       <p className="font-bold text-xs text-slate-800 dark:text-white leading-tight">{rec.description}</p>
-                      <p className="text-[10px] text-slate-400">Dia {rec.dayOfMonth} • {rec.category} {rec.isJoint ? '• Família' : ''}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {(rec.frequencyType === 'DAYS' || rec.intervalDays) ? `A cada ${rec.intervalDays || 15} dias` : `Dia ${rec.dayOfMonth}`} • {rec.category} {rec.isJoint ? '• Família' : ''}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -578,6 +685,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                         <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('dueDate')}>
                             <div className="flex items-center gap-1">Vencimento <SortIcon field="dueDate" /></div>
                         </th>
+                        <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('confirmedDate')}>
+                            <div className="flex items-center gap-1">Confirmado Em <SortIcon field="confirmedDate" /></div>
+                        </th>
                         <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('description')}>
                             <div className="flex items-center gap-1">Descrição <SortIcon field="description" /></div>
                         </th>
@@ -609,6 +719,16 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                             </td>
                             <td className="px-3.5 py-2.5 font-bold text-xs text-slate-700 dark:text-slate-300">
                                 {format(item.dueDate, 'dd/MM/yyyy')}
+                            </td>
+                            <td className="px-3.5 py-2.5 font-bold text-xs text-slate-700 dark:text-slate-300">
+                                {item.confirmedDate ? (
+                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-extrabold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md text-[11px]">
+                                        <CheckCircle className="w-3 h-3 text-emerald-500" />
+                                        {format(item.confirmedDate, 'dd/MM/yyyy')}
+                                    </span>
+                                ) : (
+                                    <span className="text-slate-300 dark:text-slate-600 font-normal">-</span>
+                                )}
                             </td>
                             <td className="px-3.5 py-2.5 font-bold text-xs text-slate-900 dark:text-white">
                                 {item.description}
@@ -659,7 +779,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                     ))}
                     {expectedTransactions.length === 0 && (
                         <tr>
-                            <td colSpan={6} className="p-8 text-center text-slate-400 text-xs">
+                            <td colSpan={7} className="p-8 text-center text-slate-400 text-xs">
                                 Nenhuma conta recorrente encontrada.
                             </td>
                         </tr>
@@ -689,11 +809,17 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                     </div>
                     
                     <div className="flex justify-between items-end">
-                        <div>
+                        <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px] font-bold">
                                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                {format(item.dueDate, 'dd/MM/yyyy')}
+                                Venc.: {format(item.dueDate, 'dd/MM/yyyy')}
                             </div>
+                            {item.confirmedDate && (
+                                <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[11px] font-extrabold">
+                                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                    Conf.: {format(item.confirmedDate, 'dd/MM/yyyy')}
+                                </div>
+                            )}
                         </div>
                         <div className="text-right">
                              <p className={`text-sm font-black ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -792,6 +918,26 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                 />
               </div>
 
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Frequência da Recorrência</label>
+                <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
+                  <button 
+                    type="button" 
+                    onClick={() => setRecFrequencyType('MONTHLY')} 
+                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${recFrequencyType === 'MONTHLY' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+                  >
+                    Mensal (Dia Fixo)
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setRecFrequencyType('DAYS')} 
+                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${recFrequencyType === 'DAYS' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+                  >
+                    Intervalo de Dias
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Valor (R$)</label>
@@ -805,19 +951,51 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Dia do Mês</label>
-                  <select 
-                    value={recDay}
-                    onChange={e => setRecDay(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
-                  >
-                    {Array.from({length: 31}, (_, i) => i + 1).map(d => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
+                {recFrequencyType === 'MONTHLY' ? (
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">Dia do Mês</label>
+                    <select 
+                      value={recDay}
+                      onChange={e => setRecDay(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
+                    >
+                      {Array.from({length: 31}, (_, i) => i + 1).map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1 block">A cada quanto tempo?</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="365"
+                      placeholder="Dias (ex: 15)" 
+                      value={recIntervalDays}
+                      onChange={e => setRecIntervalDays(e.target.value)}
+                      required
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border-none focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-bold dark:text-white"
+                    />
+                  </div>
+                )}
               </div>
+
+              {recFrequencyType === 'DAYS' && (
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+                  <span className="text-[9px] font-bold text-slate-400 flex items-center pr-1">Atalhos:</span>
+                  {[7, 10, 14, 15, 30, 45, 60, 90].map(d => (
+                    <button 
+                      key={d} 
+                      type="button" 
+                      onClick={() => setRecIntervalDays(d.toString())}
+                      className={`px-2 py-1 rounded-md text-[9px] font-bold transition-all border whitespace-nowrap ${recIntervalDays === d.toString() ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:border-indigo-700' : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}`}
+                    >
+                      {d} dias
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

@@ -33,6 +33,35 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+const renderRotatedBarLabel = (color: string) => (props: any) => {
+  const { x, y, width, value } = props;
+  if (value === undefined || value === null || value <= 0) return null;
+  const formatted = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(value);
+
+  const cx = x + width / 2;
+  const cy = y - 6;
+
+  return (
+    <g transform={`translate(${cx}, ${cy})`}>
+      <text
+        transform="rotate(-90)"
+        textAnchor="start"
+        fill={color}
+        fontSize={10}
+        fontWeight="800"
+        className="select-none pointer-events-none"
+      >
+        {formatted}
+      </text>
+    </g>
+  );
+};
+
 const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, accounts, recurringTransactions, installmentGroups }) => {
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: 'category' | 'type' | 'value' | 'average', direction: 'asc' | 'desc' } | null>(null);
@@ -102,13 +131,6 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
 
   const normalizedTransactions = useMemo(() => {
     return filteredTransactions.map(t => {
-        let effectiveType = t.type;
-        if (t.type !== 'TRANSFER') {
-            const cat = categories.find(c => c.name === t.category);
-            if (cat && cat.type) {
-                effectiveType = cat.type;
-            }
-        }
         if (t.type === 'TRANSFER' && currentFilters?.accounts.length === 1) {
             const accId = currentFilters.accounts[0];
             if (t.accountId === accId) {
@@ -117,9 +139,9 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
                 return { ...t, type: 'INCOME' as const };
             }
         }
-        return { ...t, type: effectiveType };
+        return t;
     });
-  }, [filteredTransactions, currentFilters, categories]);
+  }, [filteredTransactions, currentFilters]);
 
   const monthsCount = useMemo(() => {
     if (!currentFilters) return 1;
@@ -402,22 +424,96 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
     return history.slice(-15); // Show last 15 data points of the filtered range
   }, [normalizedTransactions]);
 
-  const monthlyHistory = useMemo(() => {
-     // Group by Month/Year
-     const grouped = normalizedTransactions.reduce((acc: any, t) => {
-         const date = parseISO(t.date);
-         const key = format(date, 'MMM/yy', { locale: ptBR });
-         
-         if (!acc[key]) acc[key] = { name: key, receitas: 0, despesas: 0 };
-         
-         if (t.type === 'INCOME') acc[key].receitas += t.amount;
-         else if (t.type === 'EXPENSE') acc[key].despesas += t.amount;
-         
-         return acc;
-     }, {});
+  const targetYear = useMemo(() => {
+    if (currentFilters?.currentDate) {
+      return currentFilters.currentDate.getFullYear();
+    }
+    if (currentFilters?.dateRange?.start) {
+      return new Date(currentFilters.dateRange.start).getFullYear();
+    }
+    return new Date().getFullYear();
+  }, [currentFilters]);
 
-     return Object.values(grouped); // No sorting needed if we assume chronological input or sort keys
-  }, [normalizedTransactions]);
+  const yearTransactions = useMemo(() => {
+    const baseTransactions = transactions.filter(t => !t.isTemplate);
+    if (!currentFilters) return baseTransactions;
+
+    return baseTransactions.filter(t => {
+      // Search
+      const matchesSearch = !currentFilters.searchTerm ||
+        t.description.toLowerCase().includes(currentFilters.searchTerm.toLowerCase()) || 
+        t.category.toLowerCase().includes(currentFilters.searchTerm.toLowerCase());
+      
+      // Type
+      const matchesType = currentFilters.type === 'ALL' || t.type === currentFilters.type;
+      
+      // Categories
+      const matchesCategory = currentFilters.categories.length === 0 || currentFilters.categories.includes(t.category);
+      
+      // Accounts
+      const matchesAccount = currentFilters.accounts.length === 0 || 
+                             currentFilters.accounts.includes(t.accountId) ||
+                             (t.type === 'TRANSFER' && t.toAccountId && currentFilters.accounts.includes(t.toAccountId));
+      
+      // Check if in targetYear
+      if (!t.date) return false;
+      const tYear = parseISO(t.date).getFullYear();
+      const matchesYear = tYear === targetYear;
+
+      return matchesSearch && matchesType && matchesAccount && matchesCategory && matchesYear;
+    });
+  }, [transactions, currentFilters, targetYear]);
+
+  const monthlyHistory = useMemo(() => {
+    const monthsData = Array.from({ length: 12 }, (_, monthIndex) => {
+      const d = new Date(targetYear, monthIndex, 1);
+      const label = format(d, 'MMM', { locale: ptBR });
+      const formattedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+      const name = `${formattedLabel}/${format(d, 'yy')}`;
+      const monthFullName = format(d, 'MMMM', { locale: ptBR });
+      const monthFullNameFormatted = monthFullName.charAt(0).toUpperCase() + monthFullName.slice(1);
+      
+      return {
+        monthIndex,
+        name,
+        monthName: monthFullNameFormatted,
+        receitas: 0,
+        despesas: 0,
+        saldo: 0
+      };
+    });
+
+    yearTransactions.forEach(t => {
+      if (!t.date) return;
+      const d = parseISO(t.date);
+      const mIdx = d.getMonth();
+      if (mIdx >= 0 && mIdx < 12) {
+        if (t.type === 'INCOME') {
+          monthsData[mIdx].receitas += t.amount;
+        } else if (t.type === 'EXPENSE') {
+          monthsData[mIdx].despesas += t.amount;
+        }
+      }
+    });
+
+    monthsData.forEach(m => {
+      m.saldo = m.receitas - m.despesas;
+    });
+
+    return monthsData;
+  }, [yearTransactions, targetYear]);
+
+  const yearTotals = useMemo(() => {
+    return monthlyHistory.reduce(
+      (acc, item) => {
+        acc.receitas += item.receitas;
+        acc.despesas += item.despesas;
+        acc.saldo += item.saldo;
+        return acc;
+      },
+      { receitas: 0, despesas: 0, saldo: 0 }
+    );
+  }, [monthlyHistory]);
 
   const getCategoryColor = (name: string) => {
     return categories.find(c => c.name === name)?.color || '#6366f1';
@@ -871,28 +967,96 @@ const Visuals: React.FC<VisualsProps> = ({ transactions, categories, users, acco
         </div>
       </div>
 
-      {/* Histórico Receitas vs Despesas (Novo Gráfico) */}
-      <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
-         <header className="mb-6">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Receitas vs Despesas</h3>
-            <p className="text-xs text-slate-500 font-medium">Comparativo mensal</p>
+      {/* Histórico Receitas vs Despesas (Gráfico e Tabela Anual) */}
+      <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
+         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Receitas vs Despesas</h3>
+              <p className="text-xs text-slate-500 font-medium">Comparativo mensal de todos os meses do ano ({targetYear})</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-3 py-1.5 rounded-xl flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                <span className="text-[10px] font-black uppercase tracking-wider">Receitas:</span>
+                <span className="text-xs font-black">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(yearTotals.receitas)}
+                </span>
+              </div>
+              <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 px-3 py-1.5 rounded-xl flex items-center gap-2 text-rose-700 dark:text-rose-300">
+                <span className="text-[10px] font-black uppercase tracking-wider">Despesas:</span>
+                <span className="text-xs font-black">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(yearTotals.despesas)}
+                </span>
+              </div>
+            </div>
          </header>
-          <div className="h-[300px]">
+
+         <div className="h-[340px]">
              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyHistory}>
+                <BarChart data={monthlyHistory} margin={{ top: 40, right: 10, left: 10, bottom: 0 }}>
                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b8" opacity={0.1} />
                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} dy={10} />
                    <Tooltip content={<CustomTooltip />} />
                    <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', paddingBottom: '20px' }} />
                    <Bar dataKey="receitas" name="Receitas" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20}>
-                      <LabelList dataKey="receitas" position="top" formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(value)} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#10b981' }} />
+                      <LabelList dataKey="receitas" content={renderRotatedBarLabel('#10b981')} />
                    </Bar>
                    <Bar dataKey="despesas" name="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={20}>
-                      <LabelList dataKey="despesas" position="top" formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(value)} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#ef4444' }} />
+                      <LabelList dataKey="despesas" content={renderRotatedBarLabel('#ef4444')} />
                    </Bar>
                 </BarChart>
              </ResponsiveContainer>
-          </div>
+         </div>
+
+         {/* Tabela Comparativa Mensal (Requisito: Mostrar meses do ano na tabela) */}
+         <div className="mt-6 border-t border-slate-100 dark:border-slate-800 pt-6">
+           <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-4">Tabela Comparativa Mensal ({targetYear})</h4>
+           <div className="overflow-x-auto">
+             <table className="w-full text-left border-collapse">
+               <thead>
+                 <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                   <th className="py-2.5 px-3">Mês</th>
+                   <th className="py-2.5 px-3 text-right">Receitas</th>
+                   <th className="py-2.5 px-3 text-right">Despesas</th>
+                   <th className="py-2.5 px-3 text-right">Resultado (Saldo)</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
+                 {monthlyHistory.map((m, idx) => (
+                   <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors text-xs font-bold">
+                     <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200">
+                       {m.monthName} <span className="text-[10px] text-slate-400 font-normal">({m.name})</span>
+                     </td>
+                     <td className="py-2.5 px-3 text-right text-emerald-600 font-bold">
+                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(m.receitas)}
+                     </td>
+                     <td className="py-2.5 px-3 text-right text-rose-600 font-bold">
+                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(m.despesas)}
+                     </td>
+                     <td className={`py-2.5 px-3 text-right font-black ${m.saldo >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(m.saldo)}
+                     </td>
+                   </tr>
+                 ))}
+               </tbody>
+               <tfoot>
+                 <tr className="bg-slate-50 dark:bg-slate-800/60 font-black text-xs border-t-2 border-slate-200 dark:border-slate-700">
+                   <td className="py-3 px-3 text-slate-700 dark:text-slate-200 uppercase tracking-wider text-[10px]">
+                     Total {targetYear}
+                   </td>
+                   <td className="py-3 px-3 text-right text-emerald-600">
+                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(yearTotals.receitas)}
+                   </td>
+                   <td className="py-3 px-3 text-right text-rose-600">
+                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(yearTotals.despesas)}
+                   </td>
+                   <td className={`py-3 px-3 text-right ${yearTotals.saldo >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(yearTotals.saldo)}
+                   </td>
+                 </tr>
+               </tfoot>
+             </table>
+           </div>
+         </div>
       </div>
 
       {/* Projeção de Parcelamentos (Novo Gráfico) */}

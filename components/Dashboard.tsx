@@ -259,6 +259,37 @@ const Dashboard: React.FC<DashboardProps> = ({
   const weeklyReminders = useMemo(() => {
     const list: { id: string; date: Date; dateStr: string; label: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; description: string; amount: number; isRecurring: boolean; category: string; isTemplate?: boolean; isLate: boolean }[] = [];
     const today = new Date();
+
+    // Helper to check if a recurring rule applies to targetDate
+    const isRecurringDueOnDate = (rt: RecurringTransaction, date: Date): boolean => {
+      if (!rt.active) return false;
+      const isInterval = rt.frequencyType === 'DAYS' || (rt.intervalDays && rt.intervalDays > 0);
+
+      if (isInterval) {
+        const interval = rt.intervalDays || 15;
+        const start = parseISO(rt.startDate || new Date().toISOString().split('T')[0]);
+        const startClean = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const targetClean = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+        if (targetClean < startClean) return false;
+
+        const diffMs = targetClean.getTime() - startClean.getTime();
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        return diffDays >= 0 && diffDays % interval === 0;
+      } else {
+        if (rt.startDate) {
+          const start = parseISO(rt.startDate);
+          const startYear = start.getFullYear();
+          const startMonth = start.getMonth();
+          const targetYear = date.getFullYear();
+          const targetMonth = date.getMonth();
+          if (startYear > targetYear || (startYear === targetYear && startMonth > targetMonth)) {
+            return false;
+          }
+        }
+        return (rt.dayOfMonth || 1) === date.getDate();
+      }
+    };
     
     // 1. Past 30 days for late items (from -30 up to -1)
     for (let i = -30; i < 0; i++) {
@@ -272,48 +303,34 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       // Check recurring
       recurringTransactions.forEach(rt => {
-        if (rt.active && rt.dayOfMonth === targetDay) {
-          // Check if eligible based on start date
-          let isEligible = true;
-          if (rt.startDate) {
-            const start = parseISO(rt.startDate);
-            const startYear = start.getFullYear();
-            const startMonth = start.getMonth();
-            const targetYear = targetDate.getFullYear();
-            const targetMonth = targetDate.getMonth();
+        if (isRecurringDueOnDate(rt, targetDate)) {
+          // Check if already paid around this date
+          const isPaid = allRawTransactions.some(t => {
+            if (t.isTemplate) return false;
+            if (t.type !== rt.type) return false;
+            const tDate = parseISO(t.date);
+            const isSamePeriod = tDate.getFullYear() === targetDate.getFullYear() && tDate.getMonth() === targetDate.getMonth();
+            if (!isSamePeriod) return false;
             
-            if (startYear > targetYear) isEligible = false;
-            if (startYear === targetYear && startMonth > targetMonth) isEligible = false;
-          }
+            const tDesc = t.description.toLowerCase().trim();
+            const rtDesc = rt.description.toLowerCase().trim();
+            return tDesc === rtDesc || (tDesc.length > 3 && rtDesc.length > 3 && (tDesc.includes(rtDesc) || rtDesc.includes(tDesc)));
+          });
 
-          if (isEligible) {
-            // Check if already paid in that month (case-insensitive and partial match)
-            const isPaid = allRawTransactions.some(t => {
-              if (t.isTemplate) return false;
-              const tDate = parseISO(t.date);
-              const isSamePeriod = tDate.getFullYear() === targetDate.getFullYear() && tDate.getMonth() === targetDate.getMonth();
-              if (!isSamePeriod) return false;
-              
-              const tDesc = t.description.toLowerCase().trim();
-              const rtDesc = rt.description.toLowerCase().trim();
-              return tDesc === rtDesc || tDesc.includes(rtDesc) || rtDesc.includes(tDesc);
+          if (!isPaid) {
+            list.push({
+              id: `rec-late-${rt.id}-${targetDateStr}`,
+              date: targetDate,
+              dateStr: targetDateStr,
+              label: dayLabel,
+              type: rt.type,
+              description: rt.description,
+              amount: rt.amount,
+              isRecurring: true,
+              category: rt.category,
+              isTemplate: true,
+              isLate: true
             });
-
-            if (!isPaid) {
-              list.push({
-                id: `rec-late-${rt.id}-${targetDateStr}`,
-                date: targetDate,
-                dateStr: targetDateStr,
-                label: dayLabel,
-                type: rt.type,
-                description: rt.description,
-                amount: rt.amount,
-                isRecurring: true,
-                category: rt.category,
-                isTemplate: true,
-                isLate: true
-              });
-            }
           }
         }
       });
@@ -333,14 +350,17 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           // Robust check for recurring templates (monthly recurrence) already recorded/paid this month
           if (t.recurrence === 'MONTHLY' || !t.installmentGroupId) {
-            const isPaidTemplate = allRawTransactions.some(realT => 
-              !realT.isTemplate && 
-              (realT.description.toLowerCase().trim() === t.description.toLowerCase().trim() ||
-               realT.description.toLowerCase().includes(t.description.toLowerCase().trim()) ||
-               t.description.toLowerCase().includes(realT.description.toLowerCase().trim())) &&
-              parseISO(realT.date).getFullYear() === targetDate.getFullYear() &&
-              parseISO(realT.date).getMonth() === targetDate.getMonth()
-            );
+            const isPaidTemplate = allRawTransactions.some(realT => {
+              if (realT.isTemplate) return false;
+              if (realT.type !== t.type) return false;
+              const rDesc = realT.description.toLowerCase().trim();
+              const tDesc = t.description.toLowerCase().trim();
+              const isDescMatch = rDesc === tDesc || (rDesc.length > 3 && tDesc.length > 3 && (rDesc.includes(tDesc) || tDesc.includes(rDesc)));
+              if (!isDescMatch) return false;
+
+              const rDate = parseISO(realT.date);
+              return rDate.getFullYear() === targetDate.getFullYear() && rDate.getMonth() === targetDate.getMonth();
+            });
             if (isPaidTemplate) return; // Skip showing in reminders!
           }
 
@@ -381,48 +401,34 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       // Check recurring
       recurringTransactions.forEach(rt => {
-        if (rt.active && rt.dayOfMonth === targetDay) {
-          // Check if eligible based on start date
-          let isEligible = true;
-          if (rt.startDate) {
-            const start = parseISO(rt.startDate);
-            const startYear = start.getFullYear();
-            const startMonth = start.getMonth();
-            const targetYear = targetDate.getFullYear();
-            const targetMonth = targetDate.getMonth();
+        if (isRecurringDueOnDate(rt, targetDate)) {
+          // Check if already paid in that month (case-insensitive and partial match)
+          const isPaid = allRawTransactions.some(t => {
+            if (t.isTemplate) return false;
+            if (t.type !== rt.type) return false;
+            const tDate = parseISO(t.date);
+            const isSamePeriod = tDate.getFullYear() === targetDate.getFullYear() && tDate.getMonth() === targetDate.getMonth();
+            if (!isSamePeriod) return false;
             
-            if (startYear > targetYear) isEligible = false;
-            if (startYear === targetYear && startMonth > targetMonth) isEligible = false;
-          }
+            const tDesc = t.description.toLowerCase().trim();
+            const rtDesc = rt.description.toLowerCase().trim();
+            return tDesc === rtDesc || (tDesc.length > 3 && rtDesc.length > 3 && (tDesc.includes(rtDesc) || rtDesc.includes(tDesc)));
+          });
 
-          if (isEligible) {
-            // Check if already paid in that month (case-insensitive and partial match)
-            const isPaid = allRawTransactions.some(t => {
-              if (t.isTemplate) return false;
-              const tDate = parseISO(t.date);
-              const isSamePeriod = tDate.getFullYear() === targetDate.getFullYear() && tDate.getMonth() === targetDate.getMonth();
-              if (!isSamePeriod) return false;
-              
-              const tDesc = t.description.toLowerCase().trim();
-              const rtDesc = rt.description.toLowerCase().trim();
-              return tDesc === rtDesc || tDesc.includes(rtDesc) || rtDesc.includes(tDesc);
+          if (!isPaid) {
+            list.push({
+              id: `rec-${rt.id}-${targetDateStr}`,
+              date: targetDate,
+              dateStr: targetDateStr,
+              label: dayLabel,
+              type: rt.type,
+              description: rt.description,
+              amount: rt.amount,
+              isRecurring: true,
+              category: rt.category,
+              isTemplate: true,
+              isLate: false
             });
-
-            if (!isPaid) {
-              list.push({
-                id: `rec-${rt.id}-${targetDateStr}`,
-                date: targetDate,
-                dateStr: targetDateStr,
-                label: dayLabel,
-                type: rt.type,
-                description: rt.description,
-                amount: rt.amount,
-                isRecurring: true,
-                category: rt.category,
-                isTemplate: true,
-                isLate: false
-              });
-            }
           }
         }
       });
@@ -442,14 +448,17 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           // Robust check for recurring templates (monthly recurrence) already recorded/paid this month
           if (t.recurrence === 'MONTHLY' || !t.installmentGroupId) {
-            const isPaidTemplate = allRawTransactions.some(realT => 
-              !realT.isTemplate && 
-              (realT.description.toLowerCase().trim() === t.description.toLowerCase().trim() ||
-               realT.description.toLowerCase().includes(t.description.toLowerCase().trim()) ||
-               t.description.toLowerCase().includes(realT.description.toLowerCase().trim())) &&
-              parseISO(realT.date).getFullYear() === targetDate.getFullYear() &&
-              parseISO(realT.date).getMonth() === targetDate.getMonth()
-            );
+            const isPaidTemplate = allRawTransactions.some(realT => {
+              if (realT.isTemplate) return false;
+              if (realT.type !== t.type) return false;
+              const rDesc = realT.description.toLowerCase().trim();
+              const tDesc = t.description.toLowerCase().trim();
+              const isDescMatch = rDesc === tDesc || (rDesc.length > 3 && tDesc.length > 3 && (rDesc.includes(tDesc) || tDesc.includes(rDesc)));
+              if (!isDescMatch) return false;
+
+              const rDate = parseISO(realT.date);
+              return rDate.getFullYear() === targetDate.getFullYear() && rDate.getMonth() === targetDate.getMonth();
+            });
             if (isPaidTemplate) return; // Skip showing in reminders!
           }
 

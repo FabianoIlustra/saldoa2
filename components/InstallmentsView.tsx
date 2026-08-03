@@ -40,7 +40,7 @@ interface InstallmentsViewProps {
   categories: Category[];
 }
 
-type SortField = 'dueDate' | 'description' | 'category' | 'installment' | 'amount' | 'status';
+type SortField = 'dueDate' | 'description' | 'category' | 'installment' | 'amount' | 'status' | 'confirmedDate';
 type SortDirection = 'asc' | 'desc';
 
 const InstallmentsView: React.FC<InstallmentsViewProps> = ({
@@ -145,16 +145,14 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
 
         if (shouldInclude) {
           let status: 'paid' | 'late' | 'pending' = 'pending';
+          let confirmedDate: Date | null = null;
           
-          // In this app's logic, if the transaction is in the DB and is NOT a template, 
-          // it is considered "Paid" or "Accounted for".
-          // If it's a future date, we'll call it pending.
           if (record && !record.isTemplate) {
-              const recordDate = parseISO(record.date);
-              if (isBefore(recordDate, startOfDay(new Date()))) {
-                  status = 'paid';
-              } else {
-                  status = 'pending';
+              status = 'paid';
+              try {
+                  confirmedDate = typeof record.date === 'string' ? parseISO(record.date) : record.date;
+              } catch {
+                  confirmedDate = parseISO(record.date);
               }
           } else if (isBefore(finalDate, startOfDay(new Date()))) {
               status = 'late';
@@ -167,7 +165,8 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
             installmentNumber: i + 1,
             dueDate: finalDate,
             status,
-            paidTransactionId: record?.id
+            paidTransactionId: record?.id,
+            confirmedDate
           });
         }
       }
@@ -203,6 +202,9 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
         switch (sortField) {
             case 'dueDate':
                 comparison = a.dueDate.getTime() - b.dueDate.getTime();
+                break;
+            case 'confirmedDate':
+                comparison = (a.confirmedDate ? a.confirmedDate.getTime() : 0) - (b.confirmedDate ? b.confirmedDate.getTime() : 0);
                 break;
             case 'description':
                 comparison = a.description.localeCompare(b.description);
@@ -442,6 +444,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
             <thead>
               <tr>
                 <th>Vencimento</th>
+                <th>Confirmado Em</th>
                 <th>Descrição</th>
                 <th>Categoria</th>
                 <th>Parcela</th>
@@ -453,6 +456,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
               ${monthlyInstallments.map(t => `
                 <tr>
                   <td>${format(t.dueDate, 'dd/MM/yyyy')}</td>
+                  <td>${t.confirmedDate ? format(t.confirmedDate, 'dd/MM/yyyy') : '-'}</td>
                   <td class="font-bold">${t.description}</td>
                   <td>${t.category}</td>
                   <td style="text-align: center;">${t.installmentNumber}/${t.totalInstallments}</td>
@@ -632,6 +636,9 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                 <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('dueDate')}>
                     <div className="flex items-center gap-1">Vencimento <SortIcon field="dueDate" /></div>
                 </th>
+                <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('confirmedDate')}>
+                    <div className="flex items-center gap-1">Confirmado Em <SortIcon field="confirmedDate" /></div>
+                </th>
                 <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('description')}>
                     <div className="flex items-center gap-1">Descrição <SortIcon field="description" /></div>
                 </th>
@@ -675,6 +682,16 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                     </td>
                     <td className="px-3.5 py-2.5 font-bold text-xs text-slate-700 dark:text-slate-300">
                       {format(item.dueDate, 'dd/MM/yyyy')}
+                    </td>
+                    <td className="px-3.5 py-2.5 font-bold text-xs text-slate-700 dark:text-slate-300">
+                      {item.confirmedDate ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-extrabold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md text-[11px]">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                          {format(item.confirmedDate, 'dd/MM/yyyy')}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 dark:text-slate-600 font-normal">-</span>
+                      )}
                     </td>
                     <td className="px-3.5 py-2.5 font-bold text-xs text-slate-900 dark:text-white">
                       {item.description}
@@ -738,7 +755,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
               })}
               {monthlyInstallments.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
                     Nenhuma parcela para este período.
                   </td>
                 </tr>
@@ -747,7 +764,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
             {monthlyInstallments.length > 0 && (
               <tfoot className="bg-slate-50 dark:bg-slate-800/50 font-black">
                 <tr>
-                  <td colSpan={6} className="px-3.5 py-2 text-right text-slate-500 uppercase text-[9px]">Total do Período:</td>
+                  <td colSpan={7} className="px-3.5 py-2 text-right text-slate-500 uppercase text-[9px]">Total do Período:</td>
                   <td className="px-3.5 py-2 text-right text-indigo-600 text-xs">
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalMonthly)}
                   </td>
@@ -760,6 +777,25 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
 
         {/* Mobile View */}
         <div className="block md:hidden">
+          {monthlyInstallments.filter(i => i.status !== 'paid').length > 0 && (
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <label className="flex items-center gap-2.5 text-xs font-black text-slate-700 dark:text-slate-200 cursor-pointer select-none">
+                <input 
+                  type="checkbox"
+                  checked={
+                    monthlyInstallments.filter(i => i.status !== 'paid').length > 0 && 
+                    selectedKeys.length === monthlyInstallments.filter(i => i.status !== 'paid').length
+                  }
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span>Selecionar todas as parcelas</span>
+              </label>
+              <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 rounded-full">
+                {selectedKeys.length} de {monthlyInstallments.filter(i => i.status !== 'paid').length}
+              </span>
+            </div>
+          )}
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {monthlyInstallments.map((item, idx) => {
               const itemKey = `${item.id}-${item.installmentNumber}`;
@@ -807,6 +843,11 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                       <span className="text-[9px] font-bold text-slate-400 block mt-0.5">
                         Venc. {format(item.dueDate, 'dd/MM/yyyy')}
                       </span>
+                      {item.confirmedDate && (
+                        <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                          Conf. {format(item.confirmedDate, 'dd/MM/yyyy')}
+                        </span>
+                      )}
                     </div>
                   </div>
 
