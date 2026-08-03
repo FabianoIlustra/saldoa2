@@ -5,14 +5,21 @@ export interface PricingPlan {
   price: number; // as a numeric value, e.g. 19.90
   description: string;
   features: string[];
+  enabled?: boolean; // Toggles whether the plan (e.g. Plano Grátis) is active for new signups
   limits: {
     accounts: number;
     transactions: number;
     goals: number;
+    recurringCount?: number;
+    installmentsCount?: number;
     hasVoice: boolean;
     hasCouple: boolean;
     hasImport: boolean;
     hasRecurring: boolean;
+    hasInstallments?: boolean;
+    hasCharts?: boolean;
+    hasGoalsTab?: boolean;
+    hasAiConsultant?: boolean;
     hasReceiptPhoto?: boolean;
   };
 }
@@ -62,6 +69,7 @@ const DEFAULT_PRICING: Record<string, PricingPlan> = {
     name: 'Grátis',
     price: 0,
     description: 'Comece a organizar suas finanças essenciais.',
+    enabled: true,
     features: [
       'Até 1 Conta Cadastrada',
       'Até 15 Lançamentos por Mês',
@@ -72,10 +80,16 @@ const DEFAULT_PRICING: Record<string, PricingPlan> = {
       accounts: 1,
       transactions: 15,
       goals: 1,
+      recurringCount: 2,
+      installmentsCount: 2,
       hasVoice: false,
       hasCouple: false,
       hasImport: false,
       hasRecurring: false,
+      hasInstallments: false,
+      hasCharts: false,
+      hasGoalsTab: true,
+      hasAiConsultant: false,
       hasReceiptPhoto: false,
     }
   },
@@ -94,10 +108,16 @@ const DEFAULT_PRICING: Record<string, PricingPlan> = {
       accounts: 3,
       transactions: 50,
       goals: 3,
+      recurringCount: 5,
+      installmentsCount: 5,
       hasVoice: true,
       hasCouple: false,
       hasImport: false,
-      hasRecurring: false,
+      hasRecurring: true,
+      hasInstallments: true,
+      hasCharts: true,
+      hasGoalsTab: true,
+      hasAiConsultant: false,
       hasReceiptPhoto: false,
     }
   },
@@ -118,10 +138,16 @@ const DEFAULT_PRICING: Record<string, PricingPlan> = {
       accounts: 10,
       transactions: 200,
       goals: 10,
+      recurringCount: 20,
+      installmentsCount: 20,
       hasVoice: true,
       hasCouple: true,
       hasImport: true,
       hasRecurring: true,
+      hasInstallments: true,
+      hasCharts: true,
+      hasGoalsTab: true,
+      hasAiConsultant: true,
       hasReceiptPhoto: false,
     }
   },
@@ -143,10 +169,16 @@ const DEFAULT_PRICING: Record<string, PricingPlan> = {
       accounts: Infinity,
       transactions: Infinity,
       goals: Infinity,
+      recurringCount: Infinity,
+      installmentsCount: Infinity,
       hasVoice: true,
       hasCouple: true,
       hasImport: true,
       hasRecurring: true,
+      hasInstallments: true,
+      hasCharts: true,
+      hasGoalsTab: true,
+      hasAiConsultant: true,
       hasReceiptPhoto: true,
     }
   }
@@ -468,5 +500,9 @@ export const deleteSiteSuggestion = async (id: string) => {
   } catch (err) {
     console.error('Erro ao deletar sugestão do Supabase:', err);
   }
+};
+
+export const clearAsaasTransactions = () => {
+  localStorage.setItem('finan_ai_asaas_txs', JSON.stringify([]));
 };
 
