@@ -34,6 +34,8 @@ interface InstallmentsViewProps {
   onDelete: (id: string, deleteTransactions: boolean) => void;
   onValidate: (transaction: Omit<Transaction, 'id' | 'isTemplate'>) => void;
   onDeleteTransaction: (id: string) => void;
+  onUpdateGroup?: (group: Partial<InstallmentGroup> & { id: string }) => Promise<void>;
+  onUpdateSingle?: (item: any) => Promise<void>;
   accounts: Account[];
   categories: Category[];
 }
@@ -48,6 +50,8 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
   onDelete,
   onValidate,
   onDeleteTransaction,
+  onUpdateGroup,
+  onUpdateSingle,
   accounts,
   categories
 }) => {
@@ -58,6 +62,22 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
   const [editAmount, setEditAmount] = useState<string>('');
   const [editDate, setEditDate] = useState<string>('');
   const [editAccountId, setEditAccountId] = useState<string>('');
+
+  // Edit Installment Modal State
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [editScope, setEditScope] = useState<'SINGLE' | 'ALL'>('SINGLE');
+  const [editDesc, setEditDesc] = useState('');
+  const [editInstallmentAmount, setEditInstallmentAmount] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editAccountIdState, setEditAccountIdState] = useState('');
+  const [editDueDateStr, setEditDueDateStr] = useState('');
+
+  // Bulk Launch State
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [isBulkLaunchModalOpen, setIsBulkLaunchModalOpen] = useState(false);
+  const [bulkAccountId, setBulkAccountId] = useState(accounts[0]?.id || '');
+  const [bulkDate, setBulkDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
 
   const [sortField, setSortField] = useState<SortField>('dueDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -275,6 +295,111 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
     }
   };
 
+  // Edit Installment Modal Handlers
+  const handleOpenEditModal = (item: any) => {
+    setEditingItem(item);
+    setEditScope('SINGLE');
+    setEditDesc(item.description);
+    setEditInstallmentAmount(item.installmentAmount.toString());
+    setEditCategory(item.category);
+    setEditAccountIdState(item.accountId || accounts[0]?.id || '');
+    setEditDueDateStr(format(item.dueDate, 'yyyy-MM-dd'));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem) return;
+
+    try {
+      if (editScope === 'SINGLE') {
+        if (onUpdateSingle) {
+          await onUpdateSingle({
+            installmentGroupId: editingItem.id,
+            installmentNumber: editingItem.installmentNumber,
+            totalInstallments: editingItem.totalInstallments,
+            description: editDesc,
+            amount: parseFloat(editInstallmentAmount),
+            category: editCategory,
+            accountId: editAccountIdState,
+            date: editDueDateStr,
+            paidTransactionId: editingItem.paidTransactionId,
+            userId: editingItem.userId,
+            type: editingItem.type,
+            isJoint: editingItem.isJoint
+          });
+        }
+      } else {
+        if (onUpdateGroup) {
+          await onUpdateGroup({
+            id: editingItem.id,
+            description: editDesc,
+            installmentAmount: parseFloat(editInstallmentAmount),
+            category: editCategory,
+            accountId: editAccountIdState
+          });
+        }
+      }
+      setEditingItem(null);
+    } catch (err) {
+      console.error('Error saving installment edit:', err);
+    }
+  };
+
+  // Bulk Selection and Launch Handlers
+  const toggleSelectAll = () => {
+    const selectable = monthlyInstallments.filter(i => i.status !== 'paid');
+    const selectableKeys = selectable.map(i => `${i.id}-${i.installmentNumber}`);
+    
+    if (selectedKeys.length >= selectableKeys.length && selectableKeys.length > 0) {
+      setSelectedKeys([]);
+    } else {
+      setSelectedKeys(selectableKeys);
+    }
+  };
+
+  const toggleSelectItem = (key: string) => {
+    setSelectedKeys(prev => 
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
+  const selectedItemsToLaunch = useMemo(() => {
+    return monthlyInstallments.filter(i => selectedKeys.includes(`${i.id}-${i.installmentNumber}`));
+  }, [monthlyInstallments, selectedKeys]);
+
+  const totalSelectedAmount = useMemo(() => {
+    return selectedItemsToLaunch.reduce((sum, item) => sum + item.installmentAmount, 0);
+  }, [selectedItemsToLaunch]);
+
+  const handleConfirmBulkLaunch = async () => {
+    if (selectedItemsToLaunch.length === 0) return;
+    setIsBulkProcessing(true);
+    try {
+      for (const item of selectedItemsToLaunch) {
+        await onValidate({
+          id: item.paidTransactionId,
+          userId: item.userId,
+          accountId: bulkAccountId || item.accountId || accounts[0]?.id || '',
+          description: `${item.description} (${item.installmentNumber}/${item.totalInstallments})`,
+          amount: item.installmentAmount,
+          type: item.type,
+          category: item.category,
+          date: bulkDate,
+          recurrence: 'NONE',
+          isJoint: item.isJoint,
+          installmentGroupId: item.id,
+          installmentNumber: item.installmentNumber,
+          totalInstallments: item.totalInstallments
+        } as any);
+      }
+      setSelectedKeys([]);
+      setIsBulkLaunchModalOpen(false);
+    } catch (err) {
+      console.error('Error launching bulk installments:', err);
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
   const handlePrint = () => {
     const printWindow = window.open('', '_blank', 'width=900,height=800');
     if (!printWindow) return;
@@ -463,10 +588,44 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
           </div>
         </div>
 
+        {/* Bulk Launch Banner */}
+        {selectedKeys.length > 0 && (
+          <div className="bg-indigo-600 text-white px-4 py-3 border-b border-indigo-700 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-3">
+              <span className="bg-white/20 text-white text-xs font-black px-2.5 py-1 rounded-full">
+                {selectedKeys.length} selecionada(s)
+              </span>
+              <span className="text-xs font-black">
+                Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalSelectedAmount)}
+              </span>
+            </div>
+            <button 
+              onClick={() => {
+                setBulkAccountId(accounts[0]?.id || '');
+                setBulkDate(format(new Date(), 'yyyy-MM-dd'));
+                setIsBulkLaunchModalOpen(true);
+              }}
+              className="bg-white text-indigo-700 font-extrabold text-xs px-4 py-2 rounded-xl hover:bg-indigo-50 transition-colors shadow-sm flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4 text-indigo-700" />
+              Lançar Todas Selecionadas no Extrato
+            </button>
+          </div>
+        )}
+
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800">
+                <th className="px-3 py-2.5 w-10 text-center">
+                  <input 
+                    type="checkbox"
+                    checked={selectedKeys.length > 0 && selectedKeys.length === monthlyInstallments.filter(i => i.status !== 'paid').length}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    title="Selecionar / Desmarcar Todas"
+                  />
+                </th>
                 <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('status')}>
                     <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
                 </th>
@@ -489,74 +648,97 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {monthlyInstallments.map((item, idx) => (
-                <tr key={idx} className={`group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${item.status === 'paid' ? 'opacity-50 grayscale' : ''}`}>
-                  <td className="px-3.5 py-2.5">
-                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                      item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                      item.status === 'late' ? 'bg-rose-100 text-rose-700' :
-                      'bg-blue-100 text-blue-700'
-                    }`}>
-                      {item.status === 'paid' ? 'Pago' : item.status === 'late' ? 'Vencido' : 'A Vencer'}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 font-bold text-xs text-slate-700 dark:text-slate-300">
-                    {format(item.dueDate, 'dd/MM/yyyy')}
-                  </td>
-                  <td className="px-3.5 py-2.5 font-bold text-xs text-slate-900 dark:text-white">
-                    {item.description}
-                  </td>
-                  <td className="px-3.5 py-2.5">
-                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
-                        {item.category}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 text-center">
-                    <span className="text-[10px] font-black bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500">
-                      {item.installmentNumber}/{item.totalInstallments}
-                    </span>
-                  </td>
-                  <td className={`px-3.5 py-2.5 font-black text-xs text-right ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.installmentAmount)}
-                  </td>
-                  <td className="px-3.5 py-2.5">
-                    <div className="flex items-center justify-center gap-1.5">
+              {monthlyInstallments.map((item, idx) => {
+                const itemKey = `${item.id}-${item.installmentNumber}`;
+                return (
+                  <tr key={idx} className={`group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${item.status === 'paid' ? 'opacity-50 grayscale' : ''}`}>
+                    <td className="px-3 py-2.5 text-center">
                       {item.status !== 'paid' ? (
-                        <button 
-                            onClick={() => handleClick(item)}
-                            className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-                            title="Lançar no Extrato"
-                        >
-                            <Check className="w-3.5 h-3.5" />
-                        </button>
+                        <input 
+                          type="checkbox"
+                          checked={selectedKeys.includes(itemKey)}
+                          onChange={() => toggleSelectItem(itemKey)}
+                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
                       ) : (
-                         <button 
-                            onClick={() => {
-                                if (item.paidTransactionId && confirm('Deseja estornar este lançamento do extrato?')) {
-                                    onDeleteTransaction(item.paidTransactionId);
-                                }
-                            }}
-                            className="bg-rose-100 text-rose-600 p-1.5 rounded-lg hover:bg-rose-200 transition-colors"
-                            title="Estornar Lançamento"
-                        >
-                            <ArrowUpDown className="w-3.5 h-3.5" />
-                        </button>
+                        <span className="text-slate-300 dark:text-slate-700 text-xs">-</span>
                       )}
-                      
-                       <button 
-                        onClick={() => setDeleteGroupConfirmId(item.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg"
-                        title="Excluir contrato completo"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                        item.status === 'late' ? 'bg-rose-100 text-rose-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {item.status === 'paid' ? 'Pago' : item.status === 'late' ? 'Vencido' : 'A Vencer'}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5 font-bold text-xs text-slate-700 dark:text-slate-300">
+                      {format(item.dueDate, 'dd/MM/yyyy')}
+                    </td>
+                    <td className="px-3.5 py-2.5 font-bold text-xs text-slate-900 dark:text-white">
+                      {item.description}
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
+                          {item.category}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5 text-center">
+                      <span className="text-[10px] font-black bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500">
+                        {item.installmentNumber}/{item.totalInstallments}
+                      </span>
+                    </td>
+                    <td className={`px-3.5 py-2.5 font-black text-xs text-right ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.installmentAmount)}
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button 
+                          onClick={() => handleOpenEditModal(item)}
+                          className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 bg-slate-100 dark:bg-slate-800 rounded-lg transition-colors"
+                          title="Editar parcela / contrato"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {item.status !== 'paid' ? (
+                          <button 
+                              onClick={() => handleClick(item)}
+                              className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                              title="Lançar no Extrato"
+                          >
+                              <Check className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                           <button 
+                              onClick={() => {
+                                  if (item.paidTransactionId && confirm('Deseja estornar este lançamento do extrato?')) {
+                                      onDeleteTransaction(item.paidTransactionId);
+                                  }
+                              }}
+                              className="bg-rose-100 text-rose-600 p-1.5 rounded-lg hover:bg-rose-200 transition-colors"
+                              title="Estornar Lançamento"
+                          >
+                              <ArrowUpDown className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        
+                         <button 
+                          onClick={() => setDeleteGroupConfirmId(item.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg"
+                          title="Excluir contrato completo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {monthlyInstallments.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
                     Nenhuma parcela para este período.
                   </td>
                 </tr>
@@ -565,7 +747,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
             {monthlyInstallments.length > 0 && (
               <tfoot className="bg-slate-50 dark:bg-slate-800/50 font-black">
                 <tr>
-                  <td colSpan={5} className="px-3.5 py-2 text-right text-slate-500 uppercase text-[9px]">Total do Período:</td>
+                  <td colSpan={6} className="px-3.5 py-2 text-right text-slate-500 uppercase text-[9px]">Total do Período:</td>
                   <td className="px-3.5 py-2 text-right text-indigo-600 text-xs">
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalMonthly)}
                   </td>
@@ -579,79 +761,101 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
         {/* Mobile View */}
         <div className="block md:hidden">
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {monthlyInstallments.map((item, idx) => (
-              <div 
-                key={idx} 
-                className={`p-4 flex flex-col gap-2.5 transition-colors ${item.status === 'paid' ? 'opacity-60 grayscale' : ''} hover:bg-slate-50 dark:hover:bg-slate-800/25`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1 text-left">
-                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block ${
-                      item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                      item.status === 'late' ? 'bg-rose-100 text-rose-700' :
-                      'bg-blue-100 text-blue-700'
-                    }`}>
-                      {item.status === 'paid' ? 'Pago' : item.status === 'late' ? 'Vencido' : 'A Vencer'}
-                    </span>
-                    <h4 className="font-extrabold text-xs text-slate-900 dark:text-white leading-snug">
-                      {item.description}
-                    </h4>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[9px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                        {item.category}
+            {monthlyInstallments.map((item, idx) => {
+              const itemKey = `${item.id}-${item.installmentNumber}`;
+              return (
+                <div 
+                  key={idx} 
+                  className={`p-4 flex flex-col gap-2.5 transition-colors ${item.status === 'paid' ? 'opacity-60 grayscale' : ''} hover:bg-slate-50 dark:hover:bg-slate-800/25`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      {item.status !== 'paid' && (
+                        <input 
+                          type="checkbox"
+                          checked={selectedKeys.includes(itemKey)}
+                          onChange={() => toggleSelectItem(itemKey)}
+                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer mt-1"
+                        />
+                      )}
+                      <div className="space-y-1 text-left">
+                        <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block ${
+                          item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                          item.status === 'late' ? 'bg-rose-100 text-rose-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                          {item.status === 'paid' ? 'Pago' : item.status === 'late' ? 'Vencido' : 'A Vencer'}
+                        </span>
+                        <h4 className="font-extrabold text-xs text-slate-900 dark:text-white leading-snug">
+                          {item.description}
+                        </h4>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[9px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                            {item.category}
+                          </span>
+                          <span className="text-[9px] font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-full">
+                            Parc. {item.installmentNumber}/{item.totalInstallments}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className={`font-black text-xs block ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.installmentAmount)}
                       </span>
-                      <span className="text-[9px] font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-full">
-                        Parc. {item.installmentNumber}/{item.totalInstallments}
+                      <span className="text-[9px] font-bold text-slate-400 block mt-0.5">
+                        Venc. {format(item.dueDate, 'dd/MM/yyyy')}
                       </span>
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <span className={`font-black text-xs block ${item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.installmentAmount)}
-                    </span>
-                    <span className="text-[9px] font-bold text-slate-400 block mt-0.5">
-                      Venc. {format(item.dueDate, 'dd/MM/yyyy')}
-                    </span>
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-50 dark:border-slate-800/40">
+                    <button 
+                      onClick={() => handleOpenEditModal(item)}
+                      className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2"
+                      title="Editar parcela / contrato"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Editar</span>
+                    </button>
+
+                    <button 
+                      onClick={() => setDeleteGroupConfirmId(item.id)}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2"
+                      title="Excluir contrato completo"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Excluir</span>
+                    </button>
+
+                    {item.status !== 'paid' ? (
+                      <button 
+                        onClick={() => handleClick(item)}
+                        className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-3"
+                        title="Lançar no Extrato"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Lançar</span>
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => {
+                          if (item.paidTransactionId && confirm('Deseja estornar este lançamento do extrato?')) {
+                            onDeleteTransaction(item.paidTransactionId);
+                          }
+                        }}
+                        className="bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 p-1.5 rounded-lg hover:bg-rose-200 transition-colors flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-3"
+                        title="Estornar Lançamento"
+                      >
+                        <ArrowUpDown className="w-3.5 h-3.5" />
+                        <span>Estornar</span>
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-50 dark:border-slate-800/40">
-                  <button 
-                    onClick={() => setDeleteGroupConfirmId(item.id)}
-                    className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2"
-                    title="Excluir contrato completo"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Excluir Contrato</span>
-                  </button>
-
-                  {item.status !== 'paid' ? (
-                    <button 
-                      onClick={() => handleClick(item)}
-                      className="bg-indigo-600 text-white p-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-3"
-                      title="Lançar no Extrato"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Lançar</span>
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={() => {
-                        if (item.paidTransactionId && confirm('Deseja estornar este lançamento do extrato?')) {
-                          onDeleteTransaction(item.paidTransactionId);
-                        }
-                      }}
-                      className="bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 p-1.5 rounded-lg hover:bg-rose-200 transition-colors flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-3"
-                      title="Estornar Lançamento"
-                    >
-                      <ArrowUpDown className="w-3.5 h-3.5" />
-                      <span>Estornar</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {monthlyInstallments.length === 0 && (
               <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
@@ -1028,6 +1232,209 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
               >
                 Cancelar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição de Parcela / Contrato */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2rem] shadow-2xl p-6 border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-indigo-500" />
+                Editar Lançamento Parcelado
+              </h3>
+              <button onClick={() => setEditingItem(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Opção de Abrangência */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">
+                  O que você deseja alterar?
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-colors">
+                  <input 
+                    type="radio" 
+                    name="editScope" 
+                    checked={editScope === 'SINGLE'} 
+                    onChange={() => setEditScope('SINGLE')}
+                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-white block">
+                      Somente esta parcela ({editingItem.installmentNumber}/{editingItem.totalInstallments})
+                    </span>
+                    <span className="text-[9px] text-slate-400">Altera apenas a parcela selecionada neste mês</span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-colors">
+                  <input 
+                    type="radio" 
+                    name="editScope" 
+                    checked={editScope === 'ALL'} 
+                    onChange={() => setEditScope('ALL')}
+                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-white block">
+                      Todas as parcelas do contrato
+                    </span>
+                    <span className="text-[9px] text-slate-400">Atualiza as informações gerais para todo o contrato</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Formulário */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Descrição</label>
+                <input 
+                  type="text" 
+                  value={editDesc} 
+                  onChange={e => setEditDesc(e.target.value)} 
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Valor da Parcela (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={editInstallmentAmount} 
+                    onChange={e => setEditInstallmentAmount(e.target.value)} 
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Categoria</label>
+                  <select 
+                    value={editCategory} 
+                    onChange={e => setEditCategory(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    {categories.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {editScope === 'SINGLE' && (
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Data de Vencimento</label>
+                  <input 
+                    type="date" 
+                    value={editDueDateStr} 
+                    onChange={e => setEditDueDateStr(e.target.value)} 
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="pt-4 flex items-center justify-end gap-3">
+                <button 
+                  onClick={() => setEditingItem(null)}
+                  className="px-4 py-3 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveEdit}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-indigo-700 transition-colors shadow-sm"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Lançamento em Lote */}
+      {isBulkLaunchModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2rem] shadow-2xl p-6 border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white">Lançar Parcelas em Lote</h3>
+                <p className="text-xs text-slate-400">Lança todas as parcelas selecionadas individualmente no extrato.</p>
+              </div>
+              <button onClick={() => setIsBulkLaunchModalOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-500">Total Selecionado ({selectedItemsToLaunch.length} parcelas):</span>
+                <span className="text-base font-black text-indigo-600">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalSelectedAmount)}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Lançar em qual conta?</label>
+                  <select 
+                    value={bulkAccountId}
+                    onChange={e => setBulkAccountId(e.target.value)}
+                    className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  >
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>{acc.name} ({acc.type})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Data do Lançamento no Extrato</label>
+                  <input 
+                    type="date"
+                    value={bulkDate}
+                    onChange={e => setBulkDate(e.target.value)}
+                    className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Item preview */}
+              <div className="max-h-40 overflow-y-auto space-y-1.5 pt-2 custom-scrollbar">
+                {selectedItemsToLaunch.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center text-xs p-2 bg-slate-50 dark:bg-slate-800/30 rounded-lg">
+                    <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[240px]">
+                      {item.description} ({item.installmentNumber}/{item.totalInstallments})
+                    </span>
+                    <span className="font-black text-indigo-600">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.installmentAmount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3">
+                <button 
+                  onClick={() => setIsBulkLaunchModalOpen(false)}
+                  disabled={isBulkProcessing}
+                  className="px-4 py-3 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleConfirmBulkLaunch}
+                  disabled={isBulkProcessing}
+                  className="px-6 py-3.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  {isBulkProcessing ? 'Lançando...' : `Confirmar Lançamento (${selectedItemsToLaunch.length})`}
+                </button>
+              </div>
             </div>
           </div>
         </div>
