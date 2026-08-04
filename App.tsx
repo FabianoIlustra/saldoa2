@@ -385,36 +385,37 @@ const AppContent: React.FC = () => {
           <nav className="space-y-2">
             {(() => {
               const menuItems = [
-                { id: 'dashboard', icon: Home, label: 'Início' },
-                { id: 'transactions', icon: History, label: 'Extrato' },
-                { id: 'cashflow', icon: TrendingUp, label: 'Resumo' },
-                { id: 'validation', icon: CalendarCheck, label: 'Recorrentes' },
-                { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
-                { id: 'visuals', icon: TrendingUp, label: 'Gráficos' },
-                { id: 'goals', icon: Target, label: 'Metas' },
-                { id: 'ai', icon: MessageSquareCode, label: 'Consultor IA' },
-                { id: 'settings', icon: Settings, label: 'Configurações' },
+                { id: 'dashboard', icon: Home, label: 'Início', color: 'text-indigo-600 dark:text-indigo-400' },
+                { id: 'transactions', icon: History, label: 'Extrato', color: 'text-emerald-600 dark:text-emerald-400' },
+                { id: 'cashflow', icon: TrendingUp, label: 'Resumo', color: 'text-violet-600 dark:text-violet-400' },
+                { id: 'validation', icon: CalendarCheck, label: 'Recorrentes', color: 'text-amber-600 dark:text-amber-400' },
+                { id: 'parcelados', icon: CreditCard, label: 'Parcelados', color: 'text-rose-600 dark:text-rose-400' },
+                { id: 'visuals', icon: TrendingUp, label: 'Gráficos', color: 'text-sky-600 dark:text-sky-400' },
+                { id: 'goals', icon: Target, label: 'Metas', color: 'text-teal-600 dark:text-teal-400' },
+                { id: 'ai', icon: MessageSquareCode, label: 'Consultor IA', color: 'text-purple-600 dark:text-purple-400' },
+                { id: 'settings', icon: Settings, label: 'Configurações', color: 'text-slate-600 dark:text-slate-300' },
               ];
 
               if (currentUserProfile?.role === 'admin') {
-                menuItems.push({ id: 'admin', icon: ShieldCheck, label: 'Painel Admin' });
+                menuItems.push({ id: 'admin', icon: ShieldCheck, label: 'Painel Admin', color: 'text-red-600 dark:text-red-400' });
               }
 
               return menuItems.map(item => {
                 const locked = isTabLocked(item.id);
+                const isActive = activeTab === item.id;
                 return (
                   <button 
                     key={item.id}
                     onClick={() => setActiveTab(item.id as TabType)}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all text-sm ${
-                      activeTab === item.id 
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50' 
-                        : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-extrabold transition-all text-sm ${
+                      isActive 
+                        ? 'bg-blue-100/90 text-blue-900 dark:bg-blue-900/50 dark:text-blue-200 border border-blue-200/80 dark:border-blue-800/60 shadow-xs' 
+                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/80'
                     }`}
                   >
                     <span className="flex items-center gap-3.5">
-                      <item.icon className="w-5 h-5" />
-                      {item.label}
+                      <item.icon className={`w-5 h-5 ${item.color} ${isActive ? 'scale-110' : 'opacity-90'} transition-transform`} />
+                      <span>{item.label}</span>
                     </span>
                     {locked && (
                       <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" title="Recurso bloqueado para o seu plano" />
@@ -540,7 +541,7 @@ const AppContent: React.FC = () => {
                           className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-base shadow-sm ring-2 ring-purple-500/20 group-hover:ring-purple-500 transition-all"
                           style={{ backgroundColor: currentUserProfile?.avatarColor || '#6366f1' }}
                         >
-                          {(currentUserProfile?.name || displayUser.name || 'U').charAt(0).toUpperCase()}
+                          {formatDisplayName(currentUserProfile?.name || displayUser.name).charAt(0).toUpperCase()}
                         </div>
                       )}
                       <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-600 text-white rounded-full flex items-center justify-center shadow-xs">
@@ -549,10 +550,10 @@ const AppContent: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 block leading-none mb-0.5">
-                        Bem-vindo(a),
+                        Olá,
                       </span>
                       <h1 className="text-lg font-black tracking-tight text-slate-900 dark:text-white truncate flex items-center gap-1.5">
-                        <span className="truncate">{currentUserProfile?.name || displayUser.name}</span>
+                        <span className="truncate">{formatDisplayName(currentUserProfile?.name || displayUser.name)}!</span>
                         <span 
                           onClick={(e) => {
                             e.stopPropagation();
@@ -563,26 +564,6 @@ const AppContent: React.FC = () => {
                         >
                           <Users className="w-3.5 h-3.5" />
                         </span>
-                        {isLinkedCouple && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const nextMode = !isCoupleMode;
-                              setIsCoupleMode(nextMode);
-                              showToast(nextMode ? 'Modo Casal ativado!' : 'Modo Individual ativado!');
-                            }}
-                            className={`px-1.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-0.5 transition-all border shrink-0 ${
-                              isCoupleMode
-                                ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
-                                : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                            }`}
-                            title={isCoupleMode ? "Modo Casal Ativo. Clique para alternar" : "Modo Individual Ativo. Clique para alternar"}
-                          >
-                            <Heart className={`w-3 h-3 ${isCoupleMode ? 'fill-rose-500 text-rose-500' : 'text-slate-400'}`} />
-                            <span>{isCoupleMode ? 'Casal' : 'Indiv.'}</span>
-                          </button>
-                        )}
                       </h1>
                     </div>
                   </button>
@@ -669,7 +650,7 @@ const AppContent: React.FC = () => {
                           className="w-12 h-12 rounded-full flex items-center justify-center text-white font-black text-lg shadow-sm ring-2 ring-purple-500/20 group-hover:ring-purple-500 transition-all"
                           style={{ backgroundColor: currentUserProfile?.avatarColor || '#6366f1' }}
                         >
-                          {(currentUserProfile?.name || displayUser.name || 'U').charAt(0).toUpperCase()}
+                          {formatDisplayName(currentUserProfile?.name || displayUser.name).charAt(0).toUpperCase()}
                         </div>
                       )}
                       <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-purple-600 text-white rounded-full flex items-center justify-center shadow-xs">
@@ -678,10 +659,10 @@ const AppContent: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 block">
-                        Bem-vindo(a),
+                        Olá,
                       </span>
                       <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors flex items-center gap-2">
-                        <span>{currentUserProfile?.name || displayUser.name}</span>
+                        <span>{formatDisplayName(currentUserProfile?.name || displayUser.name)}!</span>
                         <span 
                           onClick={(e) => {
                             e.stopPropagation();
@@ -695,30 +676,6 @@ const AppContent: React.FC = () => {
                       </h1>
                     </div>
                   </button>
-
-                  {/* Discrete button to toggle Couple Mode ON/OFF */}
-                  {isLinkedCouple && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const nextMode = !isCoupleMode;
-                        setIsCoupleMode(nextMode);
-                        showToast(nextMode ? 'Modo Casal ativado!' : 'Modo Individual ativado!');
-                      }}
-                      className={`px-3 py-1.5 rounded-2xl text-xs font-bold transition-all border flex items-center gap-1.5 shadow-xs shrink-0 ${
-                        isCoupleMode
-                          ? 'bg-rose-50 text-rose-600 border-rose-200/80 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800'
-                          : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                      }`}
-                      title={isCoupleMode ? "Modo Casal Ativo (Clique para visão individual)" : "Modo Individual Ativo (Clique para visão casal)"}
-                    >
-                      <Heart className={`w-3.5 h-3.5 ${isCoupleMode ? 'fill-rose-500 text-rose-500' : 'text-slate-400'}`} />
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider">
-                        {isCoupleMode ? 'Modo Casal ON' : 'Modo Casal OFF'}
-                      </span>
-                    </button>
-                  )}
                 </div>
               ) : (
                 <>
@@ -1101,35 +1058,38 @@ const AppContent: React.FC = () => {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-2 py-1.5 flex justify-around items-center z-50 safe-area-bottom">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-800 px-1 py-1.5 flex justify-around items-center z-50 safe-area-bottom shadow-lg">
         {(() => {
           const mobileItems = [
-            { id: 'dashboard', icon: Home, label: 'Início' },
-            { id: 'transactions', icon: History, label: 'Extrato' },
-            { id: 'parcelados', icon: CreditCard, label: 'Parcelados' },
-            { id: 'validation', icon: CalendarCheck, label: 'Recorrentes' },
-            { id: 'visuals', icon: TrendingUp, label: 'Gráficos' },
-            { id: 'cashflow', icon: ArrowUpCircle, label: 'Resumo' },
+            { id: 'dashboard', icon: Home, label: 'Início', color: 'text-indigo-600 dark:text-indigo-400' },
+            { id: 'transactions', icon: History, label: 'Extrato', color: 'text-emerald-600 dark:text-emerald-400' },
+            { id: 'parcelados', icon: CreditCard, label: 'Parcelados', color: 'text-rose-600 dark:text-rose-400' },
+            { id: 'validation', icon: CalendarCheck, label: 'Recorrentes', color: 'text-amber-600 dark:text-amber-400' },
+            { id: 'visuals', icon: TrendingUp, label: 'Gráficos', color: 'text-sky-600 dark:text-sky-400' },
+            { id: 'cashflow', icon: ArrowUpCircle, label: 'Resumo', color: 'text-violet-600 dark:text-violet-400' },
           ];
 
           if (currentUserProfile?.role === 'admin') {
-            mobileItems.push({ id: 'admin', icon: ShieldCheck, label: 'Admin' });
+            mobileItems.push({ id: 'admin', icon: ShieldCheck, label: 'Admin', color: 'text-red-600 dark:text-red-400' });
           }
 
-          return mobileItems.map(item => (
-            <button 
-              key={item.id}
-              onClick={() => setActiveTab(item.id as TabType)}
-              className={`flex flex-col items-center justify-center gap-1 transition-all rounded-xl py-1.5 px-1 flex-1 max-w-[68px] ${
-                activeTab === item.id 
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-bold' 
-                  : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="text-[9px] font-bold truncate w-full text-center">{item.label}</span>
-            </button>
-          ));
+          return mobileItems.map(item => {
+            const isActive = activeTab === item.id;
+            return (
+              <button 
+                key={item.id}
+                onClick={() => setActiveTab(item.id as TabType)}
+                className={`flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl py-1.5 px-1 flex-1 max-w-[68px] ${
+                  isActive 
+                    ? 'bg-blue-100/90 text-blue-900 dark:bg-blue-900/50 dark:text-blue-200 font-black' 
+                    : 'text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800'
+                }`}
+              >
+                <item.icon className={`w-4 h-4 ${item.color} ${isActive ? 'scale-110' : 'opacity-85'} transition-transform`} />
+                <span className="text-[9px] truncate w-full text-center leading-tight">{item.label}</span>
+              </button>
+            );
+          });
         })()}
       </nav>
 
