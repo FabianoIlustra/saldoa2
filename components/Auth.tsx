@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
-import { Loader2, FileText, X, Check, ShieldCheck } from 'lucide-react';
+import { Loader2, FileText, X, Check, ShieldCheck, KeyRound, ArrowLeft, Mail, Lock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getTermsText } from '../services/termsService';
 
 export default function Auth() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isPasswordRecovery, setIsPasswordRecovery } = useAuth();
   
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(isPasswordRecovery);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   
   // Registration fields
@@ -26,20 +30,129 @@ export default function Auth() {
 
   const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
 
-  // Auto detect ?signup=true in query string
+  // Detect recovery mode, errors, or signup from query string and hash
   useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
+    const rawHash = window.location.hash || location.hash || '';
+    const rawSearch = window.location.search || location.search || '';
+
+    const hashParams = new URLSearchParams(rawHash.startsWith('#') ? rawHash.substring(1) : rawHash);
+    const searchParams = new URLSearchParams(rawSearch.startsWith('?') ? rawSearch.substring(1) : rawSearch);
+
     if (searchParams.get('signup') === 'true') {
       setIsSignUp(true);
+      setIsForgotPassword(false);
+      setIsResettingPassword(false);
+      return;
     }
-  }, [location.search]);
+
+    const errorCode = hashParams.get('error_code') || searchParams.get('error_code');
+    const errorDesc = hashParams.get('error_description') || searchParams.get('error_description');
+    const hasError = hashParams.get('error') || searchParams.get('error') || errorCode || errorDesc;
+
+    if (hasError) {
+      setIsForgotPassword(true);
+      setIsResettingPassword(false);
+      setIsSignUp(false);
+
+      if (errorCode === 'otp_expired' || (errorDesc && errorDesc.toLowerCase().includes('expired'))) {
+        setMessage({
+          text: '⚠️ O link de recuperação de senha expirou ou já foi utilizado. Digite seu e-mail abaixo para receber um novo link.',
+          type: 'error',
+        });
+      } else if (errorDesc) {
+        setMessage({
+          text: `⚠️ Não foi possível validar o link (${decodeURIComponent(errorDesc).replace(/\+/g, ' ')}). Digite seu e-mail abaixo para receber um novo link.`,
+          type: 'error',
+        });
+      } else {
+        setMessage({
+          text: '⚠️ Não foi possível redefinir a senha com este link. Por favor, solicite um novo link abaixo.',
+          type: 'error',
+        });
+      }
+      return;
+    }
+
+    const type = hashParams.get('type') || searchParams.get('type');
+    const accessToken = hashParams.get('access_token');
+
+    if (isPasswordRecovery || type === 'recovery' || accessToken) {
+      setIsResettingPassword(true);
+      setIsForgotPassword(false);
+      setIsSignUp(false);
+    }
+  }, [location, isPasswordRecovery]);
 
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!authLoading && user && !isResettingPassword && !isPasswordRecovery) {
       const from = (location.state as any)?.from?.pathname || "/sistema";
       navigate(from, { replace: true });
     }
-  }, [user, authLoading, navigate, location]);
+  }, [user, authLoading, navigate, location, isResettingPassword, isPasswordRecovery]);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setMessage({ text: 'Por favor, informe seu e-mail cadastrado.', type: 'error' });
+      return;
+    }
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      const redirectUrl = `${window.location.origin}/login`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: redirectUrl,
+      });
+      if (error) throw error;
+
+      setMessage({
+        text: 'E-mail de recuperação enviado com sucesso! Verifique sua caixa de entrada e a pasta de spam para redefinir sua senha.',
+        type: 'success',
+      });
+    } catch (error: any) {
+      setMessage({ text: error.message || 'Erro ao solicitar recuperação de senha.', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 6) {
+      setMessage({ text: 'A nova senha deve possuir no mínimo 6 caracteres.', type: 'error' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage({ text: 'As senhas informadas não coincidem. Digite novamente.', type: 'error' });
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (error) throw error;
+
+      setMessage({
+        text: 'Senha redefinida com sucesso! Entrando na sua conta...',
+        type: 'success',
+      });
+
+      setTimeout(() => {
+        setIsResettingPassword(false);
+        setIsPasswordRecovery(false);
+        navigate('/sistema', { replace: true });
+      }, 1500);
+    } catch (error: any) {
+      setMessage({ text: error.message || 'Erro ao redefinir a senha. Tente novamente.', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('finan_ai_saved_email');
@@ -214,190 +327,339 @@ export default function Auth() {
             </svg>
           </div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white">
-            {isSignUp ? (
+            {isResettingPassword ? (
+              <>Redefinir sua Senha</>
+            ) : isForgotPassword ? (
+              <>Recuperar Senha</>
+            ) : isSignUp ? (
               <>Criar Nova Conta no Saldo A<span className="text-indigo-600 dark:text-indigo-400">2</span></>
             ) : (
               <>Bem-vindo de volta ao Saldo A<span className="text-indigo-600 dark:text-indigo-400">2</span></>
             )}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
-            {isSignUp ? 'Preencha seus dados cadastrais para começar' : 'Acesse seu painel financeiro familiar'}
+            {isResettingPassword
+              ? 'Crie uma nova senha de acesso para sua conta'
+              : isForgotPassword
+              ? 'Receba um link em seu e-mail para cadastrar uma nova senha'
+              : isSignUp
+              ? 'Preencha seus dados cadastrais para começar'
+              : 'Acesse seu painel financeiro familiar'}
           </p>
         </div>
 
-        {/* Auth Form */}
-        <form onSubmit={handleAuth} className="space-y-4">
-          
-          {/* Registration Fields */}
-          {isSignUp && (
-            <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-              <div className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4" />
-                Dados do Titular da Conta
-              </div>
+        {/* FORMS */}
 
-              {/* Nome Completo */}
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
-                  Nome Completo <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Nome e Sobrenome"
-                  required
-                />
-              </div>
-
-              {/* CPF e Celular Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
-                    CPF <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={cpf}
-                    onChange={handleCpfChange}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="000.000.000-00"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
-                    Celular / WhatsApp <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={handlePhoneChange}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="(00) 00000-0000"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Endereço */}
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
-                  Endereço Completo <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Rua, Número, Bairro, Cidade - UF"
-                  required
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Email */}
-          <div>
-            <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-              E-mail <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              placeholder="seu@email.com"
-              required
-            />
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-              Senha <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          {!isSignUp && (
-            <div className="flex items-center justify-between">
-              <label htmlFor="remember-me" className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium cursor-pointer">
-                <input
-                  id="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
-                Lembrar do meu e-mail
+        {/* 1. Resetting Password Form (from Email Link) */}
+        {isResettingPassword ? (
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div>
+              <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                Nova Senha <span className="text-rose-500">*</span>
               </label>
-            </div>
-          )}
-
-          {/* Terms Acceptance Checkbox */}
-          {isSignUp && (
-            <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/40 rounded-xl border border-indigo-100 dark:border-indigo-900/50 space-y-2">
-              <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-700 dark:text-slate-200 font-medium leading-tight">
+              <div className="relative">
                 <input
-                  type="checkbox"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-slate-900 dark:text-white"
+                  placeholder="Mínimo de 6 caracteres"
                   required
-                  checked={termsAccepted}
-                  onChange={(e) => setTermsAccepted(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded shrink-0 cursor-pointer"
+                  minLength={6}
                 />
-                <span>
-                  Declaro que li e concordo integralmente com os{' '}
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                Confirmar Nova Senha <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-slate-900 dark:text-white"
+                  placeholder="Repita a nova senha"
+                  required
+                  minLength={6}
+                />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              </div>
+            </div>
+
+            {message && (
+              <div className={`p-3 rounded-xl text-xs font-semibold ${message.type === 'error' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
+                {message.text}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md text-xs uppercase tracking-wider cursor-pointer"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Salvar Nova Senha'}
+            </button>
+
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResettingPassword(false);
+                  setIsPasswordRecovery(false);
+                  setIsForgotPassword(false);
+                  setIsSignUp(false);
+                  setMessage(null);
+                }}
+                className="text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-extrabold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Voltar para o Login
+              </button>
+            </div>
+          </form>
+
+        /* 2. Forgot Password Request Form */
+        ) : isForgotPassword ? (
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <div>
+              <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                E-mail Cadastrado <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-slate-900 dark:text-white"
+                  placeholder="seu@email.com"
+                  required
+                />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              </div>
+            </div>
+
+            {message && (
+              <div className={`p-3 rounded-xl text-xs font-semibold ${message.type === 'error' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
+                {message.text}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md text-xs uppercase tracking-wider cursor-pointer"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Enviar E-mail de Recuperação'}
+            </button>
+
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsForgotPassword(false);
+                  setMessage(null);
+                }}
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-extrabold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Voltar para o Login
+              </button>
+            </div>
+          </form>
+
+        /* 3. Standard Login / Signup Auth Form */
+        ) : (
+          <form onSubmit={handleAuth} className="space-y-4">
+            
+            {/* Registration Fields */}
+            {isSignUp && (
+              <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                <div className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  Dados do Titular da Conta
+                </div>
+
+                {/* Nome Completo */}
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
+                    Nome Completo <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="Nome e Sobrenome"
+                    required
+                  />
+                </div>
+
+                {/* CPF e Celular Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
+                      CPF <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={cpf}
+                      onChange={handleCpfChange}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="000.000.000-00"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
+                      Celular / WhatsApp <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={phone}
+                      onChange={handlePhoneChange}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="(00) 00000-0000"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Endereço */}
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
+                    Endereço Completo <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="Rua, Número, Bairro, Cidade - UF"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Email */}
+            <div>
+              <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                E-mail <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-slate-900 dark:text-white"
+                placeholder="seu@email.com"
+                required
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300">
+                  Senha <span className="text-rose-500">*</span>
+                </label>
+                {!isSignUp && (
                   <button
                     type="button"
-                    onClick={() => setShowTermsModal(true)}
-                    className="text-indigo-600 dark:text-indigo-400 font-bold underline hover:text-indigo-700"
+                    onClick={() => {
+                      setIsForgotPassword(true);
+                      setMessage(null);
+                    }}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    Termos de Uso e Política de Privacidade
-                  </button>.
-                </span>
-              </label>
+                    <KeyRound className="w-3 h-3" />
+                    Esqueceu sua senha?
+                  </button>
+                )}
+              </div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-slate-900 dark:text-white"
+                placeholder="••••••••"
+                required
+              />
             </div>
-          )}
 
-          {/* Messages */}
-          {message && (
-            <div className={`p-3 rounded-xl text-xs font-semibold ${message.type === 'error' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
-              {message.text}
-            </div>
-          )}
+            {!isSignUp && (
+              <div className="flex items-center justify-between">
+                <label htmlFor="remember-me" className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium cursor-pointer">
+                  <input
+                    id="remember-me"
+                    type="checkbox"
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                  />
+                  Lembrar do meu e-mail
+                </label>
+              </div>
+            )}
 
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md text-xs uppercase tracking-wider"
-          >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (isSignUp ? 'Aceitar Termos e Cadastrar' : 'Entrar na Conta')}
-          </button>
-        </form>
+            {/* Terms Acceptance Checkbox */}
+            {isSignUp && (
+              <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/40 rounded-xl border border-indigo-100 dark:border-indigo-900/50 space-y-2">
+                <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-700 dark:text-slate-200 font-medium leading-tight">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded shrink-0 cursor-pointer"
+                  />
+                  <span>
+                    Declaro que li e concordo integralmente com os{' '}
+                    <button
+                      type="button"
+                      onClick={() => setShowTermsModal(true)}
+                      className="text-indigo-600 dark:text-indigo-400 font-bold underline hover:text-indigo-700"
+                    >
+                      Termos de Uso e Política de Privacidade
+                    </button>.
+                  </span>
+                </label>
+              </div>
+            )}
+
+            {/* Messages */}
+            {message && (
+              <div className={`p-3 rounded-xl text-xs font-semibold ${message.type === 'error' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
+                {message.text}
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md text-xs uppercase tracking-wider cursor-pointer"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (isSignUp ? 'Aceitar Termos e Cadastrar' : 'Entrar na Conta')}
+            </button>
+          </form>
+        )}
 
         {/* Toggle Mode */}
-        <div className="mt-6 text-center border-t border-slate-100 dark:border-slate-800 pt-4">
-          <button
-            onClick={() => {
-              setIsSignUp(!isSignUp);
-              setMessage(null);
-            }}
-            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-extrabold"
-          >
-            {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Ainda não tem conta? Clique aqui para criar'}
-          </button>
-        </div>
+        {!isForgotPassword && !isResettingPassword && (
+          <div className="mt-6 text-center border-t border-slate-100 dark:border-slate-800 pt-4">
+            <button
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setMessage(null);
+              }}
+              className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-extrabold cursor-pointer"
+            >
+              {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Ainda não tem conta? Clique aqui para criar'}
+            </button>
+          </div>
+        )}
 
       </div>
 

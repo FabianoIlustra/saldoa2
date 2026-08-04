@@ -553,7 +553,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
                   <span className="flex items-center gap-1.5">
                     <Target className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                    <span>Teto de Gastos:</span>
+                    <span>Limite de gastos:</span>
                   </span>
                   <span className="font-extrabold text-slate-900 dark:text-white">
                     {formatCurrency(spendingCeiling)}
@@ -629,8 +629,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <History className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-extrabold uppercase tracking-widest text-blue-900 dark:text-blue-200">Resumo de Gastos</h3>
-                  <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Análise periódica de despesas</p>
+                  <h3 className="text-xs font-extrabold uppercase tracking-widest text-blue-900 dark:text-blue-200">Seus gastos recentes</h3>
+                  <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Acompanhamento das suas movimentações</p>
                 </div>
               </div>
 

@@ -10,7 +10,7 @@ import { getPricingConfig, getSiteConfig, fetchSiteConfigAsync, addSiteSuggestio
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user, loading, isPasswordRecovery } = useAuth();
   
   // Slider state for Hero Banners
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -53,10 +53,25 @@ const LandingPage: React.FC = () => {
   };
 
   useEffect(() => {
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+    const isAuthRedirect =
+      isPasswordRecovery ||
+      hash.includes('access_token') ||
+      hash.includes('type=recovery') ||
+      hash.includes('error') ||
+      search.includes('error') ||
+      search.includes('type=recovery');
+
+    if (isAuthRedirect) {
+      navigate('/login' + search + hash, { replace: true });
+      return;
+    }
+
     if (!loading && user) {
       navigate('/sistema', { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, isPasswordRecovery, navigate]);
 
   useEffect(() => {
     setPricingConfig(getPricingConfig());
@@ -488,7 +503,8 @@ const LandingPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch max-w-7xl mx-auto">
             
             {/* Loop dynamically through pricingConfig from admin settings */}
-            {Object.entries(pricingConfig).map(([key, plan]) => {
+            {Object.entries(pricingConfig).filter(([, rawPlan]) => (rawPlan as PricingPlan)?.enabled !== false).map(([key, rawPlan]) => {
+              const plan = rawPlan as PricingPlan;
               // SOMENTE O PLANO MÉDIO FICA COM A COR PREENCHIDA (HIGHLIGHT)
               const isHighlight = key === 'medio';
               
