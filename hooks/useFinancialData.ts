@@ -156,9 +156,9 @@ export const useFinancialData = () => {
           cpf: profile.cpf || localMeta.cpf || user.user_metadata?.cpf || '',
           phone: profile.phone || localMeta.phone || user.user_metadata?.phone || '',
           address: profile.address || localMeta.address || user.user_metadata?.address || '',
-          avatarColor: savedAvatarColor || profile.avatar_color || '#6366f1',
-          avatarUrl: savedAvatarUrl || profile.avatar_url || undefined,
-          avatarEmoji: savedAvatarEmoji || profile.avatar_emoji || undefined,
+          avatarColor: profile.avatar_color || savedAvatarColor || '#6366f1',
+          avatarUrl: profile.avatar_url !== undefined && profile.avatar_url !== null ? profile.avatar_url : (savedAvatarUrl || undefined),
+          avatarEmoji: profile.avatar_emoji !== undefined && profile.avatar_emoji !== null ? profile.avatar_emoji : (savedAvatarEmoji || undefined),
           spendingCeiling: profile.spending_ceiling,
           coupleId: profile.couple_id,
           tier: profileTier as 'gratis' | 'basico' | 'medio' | 'premium',
@@ -184,6 +184,8 @@ export const useFinancialData = () => {
                     id: p.id,
                     name: p.name || 'User',
                     avatarColor: p.avatar_color || '#6366f1',
+                    avatarUrl: p.avatar_url || undefined,
+                    avatarEmoji: p.avatar_emoji || undefined,
                     tier: (p.tier || 'gratis') as 'gratis' | 'basico' | 'medio' | 'premium',
                     role: (p.role || 'user') as 'user' | 'admin',
                     email: p.email || ''
@@ -1303,10 +1305,16 @@ export const useFinancialData = () => {
     }
 
     try {
-      await supabase
+      const { error: upsertErr } = await supabase
         .from('profiles')
-        .update(dbUpdates)
-        .eq('id', user.id);
+        .upsert({
+          id: user.id,
+          ...dbUpdates
+        }, { onConflict: 'id' });
+      
+      if (upsertErr) {
+        console.error("Erro ao salvar perfil no Supabase:", upsertErr);
+      }
     } catch (e) {
       console.warn("Could not sync profile DB updates", e);
     }
@@ -1323,6 +1331,9 @@ export const useFinancialData = () => {
         phone: updates.phone !== undefined ? updates.phone : existingMeta.phone,
         address: updates.address !== undefined ? updates.address : existingMeta.address,
         email: updates.email || existingMeta.email,
+        avatar_url: updates.avatarUrl !== undefined ? updates.avatarUrl : existingMeta.avatar_url,
+        avatar_emoji: updates.avatarEmoji !== undefined ? updates.avatarEmoji : existingMeta.avatar_emoji,
+        avatar_color: updates.avatarColor !== undefined ? updates.avatarColor : existingMeta.avatar_color,
       };
       localStorage.setItem(metaKey, JSON.stringify(updatedMeta));
 
@@ -1335,6 +1346,7 @@ export const useFinancialData = () => {
     }
 
     setCurrentUserProfile(prev => prev ? { ...prev, ...updates } : null);
+    setUsers(prev => prev.map(u => u.id === user.id ? { ...u, ...updates } : u));
   };
 
   const linkUser = async (coupleId: string) => {
