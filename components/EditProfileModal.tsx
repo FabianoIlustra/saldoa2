@@ -149,7 +149,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           .getPublicUrl(data.path);
 
         if (publicData?.publicUrl) {
-          setAvatarUrl(publicData.publicUrl);
+          const freshUrl = publicData.publicUrl;
+          setAvatarUrl(freshUrl);
           setAvatarEmoji(undefined);
           setIsUploading(false);
           return;
@@ -194,8 +195,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       phone: phone.trim(),
       address: address.trim(),
       spendingCeiling: numericCeiling,
-      avatarUrl,
-      avatarEmoji,
+      avatarUrl: avatarUrl || null,
+      avatarEmoji: avatarEmoji || null,
       avatarColor
     });
     onClose();
