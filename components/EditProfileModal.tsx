@@ -131,15 +131,25 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       // Compress image client-side to max 300x300 (~30KB)
       const compressedBlob = await compressImage(file, 300, 300, 0.82);
       const userId = userProfile?.id || 'avatar';
-      const fileExt = 'jpg';
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
+      const fileName = `${userId}-avatar.jpg`;
       const compressedFile = new File([compressedBlob], fileName, { type: 'image/jpeg' });
 
-      // Try uploading to Supabase Storage 'avatars' bucket
+      // Clean up any old files for this user in the bucket to ensure only 1 image exists per user
+      try {
+        const { data: existingFiles } = await supabase.storage.from('avatars').list('', { search: userId });
+        if (existingFiles && existingFiles.length > 0) {
+          const filesToDelete = existingFiles.map(f => f.name);
+          await supabase.storage.from('avatars').remove(filesToDelete);
+        }
+      } catch (cleanErr) {
+        console.warn('Old avatars cleanup warning:', cleanErr);
+      }
+
+      // Try uploading to Supabase Storage 'avatars' bucket with fixed filename & upsert
       const { data, error } = await supabase.storage
         .from('avatars')
         .upload(fileName, compressedFile, {
-          cacheControl: '3600',
+          cacheControl: '0',
           upsert: true
         });
 
@@ -149,7 +159,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           .getPublicUrl(data.path);
 
         if (publicData?.publicUrl) {
-          const freshUrl = publicData.publicUrl;
+          // Append timestamp parameter to force browser/other devices to reload fresh image
+          const freshUrl = `${publicData.publicUrl}?t=${Date.now()}`;
           setAvatarUrl(freshUrl);
           setAvatarEmoji(undefined);
           setIsUploading(false);
@@ -172,13 +183,35 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     }
   };
 
-  const handleRemovePhoto = () => {
+  const handleRemovePhoto = async () => {
     setAvatarUrl(undefined);
+    const userId = userProfile?.id;
+    if (userId) {
+      try {
+        const { data: existingFiles } = await supabase.storage.from('avatars').list('', { search: userId });
+        if (existingFiles && existingFiles.length > 0) {
+          await supabase.storage.from('avatars').remove(existingFiles.map(f => f.name));
+        }
+      } catch (err) {
+        console.warn('Error removing avatar from storage:', err);
+      }
+    }
   };
 
-  const handleSelectEmoji = (emoji: string) => {
+  const handleSelectEmoji = async (emoji: string) => {
     setAvatarEmoji(emoji);
     setAvatarUrl(undefined); // Clear photo if emoji chosen
+    const userId = userProfile?.id;
+    if (userId) {
+      try {
+        const { data: existingFiles } = await supabase.storage.from('avatars').list('', { search: userId });
+        if (existingFiles && existingFiles.length > 0) {
+          await supabase.storage.from('avatars').remove(existingFiles.map(f => f.name));
+        }
+      } catch (err) {
+        console.warn('Error removing avatar from storage on emoji select:', err);
+      }
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
