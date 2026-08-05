@@ -183,8 +183,14 @@ const AppContent: React.FC = () => {
     });
   }, [rawAccounts, transactions]);
 
-  // Tomorrow's Reminders calculation
-  const tomorrowReminders = useMemo(() => {
+  // Active Reminders calculation: Due Today (day of due date) and Tomorrow (day before due date)
+  const activeReminders = useMemo(() => {
+    const today = new Date();
+    const todayStr = format(today, 'yyyy-MM-dd');
+    const todayDay = today.getDate();
+    const todayMonth = today.getMonth();
+    const todayYear = today.getFullYear();
+
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = format(tomorrow, 'yyyy-MM-dd');
@@ -192,14 +198,42 @@ const AppContent: React.FC = () => {
     const tomorrowMonth = tomorrow.getMonth();
     const tomorrowYear = tomorrow.getFullYear();
 
-    const list: { id: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; description: string; amount: number; isRecurring: boolean; category: string }[] = [];
+    const list: { id: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; description: string; amount: number; isRecurring: boolean; category: string; dueLabel: 'Hoje' | 'Amanhã'; dueDate: string }[] = [];
 
-    // 1. Recurring Transactions due tomorrow
+    // 1. Recurring Transactions due Today or Tomorrow
     recurringTransactions.forEach(rt => {
-      if (rt.active && rt.dayOfMonth === tomorrowDay) {
-        // Check if ALREADY PAID in tomorrow's month/year
+      if (!rt.active) return;
+
+      // Check if due TODAY
+      if (rt.dayOfMonth === todayDay) {
         const isPaid = transactions.some(t => {
           if (t.isTemplate) return false;
+          if (t.type !== rt.type) return false;
+          const tDate = parseISO(t.date);
+          const isSamePeriod = tDate.getMonth() === todayMonth && tDate.getFullYear() === todayYear;
+          const descMatch = t.description.trim().toLowerCase() === rt.description.trim().toLowerCase();
+          return isSamePeriod && descMatch;
+        });
+
+        if (!isPaid) {
+          list.push({
+            id: `rec-${rt.id}-today`,
+            type: rt.type,
+            description: rt.description,
+            amount: rt.amount,
+            isRecurring: true,
+            category: rt.category,
+            dueLabel: 'Hoje',
+            dueDate: todayStr
+          });
+        }
+      }
+
+      // Check if due TOMORROW
+      if (rt.dayOfMonth === tomorrowDay) {
+        const isPaid = transactions.some(t => {
+          if (t.isTemplate) return false;
+          if (t.type !== rt.type) return false;
           const tDate = parseISO(t.date);
           const isSamePeriod = tDate.getMonth() === tomorrowMonth && tDate.getFullYear() === tomorrowYear;
           const descMatch = t.description.trim().toLowerCase() === rt.description.trim().toLowerCase();
@@ -208,44 +242,78 @@ const AppContent: React.FC = () => {
 
         if (!isPaid) {
           list.push({
-            id: `rec-${rt.id}`,
+            id: `rec-${rt.id}-tomorrow`,
             type: rt.type,
             description: rt.description,
             amount: rt.amount,
             isRecurring: true,
-            category: rt.category
+            category: rt.category,
+            dueLabel: 'Amanhã',
+            dueDate: tomorrowStr
           });
         }
       }
     });
 
-    // 2. Installment templates & scheduled payments due tomorrow
+    // 2. Installment templates & scheduled payments due Today or Tomorrow
     transactions.forEach(t => {
-      if (t.date === tomorrowStr) {
-        if (t.isTemplate) {
-          // Check if ALREADY PAID/validated
-          const isPaid = transactions.some(realT => {
-            if (realT.isTemplate) return false;
-            if (t.installmentGroupId && t.installmentNumber && realT.installmentGroupId && realT.installmentNumber) {
-              return String(realT.installmentGroupId) === String(t.installmentGroupId) &&
-                     Number(realT.installmentNumber) === Number(t.installmentNumber);
-            }
-            const realDate = parseISO(realT.date);
-            return realT.description.trim().toLowerCase() === t.description.trim().toLowerCase() &&
-                   realDate.getMonth() === tomorrowMonth &&
-                   realDate.getFullYear() === tomorrowYear;
-          });
+      if (!t.isTemplate) return;
 
-          if (!isPaid) {
-            list.push({
-              id: `trans-${t.id}`,
-              type: t.type,
-              description: t.totalInstallments ? `${t.description} (${t.installmentNumber}/${t.totalInstallments})` : t.description,
-              amount: t.amount,
-              isRecurring: false,
-              category: t.category
-            });
+      // Due TODAY
+      if (t.date === todayStr) {
+        const isPaid = transactions.some(realT => {
+          if (realT.isTemplate) return false;
+          if (realT.type !== t.type) return false;
+          if (t.installmentGroupId && t.installmentNumber && realT.installmentGroupId && realT.installmentNumber) {
+            return String(realT.installmentGroupId) === String(t.installmentGroupId) &&
+                   Number(realT.installmentNumber) === Number(t.installmentNumber);
           }
+          const realDate = parseISO(realT.date);
+          return realT.description.trim().toLowerCase() === t.description.trim().toLowerCase() &&
+                 realDate.getMonth() === todayMonth &&
+                 realDate.getFullYear() === todayYear;
+        });
+
+        if (!isPaid) {
+          list.push({
+            id: `trans-${t.id}-today`,
+            type: t.type,
+            description: t.totalInstallments ? `${t.description} (${t.installmentNumber}/${t.totalInstallments})` : t.description,
+            amount: t.amount,
+            isRecurring: false,
+            category: t.category,
+            dueLabel: 'Hoje',
+            dueDate: todayStr
+          });
+        }
+      }
+
+      // Due TOMORROW
+      if (t.date === tomorrowStr) {
+        const isPaid = transactions.some(realT => {
+          if (realT.isTemplate) return false;
+          if (realT.type !== t.type) return false;
+          if (t.installmentGroupId && t.installmentNumber && realT.installmentGroupId && realT.installmentNumber) {
+            return String(realT.installmentGroupId) === String(t.installmentGroupId) &&
+                   Number(realT.installmentNumber) === Number(t.installmentNumber);
+          }
+          const realDate = parseISO(realT.date);
+          return realT.description.trim().toLowerCase() === t.description.trim().toLowerCase() &&
+                 realDate.getMonth() === tomorrowMonth &&
+                 realDate.getFullYear() === tomorrowYear;
+        });
+
+        if (!isPaid) {
+          list.push({
+            id: `trans-${t.id}-tomorrow`,
+            type: t.type,
+            description: t.totalInstallments ? `${t.description} (${t.installmentNumber}/${t.totalInstallments})` : t.description,
+            amount: t.amount,
+            isRecurring: false,
+            category: t.category,
+            dueLabel: 'Amanhã',
+            dueDate: tomorrowStr
+          });
         }
       }
     });
@@ -254,11 +322,11 @@ const AppContent: React.FC = () => {
   }, [recurringTransactions, transactions]);
 
   useEffect(() => {
-    if (tomorrowReminders.length !== lastNotificationCount) {
-      setUnreadCount(tomorrowReminders.length);
-      setLastNotificationCount(tomorrowReminders.length);
+    if (activeReminders.length !== lastNotificationCount) {
+      setUnreadCount(activeReminders.length);
+      setLastNotificationCount(activeReminders.length);
     }
-  }, [tomorrowReminders, lastNotificationCount]);
+  }, [activeReminders, lastNotificationCount]);
 
   // Scroll to top whenever activeTab changes
   useEffect(() => {
@@ -582,40 +650,40 @@ const AppContent: React.FC = () => {
                 )}
               </div>
 
-              {/* Action Buttons (Bell, Theme, Settings/Home) - Compact on Mobile */}
-              <div className="flex items-center gap-1.5 shrink-0">
+              {/* Action Buttons (Bell, Theme, Settings/Home) - Generous Touch Target on Mobile */}
+              <div className="flex items-center gap-2 shrink-0">
                 <button 
                   onClick={() => {
                     setUnreadCount(0);
                     setIsRemindersOpen(true);
                   }} 
-                  className="p-1.5 sm:p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 transition-all active:scale-95 shadow-2xs relative"
-                  title="Lembretes de amanhã"
+                  className="p-2.5 sm:p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all active:scale-95 shadow-2xs relative"
+                  title="Lembretes de Hoje e Amanhã"
                 >
-                  <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center animate-pulse shadow-xs">
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-pulse shadow-xs">
                       {unreadCount}
                     </span>
                   )}
                 </button>
                 <button 
                   onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
-                  className="p-1.5 sm:p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 transition-all active:scale-95 shadow-2xs"
+                  className="p-2.5 sm:p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-amber-500 transition-all active:scale-95 shadow-2xs"
                   title="Mudar cor da tela"
                 >
-                  {theme === 'light' ? <Moon className="w-4 h-4 sm:w-5 sm:h-5" /> : <Sun className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
                 </button>
                 <button 
                   onClick={() => setActiveTab(activeTab === 'settings' ? 'dashboard' : 'settings')} 
-                  className={`p-1.5 sm:p-2 rounded-xl border transition-all active:scale-95 shadow-2xs ${
+                  className={`p-2.5 sm:p-2 rounded-2xl border transition-all active:scale-95 shadow-2xs ${
                     activeTab === 'settings'
                       ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
-                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-blue-600'
                   }`}
                   title={activeTab === 'settings' ? "Início" : "Configurações"}
                 >
-                  {activeTab === 'settings' ? <Home className="w-4 h-4 sm:w-5 sm:h-5" /> : <Settings className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  {activeTab === 'settings' ? <Home className="w-5 h-5" /> : <Settings className="w-5 h-5" />}
                 </button>
               </div>
             </div>
@@ -1058,15 +1126,16 @@ const AppContent: React.FC = () => {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-800 px-1 py-1.5 flex justify-around items-center z-50 safe-area-bottom shadow-lg">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-800 px-1 py-1.5 flex items-center justify-around z-50 safe-area-bottom shadow-lg">
         {(() => {
           const mobileItems = [
             { id: 'dashboard', icon: Home, label: 'Início', color: 'text-indigo-600 dark:text-indigo-400' },
             { id: 'transactions', icon: History, label: 'Extrato', color: 'text-emerald-600 dark:text-emerald-400' },
-            { id: 'parcelados', icon: CreditCard, label: 'Parcelados', color: 'text-rose-600 dark:text-rose-400' },
+            { id: 'cashflow', icon: TrendingUp, label: 'Resumo', color: 'text-violet-600 dark:text-violet-400' },
             { id: 'validation', icon: CalendarCheck, label: 'Recorrentes', color: 'text-amber-600 dark:text-amber-400' },
+            { id: 'parcelados', icon: CreditCard, label: 'Parcelados', color: 'text-rose-600 dark:text-rose-400' },
             { id: 'visuals', icon: TrendingUp, label: 'Gráficos', color: 'text-sky-600 dark:text-sky-400' },
-            { id: 'cashflow', icon: ArrowUpCircle, label: 'Resumo', color: 'text-violet-600 dark:text-violet-400' },
+            { id: 'goals', icon: Target, label: 'Metas', color: 'text-teal-600 dark:text-teal-400' },
           ];
 
           if (currentUserProfile?.role === 'admin') {
@@ -1075,18 +1144,24 @@ const AppContent: React.FC = () => {
 
           return mobileItems.map(item => {
             const isActive = activeTab === item.id;
+            const locked = isTabLocked(item.id);
             return (
               <button 
                 key={item.id}
                 onClick={() => setActiveTab(item.id as TabType)}
-                className={`flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl py-1.5 px-1 flex-1 max-w-[68px] ${
+                className={`flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl py-1 px-0.5 flex-1 min-w-0 max-w-[64px] ${
                   isActive 
                     ? 'bg-blue-100/90 text-blue-900 dark:bg-blue-900/50 dark:text-blue-200 font-black' 
                     : 'text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
-                <item.icon className={`w-4 h-4 ${item.color} ${isActive ? 'scale-110' : 'opacity-85'} transition-transform`} />
-                <span className="text-[9px] truncate w-full text-center leading-tight">{item.label}</span>
+                <div className="relative">
+                  <item.icon className={`w-4 h-4 ${item.color} ${isActive ? 'scale-110' : 'opacity-85'} transition-transform`} />
+                  {locked && (
+                    <Lock className="w-2.5 h-2.5 text-amber-500 absolute -top-1 -right-2" />
+                  )}
+                </div>
+                <span className="text-[8.5px] sm:text-[9px] truncate w-full text-center leading-tight">{item.label}</span>
               </button>
             );
           });
@@ -1230,7 +1305,7 @@ const AppContent: React.FC = () => {
         <RemindersModal 
           isOpen={isRemindersOpen}
           onClose={() => setIsRemindersOpen(false)}
-          reminders={tomorrowReminders}
+          reminders={activeReminders}
         />
       )}
 
