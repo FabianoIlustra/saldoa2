@@ -149,16 +149,24 @@ export const useFinancialData = () => {
           localMeta = JSON.parse(localStorage.getItem(`saldo_a2_user_meta_${user.id}`) || '{}');
         } catch (e) {}
 
+        const profileAvatarUrl = (profile.avatar_url && profile.avatar_url.trim() !== '') ? profile.avatar_url : undefined;
+        const authAvatarUrl = (user.user_metadata?.avatar_url && user.user_metadata.avatar_url.trim() !== '') ? user.user_metadata.avatar_url : undefined;
+        const finalAvatarUrl = profileAvatarUrl || authAvatarUrl || savedAvatarUrl || undefined;
+
+        const profileAvatarEmoji = (profile.avatar_emoji && profile.avatar_emoji.trim() !== '') ? profile.avatar_emoji : undefined;
+        const authAvatarEmoji = (user.user_metadata?.avatar_emoji && user.user_metadata.avatar_emoji.trim() !== '') ? user.user_metadata.avatar_emoji : undefined;
+        const finalAvatarEmoji = profileAvatarEmoji || authAvatarEmoji || savedAvatarEmoji || undefined;
+
         const currentUser: User = {
           id: profile.id,
-          name: profile.name || profile.full_name || localMeta.name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-          fullName: profile.full_name || profile.name || localMeta.full_name || user.user_metadata?.full_name || '',
-          cpf: profile.cpf || localMeta.cpf || user.user_metadata?.cpf || '',
-          phone: profile.phone || localMeta.phone || user.user_metadata?.phone || '',
-          address: profile.address || localMeta.address || user.user_metadata?.address || '',
-          avatarColor: profile.avatar_color || savedAvatarColor || '#6366f1',
-          avatarUrl: profile.avatar_url !== undefined && profile.avatar_url !== null ? profile.avatar_url : (savedAvatarUrl || undefined),
-          avatarEmoji: profile.avatar_emoji !== undefined && profile.avatar_emoji !== null ? profile.avatar_emoji : (savedAvatarEmoji || undefined),
+          name: profile.name || profile.full_name || user.user_metadata?.name || user.user_metadata?.full_name || localMeta.name || user.email?.split('@')[0] || 'User',
+          fullName: profile.full_name || profile.name || user.user_metadata?.full_name || user.user_metadata?.name || localMeta.full_name || '',
+          cpf: profile.cpf || user.user_metadata?.cpf || localMeta.cpf || '',
+          phone: profile.phone || user.user_metadata?.phone || localMeta.phone || '',
+          address: profile.address || user.user_metadata?.address || localMeta.address || '',
+          avatarColor: profile.avatar_color || user.user_metadata?.avatar_color || savedAvatarColor || '#6366f1',
+          avatarUrl: finalAvatarUrl,
+          avatarEmoji: finalAvatarEmoji,
           spendingCeiling: profile.spending_ceiling,
           coupleId: profile.couple_id,
           tier: profileTier as 'gratis' | 'basico' | 'medio' | 'premium',
@@ -321,6 +329,7 @@ export const useFinancialData = () => {
           recurrence: t.recurrence as any,
           isJoint: t.is_joint,
           isTemplate: t.is_template,
+          recurringTransactionId: t.recurring_transaction_id || undefined,
           installmentGroupId: t.installment_group_id,
           installmentNumber: t.installment_number,
           totalInstallments: t.total_installments,
@@ -494,17 +503,18 @@ export const useFinancialData = () => {
     if (t.installmentGroupId) payload.installment_group_id = t.installmentGroupId;
     if (t.installmentNumber) payload.installment_number = t.installmentNumber;
     if (t.totalInstallments) payload.total_installments = t.totalInstallments;
+    if (t.recurringTransactionId) payload.recurring_transaction_id = t.recurringTransactionId;
 
     const { data, error } = await supabase.from('transactions').insert(payload).select().single();
 
     if (error) {
-      if (error.message.includes('to_account_id') || error.code === '42703') {
-        console.warn('Coluna to_account_id ausente. Tentando salvar sem ela.');
-        delete payload.to_account_id;
+      if (error.message.includes('recurring_transaction_id') || error.message.includes('to_account_id') || error.code === '42703') {
+        if (error.message.includes('to_account_id')) delete payload.to_account_id;
+        if (error.message.includes('recurring_transaction_id') || error.code === '42703') delete payload.recurring_transaction_id;
+
         const fallback = await supabase.from('transactions').insert(payload).select().single();
         if (fallback.error) throw fallback.error;
         
-        // Se chegamos aqui, salvou mas sem a transferência vinculada
         if (fallback.data) {
            const newTrans: Transaction = {
             ...t,
@@ -513,10 +523,23 @@ export const useFinancialData = () => {
             accountId: fallback.data.account_id || t.accountId,
             isTemplate: fallback.data.is_template,
             createdAt: fallback.data.created_at,
-            toAccountId: undefined // Limpa pois o banco não suporta
+            recurringTransactionId: t.recurringTransactionId,
+            toAccountId: payload.to_account_id ? t.toAccountId : undefined
           };
           setTransactions(prev => [newTrans, ...prev]);
-          throw new Error('A transferência foi salva como um lançamento comum porque a coluna "to_account_id" ainda não existe no seu banco de dados. Por favor, execute o comando SQL enviado no chat.');
+
+          setAccounts(prev => prev.map(acc => {
+            if (acc.id === newTrans.accountId) {
+              const balanceDiff = newTrans.type === 'INCOME' ? newTrans.amount : (newTrans.type === 'EXPENSE' || newTrans.type === 'TRANSFER' ? -newTrans.amount : 0);
+              return { ...acc, currentBalance: (acc.currentBalance || 0) + balanceDiff };
+            }
+            if (newTrans.type === 'TRANSFER' && acc.id === newTrans.toAccountId) {
+              return { ...acc, currentBalance: (acc.currentBalance || 0) + newTrans.amount };
+            }
+            return acc;
+          }));
+
+          return newTrans;
         }
       }
       console.error('Error adding transaction:', error);
@@ -530,7 +553,8 @@ export const useFinancialData = () => {
         userId: data.user_id,
         accountId: data.account_id || t.accountId,
         isTemplate: data.is_template,
-        createdAt: data.created_at
+        createdAt: data.created_at,
+        recurringTransactionId: t.recurringTransactionId || (data as any).recurring_transaction_id
       };
       setTransactions(prev => [newTrans, ...prev]);
       
@@ -1287,9 +1311,6 @@ export const useFinancialData = () => {
     if (updates.name !== undefined) {
         dbUpdates.name = updates.name;
         dbUpdates.full_name = updates.fullName || updates.name;
-        await supabase.auth.updateUser({
-            data: { name: updates.name, full_name: updates.fullName || updates.name }
-        });
     }
     if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
     if (updates.cpf !== undefined) dbUpdates.cpf = updates.cpf;
@@ -1297,29 +1318,57 @@ export const useFinancialData = () => {
     if (updates.address !== undefined) dbUpdates.address = updates.address;
     if (updates.email !== undefined && updates.email.trim() && updates.email !== currentUserProfile.email) {
         dbUpdates.email = updates.email.trim();
-        try {
-          await supabase.auth.updateUser({ email: updates.email.trim() });
-        } catch (authErr) {
-          console.warn("Error updating auth email:", authErr);
-        }
     }
 
+    // 1. Sync Supabase Auth User Metadata (Accessible across all devices for this user)
     try {
-      const { error: upsertErr } = await supabase
+      const authMetadataUpdates: any = {};
+      if (updates.name !== undefined) authMetadataUpdates.name = updates.name;
+      if (updates.fullName !== undefined) authMetadataUpdates.full_name = updates.fullName;
+      if (updates.avatarUrl !== undefined) authMetadataUpdates.avatar_url = updates.avatarUrl;
+      if (updates.avatarEmoji !== undefined) authMetadataUpdates.avatar_emoji = updates.avatarEmoji;
+      if (updates.avatarColor !== undefined) authMetadataUpdates.avatar_color = updates.avatarColor;
+      if (updates.cpf !== undefined) authMetadataUpdates.cpf = updates.cpf;
+      if (updates.phone !== undefined) authMetadataUpdates.phone = updates.phone;
+      if (updates.address !== undefined) authMetadataUpdates.address = updates.address;
+
+      const authUpdatePayload: any = { data: authMetadataUpdates };
+      if (updates.email !== undefined && updates.email.trim() && updates.email !== currentUserProfile.email) {
+        authUpdatePayload.email = updates.email.trim();
+      }
+
+      await supabase.auth.updateUser(authUpdatePayload);
+    } catch (authErr) {
+      console.warn("Could not sync auth metadata:", authErr);
+    }
+
+    // 2. Sync Supabase 'profiles' table via UPDATE first (respects RLS update policies), then UPSERT as fallback
+    try {
+      const { data: updateData, error: updateErr } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          ...dbUpdates
-        }, { onConflict: 'id' });
+        .update(dbUpdates)
+        .eq('id', user.id)
+        .select();
       
-      if (upsertErr) {
-        console.error("Erro ao salvar perfil no Supabase:", upsertErr);
+      if (updateErr || !updateData || updateData.length === 0) {
+        // Fallback to upsert if the profile row did not exist yet
+        const { error: upsertErr } = await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            email: user.email || '',
+            ...dbUpdates
+          }, { onConflict: 'id' });
+        
+        if (upsertErr) {
+          console.error("Erro ao fazer upsert do perfil no Supabase:", upsertErr);
+        }
       }
     } catch (e) {
       console.warn("Could not sync profile DB updates", e);
     }
 
-    // Also sync local metadata cache for admin and immediate offline access
+    // 3. Also sync local metadata cache for immediate offline access
     try {
       const metaKey = `saldo_a2_user_meta_${user.id}`;
       const existingMeta = JSON.parse(localStorage.getItem(metaKey) || '{}');
