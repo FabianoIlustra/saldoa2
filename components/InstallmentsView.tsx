@@ -40,7 +40,7 @@ interface InstallmentsViewProps {
   categories: Category[];
 }
 
-type SortField = 'dueDate' | 'description' | 'category' | 'installment' | 'amount' | 'status' | 'confirmedDate';
+type SortField = 'dueDate' | 'description' | 'category' | 'account' | 'installment' | 'amount' | 'status' | 'confirmedDate';
 type SortDirection = 'asc' | 'desc';
 
 const InstallmentsView: React.FC<InstallmentsViewProps> = ({
@@ -160,6 +160,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
 
           list.push({
             ...group,
+            accountId: record?.accountId || group.accountId,
             description: finalDescription, // Updated to use the record's specific description
             installmentAmount: finalAmount, // Updated to use the record's specific amount
             installmentNumber: i + 1,
@@ -212,6 +213,12 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
             case 'category':
                 comparison = a.category.localeCompare(b.category);
                 break;
+            case 'account': {
+                const accA = accounts.find(acc => acc.id === a.accountId)?.name || '';
+                const accB = accounts.find(acc => acc.id === b.accountId)?.name || '';
+                comparison = accA.localeCompare(accB);
+                break;
+            }
             case 'installment':
                 comparison = a.installmentNumber - b.installmentNumber;
                 break;
@@ -224,7 +231,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
         }
         return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [installmentGroups, transactions, targetDate, currentFilters, sortField, sortDirection, statusFilters]);
+  }, [installmentGroups, transactions, targetDate, currentFilters, sortField, sortDirection, statusFilters, accounts]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -402,6 +409,10 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
     }
   };
 
+  const getAccountName = (accountId: string) => {
+    return accounts.find(a => a.id === accountId)?.name || 'Conta';
+  };
+
   const handlePrint = () => {
     const printWindow = window.open('', '_blank', 'width=900,height=800');
     if (!printWindow) return;
@@ -447,6 +458,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                 <th>Confirmado Em</th>
                 <th>Descrição</th>
                 <th>Categoria</th>
+                <th>Conta Vinculada</th>
                 <th>Parcela</th>
                 <th>Status</th>
                 <th class="text-right">Valor</th>
@@ -459,6 +471,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                   <td>${t.confirmedDate ? format(t.confirmedDate, 'dd/MM/yyyy') : '-'}</td>
                   <td class="font-bold">${t.description}</td>
                   <td>${t.category}</td>
+                  <td>${getAccountName(t.accountId)}</td>
                   <td style="text-align: center;">${t.installmentNumber}/${t.totalInstallments}</td>
                   <td class="status-${t.status}">${t.status === 'paid' ? 'PAGO' : t.status === 'late' ? 'VENCIDO' : 'A VENCER'}</td>
                   <td class="text-right font-bold ${t.type === 'INCOME' ? 'text-emerald' : 'text-rose'}">
@@ -645,6 +658,9 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                 <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('category')}>
                     <div className="flex items-center gap-1">Categoria <SortIcon field="category" /></div>
                 </th>
+                <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('account')}>
+                    <div className="flex items-center gap-1">Conta Vinculada <SortIcon field="account" /></div>
+                </th>
                 <th className="px-3.5 py-2.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => handleSort('installment')}>
                     <div className="flex items-center justify-center gap-1">Parcela <SortIcon field="installment" /></div>
                 </th>
@@ -662,7 +678,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                     <td className="px-3 py-2.5 text-center">
                       {item.status !== 'paid' ? (
                         <input 
-                          type="checkbox"
+                          type="checkbox" 
                           checked={selectedKeys.includes(itemKey)}
                           onChange={() => toggleSelectItem(itemKey)}
                           className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -699,6 +715,12 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                     <td className="px-3.5 py-2.5">
                       <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
                           {item.category}
+                      </span>
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg inline-flex items-center gap-1 max-w-[140px] truncate" title={getAccountName(item.accountId)}>
+                        <CreditCard className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{getAccountName(item.accountId)}</span>
                       </span>
                     </td>
                     <td className="px-3.5 py-2.5 text-center">
@@ -755,7 +777,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
               })}
               {monthlyInstallments.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
                     Nenhuma parcela para este período.
                   </td>
                 </tr>
@@ -764,7 +786,7 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
             {monthlyInstallments.length > 0 && (
               <tfoot className="bg-slate-50 dark:bg-slate-800/50 font-black">
                 <tr>
-                  <td colSpan={7} className="px-3.5 py-2 text-right text-slate-500 uppercase text-[9px]">Total do Período:</td>
+                  <td colSpan={8} className="px-3.5 py-2 text-right text-slate-500 uppercase text-[9px]">Total do Período:</td>
                   <td className="px-3.5 py-2 text-right text-indigo-600 text-xs">
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalMonthly)}
                   </td>
@@ -828,6 +850,10 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-[9px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                             {item.category}
+                          </span>
+                          <span className="text-[9px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded inline-flex items-center gap-1 max-w-[130px] truncate" title={getAccountName(item.accountId)}>
+                            <CreditCard className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            <span className="truncate">{getAccountName(item.accountId)}</span>
                           </span>
                           <span className="text-[9px] font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-full">
                             Parc. {item.installmentNumber}/{item.totalInstallments}
@@ -1365,6 +1391,19 @@ const InstallmentsView: React.FC<InstallmentsViewProps> = ({
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Conta Vinculada</label>
+                <select 
+                  value={editAccountIdState} 
+                  onChange={e => setEditAccountIdState(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.name}</option>
+                  ))}
+                </select>
               </div>
 
               {editScope === 'SINGLE' && (

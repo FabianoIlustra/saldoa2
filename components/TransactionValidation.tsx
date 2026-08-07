@@ -191,20 +191,50 @@ const TransactionValidation: React.FC<ValidationProps> = ({
 
             let paidTransactionId: string | undefined;
             let confirmedDate: Date | null = null;
+            
+            // Occurrence keys for unambiguous tracking
+            const occKeyDate = `${rec.id}-${dateStr}`;
+            const occKeyMonth = `${rec.id}-${format(dueDate, 'yyyy-MM')}`;
+            const occKeyOriginalDate = rec.originalId ? `${rec.originalId}-${dateStr}` : null;
+            const occKeyOriginalMonth = rec.originalId ? `${rec.originalId}-${format(dueDate, 'yyyy-MM')}` : null;
+
+            const confirmedMap = (() => {
+              try {
+                return JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
+              } catch { return {}; }
+            })();
+
+            const hasConfirmedRecord = Boolean(
+              confirmedMap[occKeyDate] || 
+              confirmedMap[occKeyMonth] || 
+              (occKeyOriginalDate && confirmedMap[occKeyOriginalDate]) || 
+              (occKeyOriginalMonth && confirmedMap[occKeyOriginalMonth])
+            );
+
             const isPaid = transactions.some(t => {
               if (t.isTemplate) return false;
               if (t.type !== rec.type) return false;
 
-              const tDesc = t.description.toLowerCase().trim();
-              const recDesc = rec.description.toLowerCase().trim();
-              const isDescMatch = tDesc === recDesc || (tDesc.length > 3 && recDesc.length > 3 && (tDesc.includes(recDesc) || recDesc.includes(tDesc)));
-
-              if (!isDescMatch) return false;
-
               const tDate = parseISO(t.date);
               const closeDate = isSameDay(tDate, dueDate) || Math.abs(Math.floor((tDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))) <= 2;
-              const matches = closeDate || isSameMonth(tDate, dueDate);
-              if (matches) {
+              const matchesDate = closeDate || isSameMonth(tDate, dueDate);
+              if (!matchesDate) return false;
+
+              // Check if explicitly linked via recurringTransactionId
+              const isDirectLink = Boolean(t.recurringTransactionId && (
+                t.recurringTransactionId === rec.id ||
+                t.recurringTransactionId === rec.originalId ||
+                t.recurringTransactionId === occKeyDate ||
+                t.recurringTransactionId === occKeyMonth
+              ));
+
+              // Or confirmed via manual validation in the current/previous session
+              const isConfirmedViaRecord = hasConfirmedRecord && (
+                t.description.toLowerCase().trim() === rec.description.toLowerCase().trim() &&
+                Math.abs(t.amount - rec.amount) < 0.01
+              );
+
+              if (isDirectLink || isConfirmedViaRecord) {
                 paidTransactionId = t.id;
                 const dStr = t.createdAt ? t.createdAt.split('T')[0] : t.date;
                 try {
@@ -212,8 +242,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                 } catch {
                   confirmedDate = parseISO(t.date);
                 }
+                return true;
               }
-              return matches;
+              return false;
             });
 
             let status: 'pending' | 'late' | 'paid' = 'pending';
@@ -248,22 +279,53 @@ const TransactionValidation: React.FC<ValidationProps> = ({
 
         const actualDay = Math.min(rec.dayOfMonth || 1, monthEnd.getDate());
         const dueDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), actualDay);
+        const dateStr = format(dueDate, 'yyyy-MM-dd');
+        const monthStr = format(dueDate, 'yyyy-MM');
 
         let paidTransactionId: string | undefined;
         let confirmedDate: Date | null = null;
+
+        const occKeyDate = `${rec.id}-${dateStr}`;
+        const occKeyMonth = `${rec.id}-${monthStr}`;
+        const occKeyOriginalDate = rec.originalId ? `${rec.originalId}-${dateStr}` : null;
+        const occKeyOriginalMonth = rec.originalId ? `${rec.originalId}-${monthStr}` : null;
+
+        const confirmedMap = (() => {
+          try {
+            return JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
+          } catch { return {}; }
+        })();
+
+        const hasConfirmedRecord = Boolean(
+          confirmedMap[occKeyDate] || 
+          confirmedMap[occKeyMonth] || 
+          (occKeyOriginalDate && confirmedMap[occKeyOriginalDate]) || 
+          (occKeyOriginalMonth && confirmedMap[occKeyOriginalMonth])
+        );
+
         const isPaid = transactions.some(t => {
           if (t.isTemplate) return false;
           if (t.type !== rec.type) return false;
 
-          const tDesc = t.description.toLowerCase().trim();
-          const recDesc = rec.description.toLowerCase().trim();
-          const isDescMatch = tDesc === recDesc || (tDesc.length > 3 && recDesc.length > 3 && (tDesc.includes(recDesc) || recDesc.includes(tDesc)));
-
-          if (!isDescMatch) return false;
-
           const tDate = parseISO(t.date);
-          const matches = isSameMonth(tDate, targetDate) && isSameYear(tDate, targetDate);
-          if (matches) {
+          const matchesDate = isSameMonth(tDate, targetDate) && isSameYear(tDate, targetDate);
+          if (!matchesDate) return false;
+
+          // Check if explicitly linked via recurringTransactionId
+          const isDirectLink = Boolean(t.recurringTransactionId && (
+            t.recurringTransactionId === rec.id ||
+            t.recurringTransactionId === rec.originalId ||
+            t.recurringTransactionId === occKeyDate ||
+            t.recurringTransactionId === occKeyMonth
+          ));
+
+          // Or confirmed via manual validation in this/previous session
+          const isConfirmedViaRecord = hasConfirmedRecord && (
+            t.description.toLowerCase().trim() === rec.description.toLowerCase().trim() &&
+            Math.abs(t.amount - rec.amount) < 0.01
+          );
+
+          if (isDirectLink || isConfirmedViaRecord) {
             paidTransactionId = t.id;
             const dStr = t.createdAt ? t.createdAt.split('T')[0] : t.date;
             try {
@@ -271,8 +333,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
             } catch {
               confirmedDate = parseISO(t.date);
             }
+            return true;
           }
-          return matches;
+          return false;
         });
 
         let status: 'pending' | 'late' | 'paid' = 'pending';
@@ -282,6 +345,8 @@ const TransactionValidation: React.FC<ValidationProps> = ({
 
         result.push({
           ...rec,
+          id: `${rec.id}-${dateStr}`,
+          originalId: rec.id,
           dueDate,
           status,
           paidTransactionId,
@@ -374,6 +439,28 @@ const TransactionValidation: React.FC<ValidationProps> = ({
     }
 
     try {
+      const recId = selectedItem.originalId || selectedItem.id;
+      const dateStr = format(selectedItem.dueDate, 'yyyy-MM-dd');
+      const monthStr = format(selectedItem.dueDate, 'yyyy-MM');
+      const occKey = `${recId}-${dateStr}`;
+      const occMonthKey = `${recId}-${monthStr}`;
+
+      // Save to localStorage immediately so UI updates and stays persistent
+      try {
+        const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
+        confirmedMap[occKey] = {
+          confirmedDate: editDate,
+          recurringId: recId,
+          date: editDate,
+          amount: parseFloat(editAmount),
+          description: selectedItem.description
+        };
+        confirmedMap[occMonthKey] = confirmedMap[occKey];
+        localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
+      } catch (e) {
+        console.warn('Error saving confirmed recurring in localStorage', e);
+      }
+
       await onValidate({
         userId: selectedItem.userId,
         accountId: editAccountId,
@@ -384,7 +471,8 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         category: selectedItem.type === 'TRANSFER' ? 'Transferência' : selectedItem.category,
         date: editDate,
         recurrence: 'NONE', // It becomes a real one-time transaction
-        isJoint: selectedItem.isJoint
+        isJoint: selectedItem.isJoint,
+        recurringTransactionId: recId
       });
       setSelectedItem(null);
     } catch (error) {
@@ -392,9 +480,39 @@ const TransactionValidation: React.FC<ValidationProps> = ({
     }
   };
 
+  const handleEstornar = (item: any) => {
+    if (item.paidTransactionId && confirm(`Deseja estornar este ${item.type === 'INCOME' ? 'recebimento' : 'pagamento'}? O lançamento será removido do extrato.`)) {
+      try {
+        const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
+        const recId = item.originalId || item.id;
+        const dateStr = format(item.dueDate, 'yyyy-MM-dd');
+        const monthStr = format(item.dueDate, 'yyyy-MM');
+        delete confirmedMap[`${recId}-${dateStr}`];
+        delete confirmedMap[`${recId}-${monthStr}`];
+        Object.keys(confirmedMap).forEach(k => {
+          if (k.startsWith(recId) && (k.includes(dateStr) || k.includes(monthStr))) {
+            delete confirmedMap[k];
+          }
+        });
+        localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
+      } catch (e) {}
+      onDelete(item.paidTransactionId);
+    }
+  };
+
   const handleIgnoreMonth = async (item: any) => {
     if (confirm('Deseja ignorar este lançamento apenas para este mês? A regra recorrente continuará ativa para os próximos meses.')) {
         try {
+            const recId = item.originalId || item.id;
+            const dateStr = format(item.dueDate, 'yyyy-MM-dd');
+            const monthStr = format(item.dueDate, 'yyyy-MM');
+            try {
+              const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
+              confirmedMap[`${recId}-${dateStr}`] = { confirmedDate: dateStr, ignored: true };
+              confirmedMap[`${recId}-${monthStr}`] = confirmedMap[`${recId}-${dateStr}`];
+              localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
+            } catch (e) {}
+
             await onValidate({
               userId: item.userId,
               accountId: accounts[0]?.id || 'default',
@@ -404,7 +522,8 @@ const TransactionValidation: React.FC<ValidationProps> = ({
               category: 'Ignorado',
               date: format(item.dueDate, 'yyyy-MM-dd'),
               recurrence: 'NONE',
-              isJoint: item.isJoint
+              isJoint: item.isJoint,
+              recurringTransactionId: recId
             });
         } catch (error) {
             console.error('Ignore error:', error);
@@ -563,15 +682,43 @@ const TransactionValidation: React.FC<ValidationProps> = ({
       </div>
 
       {/* Stats Cards Row */}
-      <div className="max-w-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 shadow-sm flex items-center gap-3">
-          <div className="w-9 h-9 bg-rose-50 dark:bg-rose-900/20 rounded-xl flex items-center justify-center text-rose-600">
+          <div className="w-9 h-9 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+            <CheckCircle className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Receitas Previstas</p>
+            <h4 className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.income)}
+            </h4>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 bg-rose-50 dark:bg-rose-900/20 rounded-xl flex items-center justify-center text-rose-600 dark:text-rose-400">
             <XCircle className="w-4.5 h-4.5" />
           </div>
           <div>
             <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Despesas Previstas</p>
-            <h4 className="text-sm font-black text-slate-900 dark:text-white">
+            <h4 className="text-sm font-black text-rose-600 dark:text-rose-400">
               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.expense)}
+            </h4>
+          </div>
+        </div>
+
+        <div className="col-span-2 sm:col-span-1 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 shadow-sm flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+            (totals.income - totals.expense) >= 0 
+              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400' 
+              : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+          }`}>
+            <ArrowUpDown className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Saldo Previsto</p>
+            <h4 className={`text-sm font-black ${(totals.income - totals.expense) >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600 dark:text-rose-400'}`}>
+              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totals.income - totals.expense)}
             </h4>
           </div>
         </div>
@@ -710,11 +857,15 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                         >
                             <td className="px-3.5 py-2.5">
                                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                                    item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                                    item.status === 'late' ? 'bg-rose-100 text-rose-700' :
-                                    'bg-blue-100 text-blue-700'
+                                    item.status === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                                    item.status === 'late' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' :
+                                    'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
                                 }`}>
-                                    {item.status === 'paid' ? 'Pago' : item.status === 'late' ? 'Vencido' : 'A Vencer'}
+                                    {item.status === 'paid' 
+                                      ? (item.type === 'INCOME' ? 'Recebido' : item.type === 'TRANSFER' ? 'Transferido' : 'Pago')
+                                      : item.status === 'late' 
+                                        ? (item.type === 'INCOME' ? 'Atrasado' : 'Vencido')
+                                        : (item.type === 'INCOME' ? 'A Receber' : item.type === 'TRANSFER' ? 'A Transferir' : 'A Vencer')}
                                 </span>
                             </td>
                             <td className="px-3.5 py-2.5 font-bold text-xs text-slate-700 dark:text-slate-300">
@@ -762,13 +913,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                                         </>
                                     ) : (
                                         <button 
-                                            onClick={() => {
-                                                if (item.paidTransactionId && confirm('Deseja estornar este pagamento? O lançamento será removido do extrato.')) {
-                                                    onDelete(item.paidTransactionId);
-                                                }
-                                            }}
+                                            onClick={() => handleEstornar(item)}
                                             className="bg-rose-100 text-rose-600 p-1.5 rounded-lg hover:bg-rose-200 transition-colors"
-                                            title="Estornar Pagamento"
+                                            title={item.type === 'INCOME' ? "Estornar Recebimento" : "Estornar Pagamento"}
                                         >
                                             <ArrowUpDown className="w-3.5 h-3.5" />
                                         </button>
@@ -800,11 +947,15 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                             </span>
                         </div>
                         <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
-                            item.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                            item.status === 'late' ? 'bg-rose-100 text-rose-700' :
-                            'bg-blue-100 text-blue-700'
+                            item.status === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                            item.status === 'late' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' :
+                            'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
                         }`}>
-                            {item.status === 'paid' ? 'Pago' : item.status === 'late' ? 'Vencido' : 'A Vencer'}
+                            {item.status === 'paid' 
+                              ? (item.type === 'INCOME' ? 'Recebido' : item.type === 'TRANSFER' ? 'Transferido' : 'Pago')
+                              : item.status === 'late' 
+                                ? (item.type === 'INCOME' ? 'Atrasado' : 'Vencido')
+                                : (item.type === 'INCOME' ? 'A Receber' : item.type === 'TRANSFER' ? 'A Transferir' : 'A Vencer')}
                         </span>
                     </div>
                     
@@ -812,7 +963,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                         <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px] font-bold">
                                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                Venc.: {format(item.dueDate, 'dd/MM/yyyy')}
+                                {item.type === 'INCOME' ? 'Prev.:' : 'Venc.:'} {format(item.dueDate, 'dd/MM/yyyy')}
                             </div>
                             {item.confirmedDate && (
                                 <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-[11px] font-extrabold">
@@ -846,14 +997,10 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                         </div>
                     ) : (
                         <button 
-                            onClick={() => {
-                                if (item.paidTransactionId && confirm('Deseja estornar este pagamento? O lançamento será removido do extrato.')) {
-                                    onDelete(item.paidTransactionId);
-                                }
-                            }}
-                            className="w-full mt-2.5 bg-rose-50 text-rose-600 py-2 rounded-lg font-bold uppercase text-[10px] tracking-wider hover:bg-rose-100 transition-colors flex items-center justify-center gap-1.5"
+                            onClick={() => handleEstornar(item)}
+                            className="w-full mt-2.5 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 py-2 rounded-lg font-bold uppercase text-[10px] tracking-wider hover:bg-rose-100 transition-colors flex items-center justify-center gap-1.5"
                         >
-                            <ArrowUpDown className="w-3.5 h-3.5" /> Estornar Pagamento
+                            <ArrowUpDown className="w-3.5 h-3.5" /> Estornar {item.type === 'INCOME' ? 'Recebimento' : 'Pagamento'}
                         </button>
                     )}
                 </div>
@@ -1086,7 +1233,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-xl shadow-2xl p-5 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-black text-slate-900 dark:text-white">Confirmar Lançamento</h3>
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                {selectedItem.type === 'INCOME' ? 'Confirmar Recebimento' : selectedItem.type === 'TRANSFER' ? 'Confirmar Transferência' : 'Confirmar Pagamento'}
+              </h3>
               <button onClick={() => setSelectedItem(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
                 <X className="w-4 h-4 text-slate-400" />
               </button>
@@ -1171,7 +1320,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
                 onClick={handleConfirm}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-extrabold uppercase tracking-wider text-[11px] shadow-md shadow-emerald-100 dark:shadow-none transition-all flex items-center justify-center gap-1.5 mt-3"
               >
-                <Check className="w-4 h-4" /> Confirmar Pagamento
+                <Check className="w-4 h-4" /> {selectedItem.type === 'INCOME' ? 'Confirmar Recebimento' : selectedItem.type === 'TRANSFER' ? 'Confirmar Transferência' : 'Confirmar Pagamento'}
               </button>
             </div>
           </div>

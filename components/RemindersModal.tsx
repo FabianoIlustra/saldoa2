@@ -8,6 +8,8 @@ interface ReminderItem {
   amount: number;
   isRecurring: boolean;
   category: string;
+  dueLabel?: 'Hoje' | 'Amanhã';
+  dueDate?: string;
 }
 
 interface RemindersModalProps {
@@ -23,6 +25,9 @@ const RemindersModal: React.FC<RemindersModalProps> = ({ isOpen, onClose, remind
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
+  const todayCount = reminders.filter(r => r.dueLabel === 'Hoje').length;
+  const tomorrowCount = reminders.filter(r => r.dueLabel === 'Amanhã').length;
+
   return (
     <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl border border-slate-100 dark:border-slate-800 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -37,8 +42,8 @@ const RemindersModal: React.FC<RemindersModalProps> = ({ isOpen, onClose, remind
               )}
             </div>
             <div>
-              <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">Lembretes de Amanhã</h3>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Contas e recebimentos programados</p>
+              <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">Lembretes de Vencimento</h3>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Contas e recebimentos de Hoje e Amanhã</p>
             </div>
           </div>
           <button 
@@ -53,49 +58,74 @@ const RemindersModal: React.FC<RemindersModalProps> = ({ isOpen, onClose, remind
         <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
           {reminders.length > 0 ? (
             <div className="space-y-3">
-              <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-100/50 dark:border-amber-900/20 p-4 rounded-2xl flex items-start gap-3">
+              <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-100/50 dark:border-amber-900/20 p-3.5 rounded-2xl flex items-start gap-2.5">
                 <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
-                  Atenção aos lançamentos programados para amanhã. Mantenha seu saldo em conta positivo para evitar juros!
-                </p>
+                <div className="text-[11px] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
+                  <span>Você possui </span>
+                  {todayCount > 0 && (
+                    <strong className="text-rose-600 dark:text-rose-400 font-black">{todayCount} para hoje</strong>
+                  )}
+                  {todayCount > 0 && tomorrowCount > 0 && <span> e </span>}
+                  {tomorrowCount > 0 && (
+                    <strong className="text-blue-600 dark:text-blue-400 font-black">{tomorrowCount} para amanhã</strong>
+                  )}
+                  <span>. Fique atento aos saldos e vencimentos!</span>
+                </div>
               </div>
 
               <div className="space-y-2">
-                {reminders.map((item) => (
-                  <div 
-                    key={item.id}
-                    className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3"
-                  >
-                    <div className="space-y-1 text-left min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${
-                          item.type === 'INCOME' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' :
-                          item.type === 'TRANSFER' ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600' :
-                          'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
-                        }`}>
-                          {item.type === 'INCOME' ? 'A Receber' : item.type === 'TRANSFER' ? 'Transferência' : 'A Pagar'}
-                        </span>
-                        {item.isRecurring && (
-                          <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
-                            Recorrente
+                {reminders.map((item) => {
+                  const isToday = item.dueLabel === 'Hoje';
+                  return (
+                    <div 
+                      key={item.id}
+                      className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                        isToday 
+                          ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-900/40 shadow-xs' 
+                          : 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800'
+                      }`}
+                    >
+                      <div className="space-y-1 text-left min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            isToday 
+                              ? 'bg-rose-500 text-white shadow-2xs' 
+                              : 'bg-indigo-600 text-white shadow-2xs'
+                          }`}>
+                            {item.dueLabel || 'Amanhã'}
                           </span>
-                        )}
-                      </div>
-                      <h4 className="font-bold text-xs text-slate-800 dark:text-white truncate">
-                        {item.description}
-                      </h4>
-                      <p className="text-[9px] text-slate-400 font-medium">Categoria: {item.category}</p>
-                    </div>
 
-                    <div className="text-right shrink-0">
-                      <span className={`font-black text-xs ${
-                        item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'
-                      }`}>
-                        {formatCurrency(item.amount)}
-                      </span>
+                          <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${
+                            item.type === 'INCOME' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' :
+                            item.type === 'TRANSFER' ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600' :
+                            'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+                          }`}>
+                            {item.type === 'INCOME' ? 'A Receber' : item.type === 'TRANSFER' ? 'Transferência' : 'A Pagar'}
+                          </span>
+
+                          {item.isRecurring && (
+                            <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+                              Recorrente
+                            </span>
+                          )}
+                        </div>
+
+                        <h4 className="font-extrabold text-xs text-slate-800 dark:text-white truncate mt-1">
+                          {item.description}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 font-medium">Categoria: {item.category}</p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className={`font-black text-xs sm:text-sm ${
+                          item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'
+                        }`}>
+                          {item.type === 'INCOME' ? '+' : '-'} {formatCurrency(item.amount)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -106,7 +136,7 @@ const RemindersModal: React.FC<RemindersModalProps> = ({ isOpen, onClose, remind
               <div className="space-y-1">
                 <h4 className="font-extrabold text-sm text-slate-800 dark:text-white">Tudo em dia!</h4>
                 <p className="text-[10px] text-slate-400 max-w-[240px] mx-auto leading-relaxed">
-                  Não há nenhum pagamento ou recebimento programado para amanhã.
+                  Não há nenhum pagamento ou recebimento pendente para hoje ou amanhã.
                 </p>
               </div>
             </div>

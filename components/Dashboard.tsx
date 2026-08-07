@@ -493,66 +493,88 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         
         {/* Left Card: Indicador Principal (Saldo do Mês) */}
-        <div className="bg-blue-100/90 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800/60 text-slate-800 dark:text-slate-100 rounded-3xl p-5 sm:p-7 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between space-y-4">
+        <div className="bg-blue-50/90 dark:bg-slate-900/60 border border-blue-200/80 dark:border-blue-900/40 text-slate-800 dark:text-slate-100 rounded-[28px] p-5 sm:p-6 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between">
           <div>
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-2 text-blue-900 dark:text-blue-200 text-xs sm:text-sm font-extrabold capitalize">
-                <Heart className="w-4 h-4 fill-blue-600/30 text-blue-700 dark:text-blue-400" />
-                <span>Saldo Total em Conta</span>
-              </div>
-
-              {/* Action buttons (+ and Mic) with soft style */}
-              <div className="flex items-center gap-2 shrink-0">
+            {/* Top Centered Section: LANÇAR with Manual and Voz Action Buttons */}
+            <div className="flex flex-col items-center justify-center pt-1 pb-4">
+              <span className="text-xs sm:text-sm font-black uppercase text-blue-700 dark:text-blue-300 tracking-wider mb-2.5">
+                LANÇAR
+              </span>
+              
+              <div className="flex items-center justify-center gap-3">
+                {/* Botão Manual */}
                 <button 
+                  type="button"
                   onClick={onManualClick}
-                  className="w-9 h-9 bg-white/80 hover:bg-white dark:bg-blue-900/60 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-200 border border-blue-200/80 dark:border-blue-700/60 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-2xs"
-                  title="Novo Lançamento"
+                  className="flex flex-col items-center group cursor-pointer focus:outline-none"
+                  title="Lançamento Manual"
                 >
-                  <Plus className="w-5 h-5" />
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-blue-900 dark:text-blue-200 border border-blue-200/90 dark:border-blue-700/60 rounded-full flex items-center justify-center transition-all group-active:scale-95 shadow-xs group-hover:shadow-sm">
+                    <Plus className="w-5 h-5 sm:w-6 sm:h-6 text-blue-900 dark:text-blue-200 stroke-[2.5]" />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-black text-blue-900 dark:text-blue-200 uppercase tracking-tight mt-1.5 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors">
+                    MANUAL
+                  </span>
                 </button>
+
+                {/* Divisor Vertical */}
+                <div className="w-[1px] h-7 bg-blue-300/70 dark:bg-blue-800/70 mx-1.5 self-center" />
+
+                {/* Botão Voz */}
                 <button 
+                  type="button"
                   onClick={onVoiceClick}
-                  className="w-9 h-9 bg-white/80 hover:bg-white dark:bg-blue-900/60 dark:hover:bg-blue-800 text-blue-900 dark:text-blue-200 border border-blue-200/80 dark:border-blue-700/60 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-2xs"
+                  className="flex flex-col items-center group cursor-pointer focus:outline-none"
                   title="Lançamento por Voz"
                 >
-                  <Mic className="w-4 h-4" />
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-blue-900 dark:text-blue-200 border border-blue-200/90 dark:border-blue-700/60 rounded-full flex items-center justify-center transition-all group-active:scale-95 shadow-xs group-hover:shadow-sm">
+                    <Mic className="w-5 h-5 sm:w-5.5 sm:h-5.5 text-blue-900 dark:text-blue-200 stroke-[2.2]" />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-black text-blue-900 dark:text-blue-200 uppercase tracking-tight mt-1.5 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors">
+                    VOZ
+                  </span>
                 </button>
               </div>
             </div>
 
+            {/* Saldo Total Em Conta Section */}
             <div className="mb-4">
-              <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-900 dark:text-white mb-1">
+              <div className="flex items-center gap-1.5 text-blue-900 dark:text-blue-200 text-xs sm:text-sm font-bold mb-1">
+                <Heart className="w-4 h-4 text-blue-600 dark:text-blue-400 stroke-[2.2]" />
+                <span>Saldo Total Em Conta</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white">
                 {formatCurrency(totalBalance)}
               </h2>
-              <p className="text-slate-600 dark:text-slate-400 text-xs font-semibold">
+              <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
                 {monthlyTransactionsCount} {monthlyTransactionsCount === 1 ? 'transação neste mês' : 'transações neste mês'} · {periodLabel}
               </p>
             </div>
 
             {/* Inner Cards for Receitas & Despesas */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-2xs">
-                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 text-[11px] font-semibold mb-1">
-                  <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3.5 sm:p-4 rounded-2xl shadow-2xs">
+                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 text-xs font-bold mb-1">
+                  <ArrowUpRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
                   <span>Receitas</span>
                 </div>
-                <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white">{formatCurrency(monthlyIncome)}</p>
+                <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">{formatCurrency(monthlyIncome)}</p>
               </div>
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-2xs">
-                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 text-[11px] font-semibold mb-1">
-                  <ArrowDownRight className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3.5 sm:p-4 rounded-2xl shadow-2xs">
+                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 text-xs font-bold mb-1">
+                  <ArrowDownRight className="w-4 h-4 text-rose-600 dark:text-rose-400 stroke-[2.5]" />
                   <span>Despesas</span>
                 </div>
-                <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white">{formatCurrency(monthlyExpense)}</p>
+                <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">{formatCurrency(monthlyExpense)}</p>
               </div>
             </div>
 
             {/* Spending Ceiling Progress Bar */}
             {spendingCeiling && spendingCeiling > 0 ? (
-              <div className="mt-3 bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl shadow-2xs">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
-                  <span className="flex items-center gap-1.5">
-                    <Target className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3.5 sm:p-4 rounded-2xl shadow-2xs mb-3">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 mb-2.5">
+                  <span className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                    <Target className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     <span>Limite de gastos:</span>
                   </span>
                   <span className="font-extrabold text-slate-900 dark:text-white">
@@ -560,7 +582,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </span>
                 </div>
 
-                <div className="w-full h-2 bg-blue-100 dark:bg-slate-700 rounded-full overflow-hidden p-0.5">
+                <div className="w-full h-2 bg-blue-100/80 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div 
                     className={`h-full rounded-full transition-all duration-500 ${
                       ceilingPercentReal > 100 ? 'bg-rose-500' : ceilingPercentReal >= 85 ? 'bg-amber-500' : 'bg-emerald-500'
@@ -569,31 +591,45 @@ const Dashboard: React.FC<DashboardProps> = ({
                   />
                 </div>
 
-                <div className="flex items-center justify-end text-xs font-bold text-slate-600 dark:text-slate-300 mt-2">
+                <div className="flex items-center justify-end text-xs font-bold text-slate-700 dark:text-slate-300 mt-2">
                   <span>
                     Gasto: {formatCurrency(monthlyExpense)} ({ceilingPercentReal}%)
                   </span>
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3.5 sm:p-4 rounded-2xl shadow-2xs mb-3 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                <span className="flex items-center gap-1.5">
+                  <Target className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Limite de gastos:</span>
+                </span>
+                <button 
+                  type="button"
+                  onClick={onManageAccounts} 
+                  className="text-blue-600 dark:text-blue-400 hover:underline font-extrabold text-xs"
+                >
+                  Definir limite
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
             {/* Ver Contas Toggle Button */}
             <button 
               onClick={() => setIsAccountsOpen(!isAccountsOpen)}
-              className="w-full flex items-center justify-between px-4 py-2.5 bg-white/90 dark:bg-slate-800/90 hover:bg-white dark:hover:bg-slate-800 border border-blue-200/80 dark:border-slate-700/80 rounded-2xl text-xs font-bold text-blue-900 dark:text-blue-200 transition-all active:scale-[0.99]"
+              className="w-full flex items-center justify-between p-3.5 sm:p-4 bg-white dark:bg-slate-800/95 hover:bg-slate-50 dark:hover:bg-slate-800 border border-blue-100/90 dark:border-slate-700/80 rounded-2xl text-xs sm:text-sm font-bold text-blue-900 dark:text-blue-200 transition-all active:scale-[0.99] shadow-2xs"
             >
               <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-blue-700 dark:text-blue-400" />
+                <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <span>Ver contas ({accounts.length})</span>
               </div>
-              {isAccountsOpen ? <ChevronUp className="w-4 h-4 text-blue-700 dark:text-blue-400" /> : <ChevronDown className="w-4 h-4 text-blue-700 dark:text-blue-400" />}
+              {isAccountsOpen ? <ChevronUp className="w-4 h-4 text-blue-600 dark:text-blue-400" /> : <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
             </button>
 
             {/* Expandable Accounts List */}
             {isAccountsOpen && (
-              <div className="mt-2.5 bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 rounded-2xl p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="mt-2.5 bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 rounded-2xl p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                 {accounts.map(account => (
                   <div key={account.id} className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-blue-50 dark:hover:bg-slate-700/50 transition-colors">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -621,11 +657,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Right Card: Resumo de Gastos (Gráfico de Resumo de Gastos) */}
-        <div className="bg-blue-100/90 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800/60 text-slate-800 dark:text-slate-100 rounded-3xl p-5 sm:p-7 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between space-y-4">
+        <div className="bg-blue-50/90 dark:bg-slate-900/60 border border-blue-200/80 dark:border-blue-900/40 text-slate-800 dark:text-slate-100 rounded-[28px] p-5 sm:p-6 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-white/80 dark:bg-blue-900/50 border border-blue-200/80 dark:border-blue-700/60 rounded-xl text-blue-800 dark:text-blue-200 shadow-2xs">
+                <div className="p-2 bg-white dark:bg-blue-900/50 border border-blue-200/80 dark:border-blue-700/60 rounded-xl text-blue-800 dark:text-blue-200 shadow-2xs">
                   <History className="w-4 h-4" />
                 </div>
                 <div>
@@ -636,7 +672,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
               <button 
                 onClick={onViewVisuals}
-                className="text-xs font-bold text-blue-800 dark:text-blue-200 hover:text-blue-950 dark:hover:text-white flex items-center gap-1 transition-colors bg-white/80 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-blue-200/80 dark:border-slate-700 shadow-2xs"
+                className="text-xs font-bold text-blue-800 dark:text-blue-200 hover:text-blue-950 dark:hover:text-white flex items-center gap-1 transition-colors bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl border border-blue-200/80 dark:border-slate-700 shadow-2xs"
               >
                 <span>Gráficos</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -645,24 +681,24 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             {/* Spend Metrics Grid (Hoje, Esta Semana, Este Mês) */}
             <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-4">
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
+              <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5 truncate">Hoje</p>
                 <p className="text-[11px] sm:text-xs md:text-sm lg:text-base font-black text-slate-900 dark:text-white tracking-tighter truncate" title={formatCurrency(daySpent)}>{formatCurrency(daySpent)}</p>
               </div>
 
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
+              <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5 truncate">Esta Semana</p>
                 <p className="text-[11px] sm:text-xs md:text-sm lg:text-base font-black text-slate-900 dark:text-white tracking-tighter truncate" title={formatCurrency(weekSpent)}>{formatCurrency(weekSpent)}</p>
               </div>
 
-              <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
+              <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-2 sm:p-3 rounded-2xl shadow-2xs min-w-0">
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5 truncate">Este Mês</p>
                 <p className="text-[11px] sm:text-xs md:text-sm lg:text-base font-black text-slate-900 dark:text-white tracking-tighter truncate" title={formatCurrency(monthlyExpense)}>{formatCurrency(monthlyExpense)}</p>
               </div>
             </div>
 
             {/* Category Expense Breakdown Bars / Graph */}
-            <div className="bg-white/90 dark:bg-slate-800/90 border border-blue-200/80 dark:border-slate-700/80 p-3 sm:p-4 rounded-2xl shadow-2xs">
+            <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3 sm:p-4 rounded-2xl shadow-2xs">
               <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-3 flex items-center justify-between">
                 <span>Maiores Categorias do Mês</span>
                 <span className="text-[10px] text-slate-400">{topExpenseCategories.list.length} ativas</span>
@@ -704,7 +740,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="pt-2">
             <button
               onClick={onViewVisuals}
-              className="w-full py-2.5 px-4 bg-white/90 hover:bg-white dark:bg-purple-900/50 dark:hover:bg-purple-800/60 text-purple-900 dark:text-purple-200 border border-purple-200/80 dark:border-purple-700/60 font-extrabold text-xs rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-2xs"
+              className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 dark:bg-purple-900/50 dark:hover:bg-purple-800/60 text-purple-900 dark:text-purple-200 border border-purple-200/80 dark:border-purple-700/60 font-extrabold text-xs rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-2xs"
             >
               <span>Ver Gráficos & Relatórios Detalhados</span>
               <ArrowRight className="w-4 h-4" />
