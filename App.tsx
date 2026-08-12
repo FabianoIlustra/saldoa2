@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Home, LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users, ArrowUpCircle, ShieldCheck, Sparkles, Bell, Edit2, Lock } from 'lucide-react';
+import { Home, LayoutDashboard, History, Settings, Target, MessageSquareCode, CheckCircle, Heart, Moon, Sun, CreditCard, LogOut, TrendingUp, CalendarCheck, Users, ArrowUpCircle, ShieldCheck, Sparkles, Bell, Edit2, Lock, HelpCircle } from 'lucide-react';
 import { getPricingConfig } from './services/adminSettings';
 import Dashboard from './components/Dashboard';
 import TransactionList from './components/TransactionList';
@@ -22,6 +22,7 @@ import SubscriptionModal from './components/SubscriptionModal';
 import InviteFamilyModal from './components/InviteFamilyModal';
 import RemindersModal from './components/RemindersModal';
 import EditProfileModal from './components/EditProfileModal';
+import { OnboardingTour } from './components/OnboardingTour';
 import { Transaction } from './types';
 import { addMonths, format, parseISO } from 'date-fns';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -132,9 +133,21 @@ const AppContent: React.FC = () => {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isRemindersOpen, setIsRemindersOpen] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [lastNotificationCount, setLastNotificationCount] = useState(-1);
   const [localMode, setLocalMode] = useState(() => isLocalModeEnabled());
+
+  // Automatic onboarding tour for first-time access
+  useEffect(() => {
+    const tourDismissed = localStorage.getItem('finan_ai_tour_completed');
+    if (!tourDismissed) {
+      const timer = setTimeout(() => {
+        setIsTourOpen(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   useEffect(() => {
     const handleLocalModeChange = () => {
@@ -322,11 +335,8 @@ const AppContent: React.FC = () => {
   }, [recurringTransactions, transactions]);
 
   useEffect(() => {
-    if (activeReminders.length !== lastNotificationCount) {
-      setUnreadCount(activeReminders.length);
-      setLastNotificationCount(activeReminders.length);
-    }
-  }, [activeReminders, lastNotificationCount]);
+    setUnreadCount(activeReminders.length);
+  }, [activeReminders.length]);
 
   // Scroll to top whenever activeTab changes
   useEffect(() => {
@@ -474,6 +484,7 @@ const AppContent: React.FC = () => {
                 return (
                   <button 
                     key={item.id}
+                    id={`tour-tab-${item.id}`}
                     onClick={() => setActiveTab(item.id as TabType)}
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-extrabold transition-all text-sm ${
                       isActive 
@@ -650,17 +661,17 @@ const AppContent: React.FC = () => {
                 )}
               </div>
 
-              {/* Action Buttons (Bell, Theme, Settings/Home) - Generous Touch Target on Mobile */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Action Buttons (Bell, Help Tour, Theme, Settings/Home) - 4 buttons well-spaced & slightly reduced on mobile */}
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button 
                   onClick={() => {
                     setUnreadCount(0);
                     setIsRemindersOpen(true);
                   }} 
-                  className="p-2.5 sm:p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all active:scale-95 shadow-2xs relative"
+                  className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all active:scale-95 shadow-2xs relative"
                   title="Lembretes de Hoje e Amanhã"
                 >
-                  <Bell className="w-5 h-5" />
+                  <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-pulse shadow-xs">
                       {unreadCount}
@@ -668,22 +679,31 @@ const AppContent: React.FC = () => {
                   )}
                 </button>
                 <button 
-                  onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
-                  className="p-2.5 sm:p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-amber-500 transition-all active:scale-95 shadow-2xs"
-                  title="Mudar cor da tela"
+                  id="tour-help-btn-mobile"
+                  onClick={() => setIsTourOpen(true)} 
+                  className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all active:scale-95 shadow-2xs"
+                  title="Tour e Dicas de Início"
                 >
-                  {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                  <HelpCircle className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-indigo-600 dark:text-indigo-400" />
                 </button>
                 <button 
+                  onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
+                  className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-amber-500 transition-all active:scale-95 shadow-2xs"
+                  title="Mudar cor da tela"
+                >
+                  {theme === 'light' ? <Moon className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <Sun className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
+                </button>
+                <button 
+                  id="tour-settings-btn-mobile"
                   onClick={() => setActiveTab(activeTab === 'settings' ? 'dashboard' : 'settings')} 
-                  className={`p-2.5 sm:p-2 rounded-2xl border transition-all active:scale-95 shadow-2xs ${
+                  className={`p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-all active:scale-95 shadow-2xs ${
                     activeTab === 'settings'
                       ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
                       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-blue-600'
                   }`}
                   title={activeTab === 'settings' ? "Início" : "Configurações"}
                 >
-                  {activeTab === 'settings' ? <Home className="w-5 h-5" /> : <Settings className="w-5 h-5" />}
+                  {activeTab === 'settings' ? <Home className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <Settings className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
                 </button>
               </div>
             </div>
@@ -790,7 +810,7 @@ const AppContent: React.FC = () => {
                     setUnreadCount(0);
                     setIsRemindersOpen(true);
                   }} 
-                  className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 transition-all active:scale-95 shadow-sm relative"
+                  className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all active:scale-95 shadow-sm relative"
                   title="Lembretes de amanhã"
                 >
                   <Bell className="w-5 h-5" />
@@ -801,13 +821,22 @@ const AppContent: React.FC = () => {
                   )}
                 </button>
                 <button 
+                  id="tour-help-btn"
+                  onClick={() => setIsTourOpen(true)} 
+                  className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all active:scale-95 shadow-sm"
+                  title="Tour e Dicas de Início"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                </button>
+                <button 
                   onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
-                  className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 transition-all active:scale-95 shadow-sm"
+                  className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-amber-500 transition-all active:scale-95 shadow-sm"
                   title="Mudar cor da tela"
                 >
                   {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
                 </button>
                 <button 
+                  id="tour-settings-btn"
                   onClick={() => setActiveTab(activeTab === 'settings' ? 'dashboard' : 'settings')} 
                   className={`p-2.5 rounded-2xl border transition-all active:scale-95 shadow-sm ${
                     activeTab === 'settings'
@@ -825,15 +854,15 @@ const AppContent: React.FC = () => {
 
         {/* Global Trial Status Banner */}
         {currentUserProfile?.isTrial && (
-          <div className="mb-6 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-4 md:p-5 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl border border-purple-800/50 print:hidden">
+          <div className="mb-6 bg-gradient-to-r from-purple-950 via-purple-900 to-slate-950 text-white p-4 md:p-5 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl border border-purple-800/50 print:hidden">
             <div className="flex items-center gap-3.5">
               <div className="w-10 h-10 bg-amber-400/20 text-amber-300 rounded-2xl flex items-center justify-center shrink-0 border border-amber-400/30">
                 <Sparkles className="w-5 h-5 animate-pulse" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md uppercase tracking-wider">7 Dias de Teste Grátis</span>
-                  <span className="text-xs text-purple-200 font-extrabold">Plano Premium Libero</span>
+                  <span className="text-[10px] font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md uppercase tracking-wider">7 DIAS DE TESTE GRÁTIS</span>
+                  <span className="text-xs text-purple-200 font-extrabold">Plano Premium Liberado</span>
                 </div>
                 <p className="text-xs text-slate-200 mt-1">
                   Restam <strong className="text-amber-300 font-black">{currentUserProfile.trialDaysRemaining ?? 7} dias</strong> do seu período de teste. Aproveite todas as ferramentas de IA e robô de voz.
@@ -842,10 +871,10 @@ const AppContent: React.FC = () => {
             </div>
             <button 
               onClick={() => setIsSubscriptionOpen(true)}
-              className="w-full md:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all active:scale-95 shrink-0 flex items-center justify-center gap-1.5"
+              className="w-full md:w-auto px-5 py-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all active:scale-95 shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Garantir Plano Definitivo</span>
+              <Sparkles className="w-4 h-4" />
+              <span>GARANTIR PLANO DEFINITIVO</span>
             </button>
           </div>
         )}
@@ -889,6 +918,7 @@ const AppContent: React.FC = () => {
             allRawTransactions={filteredRawTransactions}
             goals={filteredGoals}
             installmentGroups={filteredInstallmentGroups}
+            onOpenTour={() => setIsTourOpen(true)}
           />
         )}
 
@@ -1117,6 +1147,7 @@ const AppContent: React.FC = () => {
             onDeleteImportRule={deleteImportRule}
             onClearImportRules={clearImportRules}
             initialOpenSection={settingsInitialSection}
+            onOpenTour={() => setIsTourOpen(true)}
           />
         )}
 
@@ -1314,8 +1345,8 @@ const AppContent: React.FC = () => {
           isOpen={isEditProfileOpen}
           onClose={() => setIsEditProfileOpen(false)}
           userProfile={currentUserProfile}
-          onSave={(updates) => {
-            updateUserProfile(updates);
+          onSave={async (updates) => {
+            await updateUserProfile(updates);
             showToast('Perfil atualizado com sucesso!');
           }}
           onLogout={() => {
@@ -1325,6 +1356,25 @@ const AppContent: React.FC = () => {
           }}
         />
       )}
+
+      {/* Tour Guiado de Primeiros Passos */}
+      <OnboardingTour
+        isOpen={isTourOpen}
+        onClose={() => {
+          setIsTourOpen(false);
+          localStorage.setItem('finan_ai_tour_completed', 'true');
+        }}
+        onNavigateToSettings={(section) => {
+          setActiveTab('settings');
+          setSettingsInitialSection(section);
+        }}
+        onNavigateToTab={(tab) => {
+          setActiveTab(tab as TabType);
+        }}
+        onOpenManualForm={() => {
+          setIsFormOpen(true);
+        }}
+      />
     </div>
   );
 };
