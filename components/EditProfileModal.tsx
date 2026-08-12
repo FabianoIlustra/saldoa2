@@ -84,7 +84,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   useEffect(() => {
     if (userProfile) {
       setName(userProfile.name || '');
-      setFullName(userProfile.fullName || userProfile.name || '');
+      setFullName(userProfile.fullName || '');
       setEmail(userProfile.email || '');
       setCpf(userProfile.cpf || '');
       setPhone(userProfile.phone || '');
@@ -222,7 +222,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
     onSave({
       name: name.trim(),
-      fullName: fullName.trim() || name.trim(),
+      fullName: fullName.trim(),
       email: email.trim(),
       cpf: cpf.trim(),
       phone: phone.trim(),

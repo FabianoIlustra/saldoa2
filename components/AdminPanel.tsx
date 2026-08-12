@@ -7,7 +7,7 @@ import {
   Settings, Key, Globe, Eye, EyeOff, Save, Receipt, QrCode, CreditCard, Clock,
   Plus, Trash2, Calendar, Percent, FileText, ToggleLeft, ToggleRight, Ticket,
   Cpu, CheckSquare, ListPlus, X, Phone, MapPin, CheckCircle2, UserCheck,
-  Mail, MessageSquare, Inbox, Unlock, Sparkles, Zap, ShieldAlert, Play, Lock
+  Mail, MessageSquare, Inbox, Unlock, Sparkles, Zap, ShieldAlert, Play, Lock, LogIn
 } from 'lucide-react';
 import { 
   getPricingConfig, savePricingConfig, 
@@ -42,8 +42,31 @@ interface DBProfile {
   couple_id: string | null;
   is_trial?: boolean | null;
   is_paid?: boolean | null;
+  is_manual_release?: boolean | null;
   trial_ends_at?: string | null;
+  last_sign_in_at?: string | null;
+  login_count?: number | null;
 }
+
+const formatLastAccess = (dateIso?: string | null) => {
+  if (!dateIso) return 'Recente';
+  try {
+    const d = new Date(dateIso);
+    if (isNaN(d.getTime())) return 'Recente';
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+
+    const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return `Hoje às ${timeStr}`;
+    if (isYesterday) return `Ontem às ${timeStr}`;
+    return `${d.toLocaleDateString('pt-BR')} às ${timeStr}`;
+  } catch (e) {
+    return 'Recente';
+  }
+};
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
   const [profiles, setProfiles] = useState<DBProfile[]>([]);
@@ -150,6 +173,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
         merged = data.map((p: any) => {
           const local = localUsers.find((l: any) => l.id === p.id || l.email === p.email);
           const localPaid = localStorage.getItem(`user_paid_${p.id}`) === 'true';
+          const localLastSignIn = localStorage.getItem(`user_last_sign_in_${p.id}`);
+          const localLoginCount = Number(localStorage.getItem(`user_login_count_${p.id}`) || 0);
+          const localManualRelease = localStorage.getItem(`user_manual_release_${p.id}`) === 'true';
+
           return {
             ...p,
             full_name: p.full_name || local?.full_name || local?.name || p.name,
@@ -160,7 +187,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
             terms_accepted_at: p.terms_accepted_at || local?.terms_accepted_at || p.created_at,
             is_paid: p.is_paid !== undefined ? p.is_paid : (localPaid || local?.is_paid),
             is_trial: p.is_trial !== undefined ? p.is_trial : local?.is_trial,
+            is_manual_release: p.is_manual_release !== undefined ? p.is_manual_release : (localManualRelease || local?.is_manual_release || (p.is_paid === true || localPaid)),
             trial_ends_at: p.trial_ends_at || local?.trial_ends_at,
+            last_sign_in_at: p.last_sign_in_at || localLastSignIn || local?.last_sign_in_at || p.created_at,
+            login_count: p.login_count || (localLoginCount > 0 ? localLoginCount : local?.login_count) || 1,
           };
         });
       }
@@ -168,6 +198,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       // Append local users not in DB response
       localUsers.forEach((l: any) => {
         if (!merged.some(m => m.id === l.id || m.email === l.email)) {
+          const localLastSignIn = localStorage.getItem(`user_last_sign_in_${l.id}`);
+          const localLoginCount = Number(localStorage.getItem(`user_login_count_${l.id}`) || 0);
+          const localManualRelease = localStorage.getItem(`user_manual_release_${l.id}`) === 'true';
+          const isPaidLocal = l.is_paid || localStorage.getItem(`user_paid_${l.id}`) === 'true';
+
           merged.push({
             id: l.id || `local-${Date.now()}`,
             name: l.name || l.full_name || 'Usuário',
@@ -185,8 +220,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
             created_at: l.created_at || new Date().toISOString(),
             couple_id: null,
             is_trial: l.is_trial,
-            is_paid: l.is_paid || localStorage.getItem(`user_paid_${l.id}`) === 'true',
+            is_paid: isPaidLocal,
+            is_manual_release: l.is_manual_release || localManualRelease || Boolean(isPaidLocal),
             trial_ends_at: l.trial_ends_at,
+            last_sign_in_at: l.last_sign_in_at || localLastSignIn || l.created_at,
+            login_count: l.login_count || (localLoginCount > 0 ? localLoginCount : 1),
           });
         }
       });
@@ -201,26 +239,36 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       } catch (e) {}
 
       if (localUsers.length > 0) {
-        setProfiles(localUsers.map((l: any) => ({
-          id: l.id,
-          name: l.name || l.full_name,
-          full_name: l.full_name || l.name,
-          cpf: l.cpf || null,
-          phone: l.phone || null,
-          address: l.address || null,
-          terms_accepted: l.terms_accepted ?? true,
-          terms_accepted_at: l.terms_accepted_at || new Date().toISOString(),
-          avatar_color: '#6366f1',
-          pin: null,
-          tier: l.tier || 'gratis',
-          role: 'user',
-          email: l.email || null,
-          created_at: l.created_at || new Date().toISOString(),
-          couple_id: null,
-          is_trial: l.is_trial,
-          is_paid: l.is_paid || localStorage.getItem(`user_paid_${l.id}`) === 'true',
-          trial_ends_at: l.trial_ends_at,
-        })));
+        setProfiles(localUsers.map((l: any) => {
+          const localLastSignIn = localStorage.getItem(`user_last_sign_in_${l.id}`);
+          const localLoginCount = Number(localStorage.getItem(`user_login_count_${l.id}`) || 0);
+          const localManualRelease = localStorage.getItem(`user_manual_release_${l.id}`) === 'true';
+          const isPaidLocal = l.is_paid || localStorage.getItem(`user_paid_${l.id}`) === 'true';
+
+          return {
+            id: l.id,
+            name: l.name || l.full_name,
+            full_name: l.full_name || l.name,
+            cpf: l.cpf || null,
+            phone: l.phone || null,
+            address: l.address || null,
+            terms_accepted: l.terms_accepted ?? true,
+            terms_accepted_at: l.terms_accepted_at || new Date().toISOString(),
+            avatar_color: '#6366f1',
+            pin: null,
+            tier: l.tier || 'gratis',
+            role: 'user',
+            email: l.email || null,
+            created_at: l.created_at || new Date().toISOString(),
+            couple_id: null,
+            is_trial: l.is_trial,
+            is_paid: isPaidLocal,
+            is_manual_release: l.is_manual_release || localManualRelease || Boolean(isPaidLocal),
+            trial_ends_at: l.trial_ends_at,
+            last_sign_in_at: l.last_sign_in_at || localLastSignIn || l.created_at,
+            login_count: l.login_count || (localLoginCount > 0 ? localLoginCount : 1),
+          };
+        }));
       } else {
         setErrorState(err.message || 'Row Level Security (RLS) limitou a busca.');
       }
@@ -340,41 +388,51 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
           tier: 'premium',
           is_paid: true,
           is_trial: false,
+          is_manual_release: true,
         };
         localStorage.setItem(`user_paid_${userId}`, 'true');
+        localStorage.setItem(`user_manual_release_${userId}`, 'true');
       } else if (actionType === 'renovar_7') {
         const newTrialEnds = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         updates = {
           tier: 'premium',
           is_paid: false,
           is_trial: true,
+          is_manual_release: true,
           trial_ends_at: newTrialEnds,
         };
         localStorage.removeItem(`user_paid_${userId}`);
+        localStorage.setItem(`user_manual_release_${userId}`, 'true');
       } else if (actionType === 'renovar_30') {
         const newTrialEnds = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
         updates = {
           tier: 'premium',
           is_paid: false,
           is_trial: true,
+          is_manual_release: true,
           trial_ends_at: newTrialEnds,
         };
         localStorage.removeItem(`user_paid_${userId}`);
+        localStorage.setItem(`user_manual_release_${userId}`, 'true');
       } else if (actionType === 'plano_especifico') {
         const sel = customTierChoice || 'premium';
         updates = {
           tier: sel,
           is_paid: true,
           is_trial: false,
+          is_manual_release: true,
         };
         localStorage.setItem(`user_paid_${userId}`, 'true');
+        localStorage.setItem(`user_manual_release_${userId}`, 'true');
       } else if (actionType === 'gratis') {
         updates = {
           tier: 'gratis',
           is_paid: false,
           is_trial: false,
+          is_manual_release: false,
         };
         localStorage.removeItem(`user_paid_${userId}`);
+        localStorage.removeItem(`user_manual_release_${userId}`);
       }
 
       const { error } = await supabase
@@ -406,7 +464,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     }
   };
 
-  // Projections & stats: ADMs strictly excluded from paid plans, counters and revenue!
+  // Projections & stats: Manual releases / courtesy users are excluded from revenue (counted at R$ 0,00)
   const stats = React.useMemo(() => {
     const now = new Date();
     const nonAdmins = profiles.filter(p => p.role !== 'admin');
@@ -414,13 +472,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     const nonAdminCount = nonAdmins.length;
     const adminCount = profiles.filter(p => p.role === 'admin').length;
 
+    const isManualUser = (p: DBProfile) => {
+      if (p.role === 'admin' || p.email === 'fabianofreitasfoto@hotmail.com') return true;
+      if (p.is_manual_release === true || localStorage.getItem(`user_manual_release_${p.id}`) === 'true') return true;
+      if (p.is_paid === true || localStorage.getItem(`user_paid_${p.id}`) === 'true') return true;
+      return false;
+    };
+
     let trialActiveCount = 0;
     let trialExpiredCount = 0;
     let manualReleasedCount = 0;
 
     nonAdmins.forEach(p => {
-      const isPaid = p.is_paid === true || localStorage.getItem(`user_paid_${p.id}`) === 'true';
-      if (isPaid) {
+      const isManual = isManualUser(p);
+      if (isManual) {
         manualReleasedCount++;
       } else {
         const createdAtIso = p.created_at || new Date().toISOString();
@@ -436,17 +501,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       }
     });
 
-    const gratis = nonAdmins.filter(p => !p.tier || p.tier === 'gratis').length;
-    const basico = nonAdmins.filter(p => p.tier === 'basico').length;
-    const medio = nonAdmins.filter(p => p.tier === 'medio').length;
-    const premium = nonAdmins.filter(p => p.tier === 'premium').length;
+    const gratis = nonAdmins.filter(p => (!p.tier || p.tier === 'gratis') && !isManualUser(p)).length;
+    const basico = nonAdmins.filter(p => p.tier === 'basico' && !isManualUser(p)).length;
+    const medio = nonAdmins.filter(p => p.tier === 'medio' && !isManualUser(p)).length;
+    const premium = nonAdmins.filter(p => p.tier === 'premium' && !isManualUser(p)).length;
+    const cortesia = nonAdmins.filter(p => isManualUser(p) && p.tier !== 'gratis').length;
 
     // Load active dynamic prices
     const priceBasico = pricingConfig.basico?.price ?? 19.90;
     const priceMedio = pricingConfig.medio?.price ?? 39.90;
     const pricePremium = pricingConfig.premium?.price ?? 59.90;
 
-    // Projected monthly revenue
+    // Projected monthly revenue: Manual releases are zerados (R$ 0,00)
     const projectedRevenue = (basico * priceBasico) + (medio * priceMedio) + (premium * pricePremium);
 
     return {
@@ -460,6 +526,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       basico,
       medio,
       premium,
+      cortesia,
       projectedRevenue
     };
   }, [profiles, pricingConfig]);
@@ -548,11 +615,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     const nonAdmins = profiles.filter(p => p.role !== 'admin');
     const totalUsers = nonAdmins.length || 1;
 
+    const isManualUser = (p: DBProfile) => {
+      if (p.role === 'admin' || p.email === 'fabianofreitasfoto@hotmail.com') return true;
+      if (p.is_manual_release === true || localStorage.getItem(`user_manual_release_${p.id}`) === 'true') return true;
+      if (p.is_paid === true || localStorage.getItem(`user_paid_${p.id}`) === 'true') return true;
+      return false;
+    };
+
     const usersByPlan = {
-      gratis: nonAdmins.filter(p => !p.tier || p.tier === 'gratis'),
-      basico: nonAdmins.filter(p => p.tier === 'basico'),
-      medio: nonAdmins.filter(p => p.tier === 'medio'),
-      premium: nonAdmins.filter(p => p.tier === 'premium'),
+      gratis: nonAdmins.filter(p => (!p.tier || p.tier === 'gratis') && !isManualUser(p)),
+      basico: nonAdmins.filter(p => p.tier === 'basico' && !isManualUser(p)),
+      medio: nonAdmins.filter(p => p.tier === 'medio' && !isManualUser(p)),
+      premium: nonAdmins.filter(p => p.tier === 'premium' && !isManualUser(p)),
+      cortesia: nonAdmins.filter(p => isManualUser(p) && p.tier !== 'gratis'),
       admin: profiles.filter(p => p.role === 'admin'),
       trial: nonAdmins.filter(p => (p as any).isTrial),
     };
@@ -561,6 +636,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
     const priceMedio = pricingConfig.medio?.price ?? 39.90;
     const pricePremium = pricingConfig.premium?.price ?? 59.90;
 
+    // Revenue only from paid subscribers (manual releases are R$ 0,00)
     const mrrBasico = usersByPlan.basico.length * priceBasico;
     const mrrMedio = usersByPlan.medio.length * priceMedio;
     const mrrPremium = usersByPlan.premium.length * pricePremium;
@@ -1044,7 +1120,7 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                     <thead>
                       <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-950/20 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                         <th className="px-6 py-4">Usuário / Nome</th>
-                        <th className="px-6 py-4">CPF / Celular</th>
+                        <th className="px-6 py-4">Acessos & Último Login</th>
                         <th className="px-6 py-4">Status do Teste / Acesso</th>
                         <th className="px-6 py-4">Aceite dos Termos</th>
                         <th className="px-6 py-4">Plano</th>
@@ -1106,12 +1182,17 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                               </div>
                             </td>
 
-                            {/* CPF & Phone */}
+                            {/* Quantidade de Acessos e Data do Último Acesso */}
                             <td className="px-6 py-4 text-slate-600 dark:text-slate-300 font-medium">
-                              <p className="font-bold text-slate-800 dark:text-slate-200">{p.cpf || <span className="text-slate-400 font-normal italic">Pendente</span>}</p>
-                              <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                <Phone className="w-3 h-3" />
-                                {p.phone || 'Sem celular'}
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-black text-[11px] border border-indigo-100 dark:border-indigo-900/40">
+                                  <LogIn className="w-3.5 h-3.5 text-indigo-500" />
+                                  {p.login_count || 1} {(p.login_count || 1) === 1 ? 'acesso' : 'acessos'}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 mt-1.5 font-semibold">
+                                <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>Último: <strong className="text-slate-700 dark:text-slate-300 font-bold">{formatLastAccess(p.last_sign_in_at || p.created_at)}</strong></span>
                               </p>
                             </td>
 
@@ -1561,6 +1642,27 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                       </div>
                       <p className="text-[10px] text-amber-600 font-bold">
                         Receita: R$ {financialMetrics.mrrPremium.toFixed(2).replace('.', ',')}/mês
+                      </p>
+                    </div>
+
+                    {/* Cortesia / Liberação Manual / Testes */}
+                    <div className="p-4 rounded-2xl border border-emerald-100 dark:border-emerald-950/50 bg-emerald-50/30 dark:bg-emerald-950/20 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase text-emerald-600 dark:text-emerald-400">Cortesia / Teste (Admin)</span>
+                        <span className="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 rounded">
+                          Isento
+                        </span>
+                      </div>
+                      <div className="flex items-baseline justify-between pt-1">
+                        <span className="text-2xl font-black text-slate-800 dark:text-white">
+                          {financialMetrics.usersByPlan.cortesia.length}
+                        </span>
+                        <span className="text-xs font-bold text-emerald-600">
+                          {((financialMetrics.usersByPlan.cortesia.length / financialMetrics.totalUsers) * 100).toFixed(1)}% da base
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-emerald-600 font-bold">
+                        Receita: R$ 0,00/mês (Não entra no faturamento)
                       </p>
                     </div>
                   </div>
@@ -2923,6 +3025,21 @@ UPDATE public.profiles SET role = 'admin', tier = 'premium' WHERE id = '${curren
                     <span className="text-[10px] font-black uppercase text-slate-400 block">Plano Atual</span>
                     <span className="font-black text-indigo-600 dark:text-indigo-400 uppercase">
                       {selectedUserProfile.tier || 'gratis'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-800">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-slate-400 block">Total de Acessos</span>
+                    <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                      {selectedUserProfile.login_count || 1} {(selectedUserProfile.login_count || 1) === 1 ? 'acesso' : 'acessos'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-slate-400 block">Último Acesso</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {formatLastAccess(selectedUserProfile.last_sign_in_at || selectedUserProfile.created_at)}
                     </span>
                   </div>
                 </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, FinancialAnalysis, Account, User, RecurringTransaction, Goal, InstallmentGroup } from '../types';
-import { ArrowUpRight, ArrowDownRight, Sparkles, CreditCard, Plus, Camera, Mic, ArrowRight, TrendingUp, Users, ChevronDown, ChevronUp, Calendar, Clock, PiggyBank, Percent, Activity, Trophy, Repeat, AlertTriangle, Heart, Target, Zap, History } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Sparkles, CreditCard, Plus, Camera, Mic, ArrowRight, TrendingUp, Users, ChevronDown, ChevronUp, Calendar, Clock, PiggyBank, Percent, Activity, Trophy, Repeat, AlertTriangle, Heart, Target, Zap, History, Compass, CheckCircle2 } from 'lucide-react';
 import { getFinancialInsights, isLocalModeEnabled } from '../services/geminiService';
 import { startOfMonth, endOfMonth, startOfWeek, isWithinInterval, parseISO, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -22,6 +22,7 @@ interface DashboardProps {
   allRawTransactions?: Transaction[];
   goals?: Goal[];
   installmentGroups?: InstallmentGroup[];
+  onOpenTour?: () => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -39,7 +40,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   recurringTransactions = [],
   allRawTransactions = [],
   goals = [],
-  installmentGroups = []
+  installmentGroups = [],
+  onOpenTour
 }) => {
   const [insights, setInsights] = useState<FinancialAnalysis | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
@@ -493,13 +495,18 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         
         {/* Left Card: Indicador Principal (Saldo do Mês) */}
-        <div className="bg-blue-50/90 dark:bg-slate-900/60 border border-blue-200/80 dark:border-blue-900/40 text-slate-800 dark:text-slate-100 rounded-[28px] p-5 sm:p-6 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between">
+        <div 
+          id="tour-main-balance" 
+          className="bg-blue-50/90 dark:bg-slate-900/60 border border-blue-200/80 dark:border-blue-900/40 text-slate-800 dark:text-slate-100 rounded-[28px] p-5 sm:p-6 shadow-xs relative overflow-hidden transition-all flex flex-col justify-between"
+        >
           <div>
             {/* Top Centered Section: LANÇAR with Manual and Voz Action Buttons */}
-            <div className="flex flex-col items-center justify-center pt-1 pb-4">
-              <span className="text-xs sm:text-sm font-black uppercase text-blue-700 dark:text-blue-300 tracking-wider mb-2.5">
-                LANÇAR
-              </span>
+            <div id="tour-launch-buttons" className="flex flex-col items-center justify-center pt-1 pb-4">
+              <div className="flex items-center justify-center w-full mb-2">
+                <span className="text-xs sm:text-sm font-black uppercase text-blue-700 dark:text-blue-300 tracking-wider">
+                  LANÇAR
+                </span>
+              </div>
               
               <div className="flex items-center justify-center gap-3">
                 {/* Botão Manual */}
@@ -571,7 +578,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             {/* Spending Ceiling Progress Bar */}
             {spendingCeiling && spendingCeiling > 0 ? (
-              <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3.5 sm:p-4 rounded-2xl shadow-2xs mb-3">
+              <div id="tour-ceiling-card" className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3.5 sm:p-4 rounded-2xl shadow-2xs mb-3">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 mb-2.5">
                   <span className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
                     <Target className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -598,7 +605,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3.5 sm:p-4 rounded-2xl shadow-2xs mb-3 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+              <div id="tour-ceiling-card" className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3.5 sm:p-4 rounded-2xl shadow-2xs mb-3 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
                 <span className="flex items-center gap-1.5">
                   <Target className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   <span>Limite de gastos:</span>
@@ -614,7 +621,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             )}
           </div>
 
-          <div>
+          <div id="tour-accounts-card">
             {/* Ver Contas Toggle Button */}
             <button 
               onClick={() => setIsAccountsOpen(!isAccountsOpen)}
@@ -698,7 +705,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
 
             {/* Category Expense Breakdown Bars / Graph */}
-            <div className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3 sm:p-4 rounded-2xl shadow-2xs">
+            <div id="tour-categories-card" className="bg-white dark:bg-slate-800/95 border border-blue-100/90 dark:border-slate-700/80 p-3 sm:p-4 rounded-2xl shadow-2xs">
               <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-3 flex items-center justify-between">
                 <span>Maiores Categorias do Mês</span>
                 <span className="text-[10px] text-slate-400">{topExpenseCategories.list.length} ativas</span>
@@ -815,7 +822,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Card 6: Recorrentes */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
+        <div id="tour-recurring-indicator" className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
           <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-500 flex items-center justify-center mb-3">
             <Repeat className="w-4 h-4" />
           </div>
@@ -827,7 +834,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Card 7: Parcelas ativas */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
+        <div id="tour-installments-indicator" className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
           <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center mb-3">
             <CreditCard className="w-4 h-4" />
           </div>

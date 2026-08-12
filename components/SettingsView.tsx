@@ -50,6 +50,7 @@ interface SettingsViewProps {
   onDeleteImportRule?: (pattern: string) => void;
   onClearImportRules?: () => void;
   initialOpenSection?: string;
+  onOpenTour?: () => void;
 }
 
 const CollapsibleSection: React.FC<{ 
@@ -124,7 +125,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   importRules = {},
   onDeleteImportRule,
   onClearImportRules,
-  initialOpenSection
+  initialOpenSection,
+  onOpenTour
 }) => {
   const [newCatName, setNewCatName] = useState('');
   const [newCatType, setNewCatType] = useState<TransactionType>('EXPENSE');
@@ -331,8 +333,41 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+    <div id="tour-settings-view" className="space-y-6 animate-in fade-in duration-500 pb-20">
       
+      {/* Tour Guiado & Dicas Card */}
+      {onOpenTour && (
+        <div className="bg-gradient-to-r from-indigo-500/15 via-purple-500/15 to-blue-500/15 dark:from-indigo-950/50 dark:via-purple-950/40 dark:to-blue-950/50 border border-indigo-200/90 dark:border-indigo-800/70 p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-black uppercase tracking-wider bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">
+                  Guia Interativo
+                </span>
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                  Tour de Primeiros Passos 🧭
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium mt-0.5">
+                Revise as dicas de configuração de contas, categorias, teto de gastos e contas recorrentes.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenTour}
+            className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 active:scale-95 shrink-0"
+          >
+            <span>Iniciar Tour</span>
+            <Sparkles className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Plano & Assinatura */}
       <CollapsibleSection 
         title="Plano & Assinatura" 
@@ -541,243 +576,249 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       </CollapsibleSection>
 
       {/* Gestão de Contas Bancárias */}
-      <CollapsibleSection 
-        title="Minhas Contas Bancárias" 
-        icon={<CreditCard className="w-5 h-5" />}
-        defaultOpen={false}
-      >
-        <form onSubmit={handleAddAccount} className="flex flex-col md:grid md:grid-cols-4 gap-3 mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
-          <div className="md:col-span-1">
-            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Nome do Banco/Conta</label>
-            <input 
-              type="text" 
-              placeholder="Ex: Nubank, Itaú..." 
-              value={accName}
-              onChange={e => setAccName(e.target.value)}
-              className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs"
-            />
+      <div id="tour-accounts-section">
+        <CollapsibleSection 
+          title="Minhas Contas Bancárias" 
+          icon={<CreditCard className="w-5 h-5" />}
+          defaultOpen={false}
+        >
+          <form onSubmit={handleAddAccount} className="flex flex-col md:grid md:grid-cols-4 gap-3 mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+            <div className="md:col-span-1">
+              <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Nome do Banco/Conta</label>
+              <input 
+                type="text" 
+                placeholder="Ex: Nubank, Itaú..." 
+                value={accName}
+                onChange={e => setAccName(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">URL da Logo (Opcional)</label>
+              <input 
+                type="text" 
+                placeholder="https://... logo.png" 
+                value={accLogoUrl}
+                onChange={e => setAccLogoUrl(e.target.value)}
+                className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-medium text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Tipo</label>
+              <select 
+                value={accType}
+                onChange={e => setAccType(e.target.value as any)}
+                className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs"
+              >
+                <option>Corrente</option>
+                <option>Poupança</option>
+                <option>Investimento</option>
+                <option>Dinheiro</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Saldo Inicial (R$)</label>
+              <div className="flex gap-2">
+                <input 
+                  type="number" 
+                  step="0.01"
+                  placeholder="0.00" 
+                  value={accBalance}
+                  onChange={e => setAccBalance(e.target.value)}
+                  className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs min-w-0"
+                />
+                <button type="submit" className="bg-indigo-600 text-white p-2.5 rounded-lg hover:bg-indigo-700 transition-all shadow-sm shrink-0 flex items-center justify-center">
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+            {accounts.map(acc => (
+              <div key={acc.id} className="p-3 flex items-center justify-between group transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div 
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 overflow-hidden shadow-2xs border border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 p-1" 
+                    style={{ backgroundColor: acc.color || '#6366f1' }}
+                  >
+                    {acc.logoUrl ? (
+                      <img 
+                        src={acc.logoUrl} 
+                        alt={acc.name} 
+                        className="w-full h-full object-contain rounded-md bg-white/90 p-0.5" 
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <Banknote className="w-4.5 h-4.5 text-white" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-800 dark:text-white truncate text-xs">{acc.name}</p>
+                    <span className="text-[9px] font-black uppercase text-slate-400">{acc.type}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 shrink-0">
+                  <p className="font-black text-indigo-600 text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(acc.currentBalance)}</p>
+                  <div className="flex gap-1">
+                    <button onClick={() => openEditModal(acc)} className="p-1 text-slate-400 hover:text-indigo-500 transition-colors" title="Editar">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => openDeleteModal(acc.id)} className="p-1 text-slate-400 hover:text-rose-500 transition-colors" title="Excluir">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {accounts.length === 0 && (
+              <div className="p-4 text-center text-slate-400 text-xs">
+                Nenhuma conta cadastrada.
+              </div>
+            )}
           </div>
-          <div>
-            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">URL da Logo (Opcional)</label>
-            <input 
-              type="text" 
-              placeholder="https://... logo.png" 
-              value={accLogoUrl}
-              onChange={e => setAccLogoUrl(e.target.value)}
-              className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-medium text-xs"
-            />
+        </CollapsibleSection>
+      </div>
+
+      {/* Categorias Personalizadas */}
+      <div id="tour-categories-section">
+        <CollapsibleSection 
+          title="Categorias e Metas" 
+          icon={<Tag className="w-5 h-5" />}
+        >
+          <form onSubmit={e => {
+            e.preventDefault();
+            if (newCatName) {
+              onAddCategory({ 
+                  id: Math.random().toString(36).substr(2, 9), 
+                  name: newCatName, 
+                  color: getRandomColor(),
+                  type: newCatType
+              });
+              setNewCatName('');
+            }
+          }} className="flex flex-col md:flex-row gap-2 mb-6">
+            <div className="flex-1 flex gap-2">
+               <select 
+                  className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-xs"
+                  value={newCatType}
+                  onChange={e => setNewCatType(e.target.value as TransactionType)}
+               >
+                  <option value="EXPENSE">Despesa</option>
+                  <option value="INCOME">Receita</option>
+               </select>
+               <input
+                  type="text"
+                  placeholder="Nome da categoria..."
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-xs"
+               />
+            </div>
+            <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-black uppercase text-[10px] tracking-wider hover:bg-indigo-700 transition-all shadow-sm flex items-center justify-center">
+              <Plus className="w-4 h-4 mr-1" /> Adicionar Categoria
+            </button>
+          </form>
+
+          <div className="space-y-4">
+              <div>
+                  <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Despesas (Ordem Alfabética A-Z)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {[...categories].filter(c => c.type === 'EXPENSE' || !c.type).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' })).map((cat) => (
+                      <div key={cat.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-lg group transition-all hover:bg-white dark:hover:bg-slate-800">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                          <div className="text-xs font-bold truncate text-slate-700 dark:text-slate-300 flex items-center gap-1.5 min-w-0 flex-wrap">
+                            <span className="truncate">{cat.name}</span>
+                            {cat.limit && cat.limit > 0 ? (
+                              <span className="text-[10px] font-semibold text-rose-500 dark:text-rose-400 shrink-0 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-md border border-rose-100/50 dark:border-rose-900/30">
+                                Lmt: R$ {cat.limit.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="flex gap-0.5 shrink-0">
+                          <button onClick={() => openEditCategoryModal(cat)} className="text-slate-400 hover:text-indigo-500 p-1">
+                              <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => onDeleteCategory(cat.id)} className="text-slate-400 hover:text-rose-500 p-1">
+                              <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                  ))}
+                  </div>
+              </div>
+
+              <div>
+                  <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Receitas (Ordem Alfabética A-Z)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {[...categories].filter(c => c.type === 'INCOME').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' })).map((cat) => (
+                      <div key={cat.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-lg group transition-all hover:bg-white dark:hover:bg-slate-800">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                          <div className="text-xs font-bold truncate text-slate-700 dark:text-slate-300 flex items-center gap-1.5 min-w-0 flex-wrap">
+                            <span className="truncate">{cat.name}</span>
+                            {cat.limit && cat.limit > 0 ? (
+                              <span className="text-[10px] font-semibold text-emerald-500 dark:text-emerald-400 shrink-0 bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-md border border-emerald-100/50 dark:border-emerald-900/30">
+                                Lmt: R$ {cat.limit.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="flex gap-0.5 shrink-0">
+                          <button onClick={() => openEditCategoryModal(cat)} className="text-slate-400 hover:text-indigo-500 p-1">
+                              <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => onDeleteCategory(cat.id)} className="text-slate-400 hover:text-rose-500 p-1">
+                              <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                  ))}
+                  </div>
+              </div>
           </div>
-          <div>
-            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Tipo</label>
-            <select 
-              value={accType}
-              onChange={e => setAccType(e.target.value as any)}
-              className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs"
-            >
-              <option>Corrente</option>
-              <option>Poupança</option>
-              <option>Investimento</option>
-              <option>Dinheiro</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Saldo Inicial (R$)</label>
-            <div className="flex gap-2">
+        </CollapsibleSection>
+      </div>
+
+      {/* Teto de Gastos */}
+      <div id="tour-ceiling-section">
+        <CollapsibleSection 
+          title="Teto de Gastos Mensal" 
+          icon={<AlertTriangle className="w-5 h-5 text-amber-500" />}
+        >
+          <div className="flex flex-col md:flex-row gap-3 items-end">
+            <div className="flex-1 w-full">
+              <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Limite Mensal (R$)</label>
               <input 
                 type="number" 
                 step="0.01"
                 placeholder="0.00" 
-                value={accBalance}
-                onChange={e => setAccBalance(e.target.value)}
-                className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-bold text-xs min-w-0"
+                value={ceilingAmount}
+                onChange={e => setCeilingAmount(e.target.value)}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 outline-none font-bold text-xs"
               />
-              <button type="submit" className="bg-indigo-600 text-white p-2.5 rounded-lg hover:bg-indigo-700 transition-all shadow-sm shrink-0 flex items-center justify-center">
-                <Plus className="w-5 h-5" />
-              </button>
             </div>
+            <button 
+              onClick={() => {
+                  const amount = parseFloat(ceilingAmount);
+                  if (!isNaN(amount) && onUpdateSpendingCeiling) {
+                      onUpdateSpendingCeiling(amount);
+                  }
+              }}
+              className="w-full md:w-auto px-4 py-2 bg-amber-500 text-white rounded-lg font-black uppercase text-[10px] tracking-wider hover:bg-amber-600 transition-all shadow-sm"
+            >
+              Salvar Limite
+            </button>
           </div>
-        </form>
-
-        <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
-          {accounts.map(acc => (
-            <div key={acc.id} className="p-3 flex items-center justify-between group transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 gap-3">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div 
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 overflow-hidden shadow-2xs border border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 p-1" 
-                  style={{ backgroundColor: acc.color || '#6366f1' }}
-                >
-                  {acc.logoUrl ? (
-                    <img 
-                      src={acc.logoUrl} 
-                      alt={acc.name} 
-                      className="w-full h-full object-contain rounded-md bg-white/90 p-0.5" 
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <Banknote className="w-4.5 h-4.5 text-white" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-slate-800 dark:text-white truncate text-xs">{acc.name}</p>
-                  <span className="text-[9px] font-black uppercase text-slate-400">{acc.type}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 shrink-0">
-                <p className="font-black text-indigo-600 text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(acc.currentBalance)}</p>
-                <div className="flex gap-1">
-                  <button onClick={() => openEditModal(acc)} className="p-1 text-slate-400 hover:text-indigo-500 transition-colors" title="Editar">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => openDeleteModal(acc.id)} className="p-1 text-slate-400 hover:text-rose-500 transition-colors" title="Excluir">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-          {accounts.length === 0 && (
-            <div className="p-4 text-center text-slate-400 text-xs">
-              Nenhuma conta cadastrada.
-            </div>
-          )}
-        </div>
-      </CollapsibleSection>
-
-      {/* Categorias Personalizadas */}
-      <CollapsibleSection 
-        title="Categorias e Metas" 
-        icon={<Tag className="w-5 h-5" />}
-      >
-        <form onSubmit={e => {
-          e.preventDefault();
-          if (newCatName) {
-            onAddCategory({ 
-                id: Math.random().toString(36).substr(2, 9), 
-                name: newCatName, 
-                color: getRandomColor(),
-                type: newCatType
-            });
-            setNewCatName('');
-          }
-        }} className="flex flex-col md:flex-row gap-2 mb-6">
-          <div className="flex-1 flex gap-2">
-             <select 
-                className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-xs"
-                value={newCatType}
-                onChange={e => setNewCatType(e.target.value as TransactionType)}
-             >
-                <option value="EXPENSE">Despesa</option>
-                <option value="INCOME">Receita</option>
-             </select>
-             <input
-                type="text"
-                placeholder="Nome da categoria..."
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-xs"
-             />
-          </div>
-          <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-black uppercase text-[10px] tracking-wider hover:bg-indigo-700 transition-all shadow-sm flex items-center justify-center">
-            <Plus className="w-4 h-4 mr-1" /> Adicionar Categoria
-          </button>
-        </form>
-
-        <div className="space-y-4">
-            <div>
-                <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Despesas</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                {categories.filter(c => c.type === 'EXPENSE' || !c.type).map((cat) => (
-                    <div key={cat.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-lg group transition-all hover:bg-white dark:hover:bg-slate-800">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                        <div className="text-xs font-bold truncate text-slate-700 dark:text-slate-300 flex items-center gap-1.5 min-w-0 flex-wrap">
-                          <span className="truncate">{cat.name}</span>
-                          {cat.limit && cat.limit > 0 ? (
-                            <span className="text-[10px] font-semibold text-rose-500 dark:text-rose-400 shrink-0 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-md border border-rose-100/50 dark:border-rose-900/30">
-                              Lmt: R$ {cat.limit.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="flex gap-0.5 shrink-0">
-                        <button onClick={() => openEditCategoryModal(cat)} className="text-slate-400 hover:text-indigo-500 p-1">
-                            <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => onDeleteCategory(cat.id)} className="text-slate-400 hover:text-rose-500 p-1">
-                            <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                ))}
-                </div>
-            </div>
-
-            <div>
-                <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Receitas</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                {categories.filter(c => c.type === 'INCOME').map((cat) => (
-                    <div key={cat.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-lg group transition-all hover:bg-white dark:hover:bg-slate-800">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                        <div className="text-xs font-bold truncate text-slate-700 dark:text-slate-300 flex items-center gap-1.5 min-w-0 flex-wrap">
-                          <span className="truncate">{cat.name}</span>
-                          {cat.limit && cat.limit > 0 ? (
-                            <span className="text-[10px] font-semibold text-emerald-500 dark:text-emerald-400 shrink-0 bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-md border border-emerald-100/50 dark:border-emerald-900/30">
-                              Lmt: R$ {cat.limit.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="flex gap-0.5 shrink-0">
-                        <button onClick={() => openEditCategoryModal(cat)} className="text-slate-400 hover:text-indigo-500 p-1">
-                            <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => onDeleteCategory(cat.id)} className="text-slate-400 hover:text-rose-500 p-1">
-                            <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                ))}
-                </div>
-            </div>
-        </div>
-      </CollapsibleSection>
-
-      {/* Teto de Gastos */}
-      <CollapsibleSection 
-        title="Teto de Gastos Mensal" 
-        icon={<AlertTriangle className="w-5 h-5 text-amber-500" />}
-      >
-        <div className="flex flex-col md:flex-row gap-3 items-end">
-          <div className="flex-1 w-full">
-            <label className="text-[9px] font-black uppercase text-slate-400 ml-1 mb-1 block">Limite Mensal (R$)</label>
-            <input 
-              type="number" 
-              step="0.01"
-              placeholder="0.00" 
-              value={ceilingAmount}
-              onChange={e => setCeilingAmount(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 outline-none font-bold text-xs"
-            />
-          </div>
-          <button 
-            onClick={() => {
-                const amount = parseFloat(ceilingAmount);
-                if (!isNaN(amount) && onUpdateSpendingCeiling) {
-                    onUpdateSpendingCeiling(amount);
-                }
-            }}
-            className="w-full md:w-auto px-4 py-2 bg-amber-500 text-white rounded-lg font-black uppercase text-[10px] tracking-wider hover:bg-amber-600 transition-all shadow-sm"
-          >
-            Salvar Limite
-          </button>
-        </div>
-        <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
-          Defina um valor máximo para seus gastos mensais. O painel principal mostrará uma barra de progresso que muda de cor conforme você se aproxima do limite (Azul &lt; 80%, Amarelo &lt; 95%, Vermelho &gt; 95%).
-        </p>
-      </CollapsibleSection>
+          <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
+            Defina um valor máximo para seus gastos mensais. O painel principal mostrará uma barra de progresso que muda de cor conforme você se aproxima do limite (Azul &lt; 80%, Amarelo &lt; 95%, Vermelho &gt; 95%).
+          </p>
+        </CollapsibleSection>
+      </div>
 
       {/* Inteligência de Importação */}
       <CollapsibleSection 

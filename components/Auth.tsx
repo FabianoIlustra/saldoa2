@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
-import { Loader2, FileText, X, Check, ShieldCheck, KeyRound, ArrowLeft, Mail, Lock } from 'lucide-react';
+import { Loader2, FileText, X, Check, ShieldCheck, KeyRound, ArrowLeft, Mail, Lock, AlertCircle, Sparkles, HelpCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getTermsText } from '../services/termsService';
+
+interface AuthMessage {
+  text: string;
+  type: 'error' | 'success';
+  code?: 'already_registered' | 'invalid_credentials' | 'email_not_confirmed' | 'other';
+  email?: string;
+}
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -28,7 +35,77 @@ export default function Auth() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
 
-  const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
+  const [message, setMessage] = useState<AuthMessage | null>(null);
+
+  const parseAuthError = (error: any, targetEmail?: string): AuthMessage => {
+    if (!error) return { text: 'Ocorreu um erro inesperado.', type: 'error' };
+    const rawMsg = (error.message || error.error_description || String(error)).toLowerCase();
+    const rawCode = (error.code || '').toLowerCase();
+    const cleanEmail = (targetEmail || email || '').trim();
+
+    if (
+      rawMsg.includes('user already registered') ||
+      rawMsg.includes('user already exists') ||
+      rawMsg.includes('already registered') ||
+      rawMsg.includes('email already in use') ||
+      rawCode === 'user_already_exists'
+    ) {
+      return {
+        text: `O e-mail "${cleanEmail}" já possui cadastro no Saldo A2!`,
+        type: 'error',
+        code: 'already_registered',
+        email: cleanEmail,
+      };
+    }
+
+    if (
+      rawMsg.includes('invalid login credentials') ||
+      rawMsg.includes('invalid credentials') ||
+      rawMsg.includes('invalid_grant')
+    ) {
+      return {
+        text: 'E-mail ou senha incorretos. Verifique suas credenciais ou solicite a recuperação de senha.',
+        type: 'error',
+        code: 'invalid_credentials',
+        email: cleanEmail,
+      };
+    }
+
+    if (rawMsg.includes('email not confirmed') || rawMsg.includes('not confirmed')) {
+      return {
+        text: 'Seu cadastro foi realizado, mas o e-mail ainda não foi confirmado. Verifique sua caixa de entrada e a pasta de spam.',
+        type: 'error',
+        code: 'email_not_confirmed',
+        email: cleanEmail,
+      };
+    }
+
+    if (rawMsg.includes('password should be at least') || rawMsg.includes('weak password') || rawMsg.includes('password is too short')) {
+      return {
+        text: 'A senha deve conter no mínimo 6 caracteres.',
+        type: 'error',
+      };
+    }
+
+    if (rawMsg.includes('rate limit') || rawMsg.includes('over_email_send_rate_limit')) {
+      return {
+        text: 'Muitas tentativas em pouco tempo. Por segurança, aguarde alguns minutos antes de tentar novamente.',
+        type: 'error',
+      };
+    }
+
+    if (rawMsg.includes('network') || rawMsg.includes('failed to fetch')) {
+      return {
+        text: 'Erro de conexão com a internet. Verifique sua rede e tente novamente.',
+        type: 'error',
+      };
+    }
+
+    return {
+      text: error.message || 'Ocorreu um erro no acesso. Tente novamente.',
+      type: 'error',
+    };
+  };
 
   // Detect recovery mode, errors, or signup from query string and hash
   useEffect(() => {
@@ -92,7 +169,8 @@ export default function Auth() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       setMessage({ text: 'Por favor, informe seu e-mail cadastrado.', type: 'error' });
       return;
     }
@@ -101,7 +179,7 @@ export default function Auth() {
 
     try {
       const redirectUrl = `${window.location.origin}/login`;
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo: redirectUrl,
       });
       if (error) throw error;
@@ -111,7 +189,7 @@ export default function Auth() {
         type: 'success',
       });
     } catch (error: any) {
-      setMessage({ text: error.message || 'Erro ao solicitar recuperação de senha.', type: 'error' });
+      setMessage(parseAuthError(error, cleanEmail));
     } finally {
       setLoading(false);
     }
@@ -148,7 +226,7 @@ export default function Auth() {
         navigate('/sistema', { replace: true });
       }, 1500);
     } catch (error: any) {
-      setMessage({ text: error.message || 'Erro ao redefinir a senha. Tente novamente.', type: 'error' });
+      setMessage(parseAuthError(error, email));
     } finally {
       setLoading(false);
     }
@@ -194,10 +272,38 @@ export default function Auth() {
     setPhone(value);
   };
 
+  const handleDirectLoginWithTypedPassword = async () => {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
+      setIsSignUp(false);
+      setMessage(null);
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+      if (error) throw error;
+
+      if (rememberMe) {
+        localStorage.setItem('finan_ai_saved_email', cleanEmail);
+      }
+      const from = (location.state as any)?.from?.pathname || "/sistema";
+      navigate(from, { replace: true });
+    } catch (err: any) {
+      setMessage(parseAuthError(err, cleanEmail));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
+    const cleanEmail = email.trim();
 
     try {
       if (isSignUp) {
@@ -221,7 +327,7 @@ export default function Auth() {
 
         // 1. Sign Up in Supabase Auth
         const { data: signUpData, error } = await supabase.auth.signUp({
-          email,
+          email: cleanEmail,
           password,
           options: {
             data: {
@@ -243,7 +349,7 @@ export default function Auth() {
         if (signUpData.user) {
           const userMeta = {
             id: signUpData.user.id,
-            email,
+            email: cleanEmail,
             name: fullName.trim(),
             full_name: fullName.trim(),
             cpf: cpf.trim(),
@@ -276,7 +382,7 @@ export default function Auth() {
               address: address.trim(),
               terms_accepted: true,
               terms_accepted_at: nowIso,
-              email: email,
+              email: cleanEmail,
             }, { onConflict: 'id' });
           } catch (profileErr) {
             console.warn('Profile row update attempt during signup:', profileErr);
@@ -290,13 +396,13 @@ export default function Auth() {
 
       } else {
         const { data: signInData, error } = await supabase.auth.signInWithPassword({
-          email,
+          email: cleanEmail,
           password,
         });
         if (error) throw error;
         
         if (rememberMe) {
-          localStorage.setItem('finan_ai_saved_email', email);
+          localStorage.setItem('finan_ai_saved_email', cleanEmail);
         } else {
           localStorage.removeItem('finan_ai_saved_email');
         }
@@ -305,7 +411,7 @@ export default function Auth() {
         navigate(from, { replace: true });
       }
     } catch (error: any) {
-      setMessage({ text: error.message || 'Ocorreu um erro no acesso.', type: 'error' });
+      setMessage(parseAuthError(error, cleanEmail));
     } finally {
       setLoading(false);
     }
@@ -630,8 +736,78 @@ export default function Auth() {
 
             {/* Messages */}
             {message && (
-              <div className={`p-3 rounded-xl text-xs font-semibold ${message.type === 'error' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
-                {message.text}
+              <div className={`p-4 rounded-2xl text-xs space-y-3 transition-all ${
+                message.type === 'error' 
+                  ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60' 
+                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60'
+              }`}>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-extrabold text-xs leading-snug">{message.text}</p>
+                    {message.code === 'already_registered' && (
+                      <p className="text-[11px] font-medium text-rose-600/90 dark:text-rose-300/90 leading-relaxed">
+                        Este e-mail já foi registrado anteriormente no banco de autenticação. Não é necessário criar um novo cadastro, basta entrar ou redefinir sua senha:
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {message.code === 'already_registered' && (
+                  <div className="pt-2 border-t border-rose-200/80 dark:border-rose-900/60 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSignUp(false);
+                        setMessage(null);
+                      }}
+                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[11px] rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      Fazer Login com este E-mail
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDirectLoginWithTypedPassword}
+                      className="px-3 py-2 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-slate-700 font-extrabold text-[11px] rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Entrar com a Senha Digitada
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgotPassword(true);
+                        setIsSignUp(false);
+                        setMessage({
+                          text: 'Digite seu e-mail e clique em "Enviar E-mail de Recuperação" para redefinir sua senha.',
+                          type: 'success',
+                        });
+                      }}
+                      className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] rounded-xl transition-all cursor-pointer"
+                    >
+                      Recuperar Senha
+                    </button>
+                  </div>
+                )}
+
+                {message.code === 'invalid_credentials' && (
+                  <div className="pt-2 border-t border-rose-200/80 dark:border-rose-900/60">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgotPassword(true);
+                        setMessage(null);
+                      }}
+                      className="text-[11px] text-indigo-600 dark:text-indigo-400 font-extrabold underline hover:text-indigo-700 cursor-pointer flex items-center gap-1"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      Esqueceu sua senha? Clique aqui para recuperá-la
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

@@ -55,13 +55,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, users, ac
 
   const availableCategories = useMemo(() => {
     if (type === 'TRANSFER') return [{ id: 'transf', name: 'Transferência' }];
-    const filtered = categories.filter(cat => !cat.type || cat.type === type);
-    if (category && !filtered.some(cat => cat.name === category)) {
+    let filtered = categories.filter(cat => !cat.type || cat.type === type);
+    if (filtered.length === 0) filtered = categories;
+
+    const sorted = [...filtered].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
+
+    if (category && !sorted.some(cat => cat.name === category)) {
       const existing = categories.find(cat => cat.name === category);
-      if (existing) return [existing, ...filtered];
-      return [{ id: 'custom', name: category }, ...filtered];
+      if (existing) return [existing, ...sorted];
+      return [{ id: 'custom', name: category }, ...sorted];
     }
-    return filtered.length > 0 ? filtered : categories;
+    return sorted;
   }, [categories, type, category]);
 
   const handleSubmit = (e: React.FormEvent) => {
