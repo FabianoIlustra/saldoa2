@@ -4,6 +4,10 @@ import { Transaction, Category, Account, Goal, RecurringTransaction, User, Insta
 import { useAuth } from '../contexts/AuthContext';
 import { DEFAULT_CATEGORIES } from '../constants';
 
+const sortCategories = (cats: Category[]): Category[] => {
+  return [...cats].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
+};
+
 export const useFinancialData = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -30,13 +34,15 @@ export const useFinancialData = () => {
           .eq('id', user.id)
           .single();
 
-        if (error && error.code !== 'PGRST116') {
-          console.error("Error fetching profile", error);
+        if (error) {
+          if (error.code !== 'PGRST116') {
+            console.warn("Notice: profile not found in DB, using fallback profile:", error.message);
+          }
         } else if (data) {
           profile = data;
         }
       } catch (e) {
-        console.error("Error catching profile", e);
+        console.warn("Notice: profile fetch exception, using fallback profile:", e);
       }
 
       // If no profile exists, let's auto-create it
@@ -159,8 +165,8 @@ export const useFinancialData = () => {
 
         const currentUser: User = {
           id: profile.id,
-          name: profile.name || profile.full_name || user.user_metadata?.name || user.user_metadata?.full_name || localMeta.name || user.email?.split('@')[0] || 'User',
-          fullName: profile.full_name || profile.name || user.user_metadata?.full_name || user.user_metadata?.name || localMeta.full_name || '',
+          name: profile.name || user.user_metadata?.name || user.user_metadata?.display_name || localMeta.name || profile.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuário',
+          fullName: profile.full_name || user.user_metadata?.full_name || localMeta.full_name || '',
           cpf: profile.cpf || user.user_metadata?.cpf || localMeta.cpf || '',
           phone: profile.phone || user.user_metadata?.phone || localMeta.phone || '',
           address: profile.address || user.user_metadata?.address || localMeta.address || '',
@@ -179,6 +185,24 @@ export const useFinancialData = () => {
           isPaid
         };
         setCurrentUserProfile(currentUser);
+
+        // Track user login and last access
+        try {
+          const nowIso = new Date().toISOString();
+          localStorage.setItem(`user_last_sign_in_${user.id}`, nowIso);
+          
+          let currentLoginCount = Number(localStorage.getItem(`user_login_count_${user.id}`) || profile.login_count || 0);
+          if (!sessionStorage.getItem(`session_active_${user.id}`)) {
+            sessionStorage.setItem(`session_active_${user.id}`, 'true');
+            currentLoginCount += 1;
+            localStorage.setItem(`user_login_count_${user.id}`, String(currentLoginCount));
+            
+            supabase.from('profiles').update({
+              last_sign_in_at: nowIso,
+              login_count: currentLoginCount
+            }).eq('id', user.id).then(() => {}, () => {});
+          }
+        } catch (e) {}
 
         // Fetch all profiles in the couple (including self) if linked
         if (profile.couple_id) {
@@ -222,7 +246,7 @@ export const useFinancialData = () => {
       // Fetch Categories
       const { data: cats } = await supabase.from('categories').select('*').in('user_id', userIds);
       if (cats && cats.length > 0) {
-        setCategories(cats.map(c => ({
+        setCategories(sortCategories(cats.map(c => ({
           id: c.id,
           name: c.name,
           color: c.color || '#94a3b8', // Fallback if color missing
@@ -230,22 +254,10 @@ export const useFinancialData = () => {
           limit: c.limit !== undefined && c.limit !== null ? Number(c.limit) : undefined,
           monitored: c.monitored !== undefined && c.monitored !== null ? !!c.monitored : false,
           isEssential: c.is_essential !== undefined && c.is_essential !== null ? !!c.is_essential : false
-        })));
+        }))));
       } else {
         // If no categories, insert defaults
-        const defaultCats = DEFAULT_CATEGORIES.map(c => ({
-          user_id: user.id,
-          name: c.name,
-          type: c.type || 'EXPENSE',
-          color: c.color
-        }));
-        // We can't easily insert all at once if we want to keep IDs consistent with UI, 
-        // but for now let's just use the defaults in UI if DB is empty, 
-        // or insert them. Let's insert them to persist.
-        // Actually, let's just set local state to defaults and let user save them later or 
-        // insert them now. Inserting now is better.
-        // For simplicity in this turn, I'll just set state.
-        setCategories(DEFAULT_CATEGORIES);
+        setCategories(sortCategories(DEFAULT_CATEGORIES));
       }
 
       // Fetch Import Rules
@@ -1046,7 +1058,7 @@ export const useFinancialData = () => {
     }
 
     if (data) {
-      setCategories(prev => [...prev, {
+      setCategories(prev => sortCategories([...prev, {
         id: data.id,
         name: data.name,
         color: data.color,
@@ -1054,7 +1066,7 @@ export const useFinancialData = () => {
         limit: data.limit ? Number(data.limit) : undefined,
         monitored: !!data.monitored,
         isEssential: !!data.is_essential
-      }]);
+      }]));
     }
   };
 
@@ -1082,7 +1094,7 @@ export const useFinancialData = () => {
       }).eq('id', c.id);
     }
 
-    setCategories(prev => prev.map(cat => cat.id === c.id ? { ...c, type: categoryType } : cat));
+    setCategories(prev => sortCategories(prev.map(cat => cat.id === c.id ? { ...c, type: categoryType } : cat)));
   };
 
   const deleteCategory = async (id: string) => {
@@ -1310,9 +1322,10 @@ export const useFinancialData = () => {
     if (updates.spendingCeiling !== undefined) dbUpdates.spending_ceiling = updates.spendingCeiling;
     if (updates.name !== undefined) {
         dbUpdates.name = updates.name;
-        dbUpdates.full_name = updates.fullName || updates.name;
     }
-    if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
+    if (updates.fullName !== undefined) {
+        dbUpdates.full_name = updates.fullName;
+    }
     if (updates.cpf !== undefined) dbUpdates.cpf = updates.cpf;
     if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
     if (updates.address !== undefined) dbUpdates.address = updates.address;
@@ -1323,7 +1336,10 @@ export const useFinancialData = () => {
     // 1. Sync Supabase Auth User Metadata (Accessible across all devices for this user)
     try {
       const authMetadataUpdates: any = {};
-      if (updates.name !== undefined) authMetadataUpdates.name = updates.name;
+      if (updates.name !== undefined) {
+        authMetadataUpdates.name = updates.name;
+        authMetadataUpdates.display_name = updates.name;
+      }
       if (updates.fullName !== undefined) authMetadataUpdates.full_name = updates.fullName;
       if (updates.avatarUrl !== undefined) authMetadataUpdates.avatar_url = updates.avatarUrl;
       if (updates.avatarEmoji !== undefined) authMetadataUpdates.avatar_emoji = updates.avatarEmoji;
@@ -1342,7 +1358,7 @@ export const useFinancialData = () => {
       console.warn("Could not sync auth metadata:", authErr);
     }
 
-    // 2. Sync Supabase 'profiles' table via UPDATE first (respects RLS update policies), then UPSERT as fallback
+    // 2. Sync Supabase 'profiles' table with progressive fallback for custom column sets
     try {
       const { data: updateData, error: updateErr } = await supabase
         .from('profiles')
@@ -1350,18 +1366,39 @@ export const useFinancialData = () => {
         .eq('id', user.id)
         .select();
       
-      if (updateErr || !updateData || updateData.length === 0) {
+      if (updateErr) {
+        // If updating all custom columns failed (e.g. column does not exist in user's DB), try safe core columns
+        const coreDbUpdates: any = {};
+        if (updates.name !== undefined) coreDbUpdates.name = updates.name;
+        if (updates.fullName !== undefined) coreDbUpdates.full_name = updates.fullName;
+        if (updates.avatarColor !== undefined) coreDbUpdates.avatar_color = updates.avatarColor;
+        if (updates.spendingCeiling !== undefined) coreDbUpdates.spending_ceiling = updates.spendingCeiling;
+
+        const { error: coreErr } = await supabase
+          .from('profiles')
+          .update(coreDbUpdates)
+          .eq('id', user.id);
+
+        if (coreErr && updates.name !== undefined) {
+          // Minimal update with only 'name'
+          await supabase
+            .from('profiles')
+            .update({ name: updates.name })
+            .eq('id', user.id);
+        }
+      } else if (!updateData || updateData.length === 0) {
         // Fallback to upsert if the profile row did not exist yet
         const { error: upsertErr } = await supabase
           .from('profiles')
           .upsert({
             id: user.id,
-            email: user.email || '',
-            ...dbUpdates
+            name: updates.name || user.user_metadata?.name || 'Usuário',
+            avatar_color: updates.avatarColor || '#6366f1',
+            email: user.email || ''
           }, { onConflict: 'id' });
         
         if (upsertErr) {
-          console.error("Erro ao fazer upsert do perfil no Supabase:", upsertErr);
+          console.warn("Notice: upsert profile fallback warning:", upsertErr);
         }
       }
     } catch (e) {
@@ -1374,8 +1411,8 @@ export const useFinancialData = () => {
       const existingMeta = JSON.parse(localStorage.getItem(metaKey) || '{}');
       const updatedMeta = {
         ...existingMeta,
-        name: updates.name || existingMeta.name,
-        full_name: updates.fullName || updates.name || existingMeta.full_name,
+        name: updates.name !== undefined ? updates.name : existingMeta.name,
+        full_name: updates.fullName !== undefined ? updates.fullName : existingMeta.full_name,
         cpf: updates.cpf !== undefined ? updates.cpf : existingMeta.cpf,
         phone: updates.phone !== undefined ? updates.phone : existingMeta.phone,
         address: updates.address !== undefined ? updates.address : existingMeta.address,
@@ -1400,9 +1437,44 @@ export const useFinancialData = () => {
 
   const linkUser = async (coupleId: string) => {
     if (!user) return;
+    const cleanCoupleId = coupleId.trim();
+    if (!cleanCoupleId) return;
+
+    if (cleanCoupleId === user.id) {
+      throw new Error("Você não pode vincular a conta ao seu próprio código de usuário.");
+    }
+
+    // 1. Check if current user is already linked with someone else
+    if (currentUserProfile?.coupleId) {
+      const otherMembers = users.filter(u => u.id !== user.id);
+      if (otherMembers.length > 0) {
+        throw new Error("Você já possui uma conta vinculada ao seu usuário. Só é permitido vincular com 1 usuário.");
+      }
+    }
+
+    // 2. Check if the target user or couple already has someone linked
+    try {
+      const { data: targetProfiles } = await supabase
+        .from('profiles')
+        .select('id, couple_id')
+        .or(`couple_id.eq.${cleanCoupleId},id.eq.${cleanCoupleId}`);
+
+      if (targetProfiles && targetProfiles.length > 0) {
+        const nonCurrentUserProfiles = targetProfiles.filter(p => p.id !== user.id);
+        if (nonCurrentUserProfiles.length >= 2) {
+          throw new Error("Este usuário já está vinculado a outra conta. Só é permitido vincular com 1 usuário.");
+        }
+      }
+    } catch (err: any) {
+      if (err.message && (err.message.includes('vinculad') || err.message.includes('permitido'))) {
+        throw err;
+      }
+      console.warn("Could not pre-check target profile link:", err);
+    }
+
     const { error } = await supabase
       .from('profiles')
-      .update({ couple_id: coupleId })
+      .update({ couple_id: cleanCoupleId })
       .eq('id', user.id);
     
     if (!error) {
