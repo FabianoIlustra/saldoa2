@@ -2,17 +2,17 @@
 import { Transaction, Category } from './types';
 
 export const DEFAULT_CATEGORIES: Category[] = [
-  { id: '1', name: 'Salário', type: 'INCOME', color: '#10b981' },
   { id: '2', name: 'Alimentação', type: 'EXPENSE', color: '#f59e0b' },
-  { id: '3', name: 'Moradia', type: 'EXPENSE', color: '#3b82f6' },
-  { id: '4', name: 'Transporte', type: 'EXPENSE', color: '#6366f1' },
-  { id: '5', name: 'Lazer', type: 'EXPENSE', color: '#ec4899' },
   { id: '6', name: 'Educação', type: 'EXPENSE', color: '#8b5cf6' },
-  { id: '7', name: 'Saúde', type: 'EXPENSE', color: '#ef4444' },
   { id: '8', name: 'Investimentos', type: 'EXPENSE', color: '#06b6d4' },
+  { id: '5', name: 'Lazer', type: 'EXPENSE', color: '#ec4899' },
+  { id: '3', name: 'Moradia', type: 'EXPENSE', color: '#3b82f6' },
   { id: '9', name: 'Outros', type: 'EXPENSE', color: '#94a3b8' },
+  { id: '11', name: 'Pró-labore', type: 'INCOME', color: '#10b981' },
   { id: '10', name: 'Renda Extra', type: 'INCOME', color: '#8b5cf6' },
-  { id: '11', name: 'Pró-labore', type: 'INCOME', color: '#10b981' }
+  { id: '1', name: 'Salário', type: 'INCOME', color: '#10b981' },
+  { id: '7', name: 'Saúde', type: 'EXPENSE', color: '#ef4444' },
+  { id: '4', name: 'Transporte', type: 'EXPENSE', color: '#6366f1' }
 ];
 
 export const CATEGORIES = DEFAULT_CATEGORIES.map(c => c.name);
