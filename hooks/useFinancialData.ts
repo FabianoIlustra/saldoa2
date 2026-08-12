@@ -191,18 +191,29 @@ export const useFinancialData = () => {
           const nowIso = new Date().toISOString();
           localStorage.setItem(`user_last_sign_in_${user.id}`, nowIso);
           
-          let currentLoginCount = Number(localStorage.getItem(`user_login_count_${user.id}`) || profile.login_count || 0);
-          if (!sessionStorage.getItem(`session_active_${user.id}`)) {
+          const dbCount = typeof profile.login_count === 'number' && profile.login_count > 0 ? profile.login_count : 0;
+          const localCount = Number(localStorage.getItem(`user_login_count_${user.id}`) || 0);
+          let currentLoginCount = Math.max(dbCount, localCount);
+
+          const isNewSession = !sessionStorage.getItem(`session_active_${user.id}`);
+          if (isNewSession) {
             sessionStorage.setItem(`session_active_${user.id}`, 'true');
-            currentLoginCount += 1;
+            currentLoginCount = Math.max(1, currentLoginCount + 1);
             localStorage.setItem(`user_login_count_${user.id}`, String(currentLoginCount));
-            
-            supabase.from('profiles').update({
-              last_sign_in_at: nowIso,
-              login_count: currentLoginCount
-            }).eq('id', user.id).then(() => {}, () => {});
+          } else if (currentLoginCount === 0) {
+            currentLoginCount = 1;
+            localStorage.setItem(`user_login_count_${user.id}`, '1');
           }
-        } catch (e) {}
+          
+          supabase.from('profiles').update({
+            last_sign_in_at: nowIso,
+            login_count: currentLoginCount
+          }).eq('id', user.id).then(() => {}, (err) => {
+            console.warn('Could not update last_sign_in_at on Supabase (run SQL migration if columns are missing):', err);
+          });
+        } catch (e) {
+          console.warn('Login tracking error:', e);
+        }
 
         // Fetch all profiles in the couple (including self) if linked
         if (profile.couple_id) {
