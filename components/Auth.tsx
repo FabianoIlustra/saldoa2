@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import { Loader2, FileText, X, Check, ShieldCheck, KeyRound, ArrowLeft, Mail, Lock, AlertCircle, Sparkles, HelpCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getTermsText } from '../services/termsService';
+import { recordUserSiteAccess } from '../services/accessTracker';
 
 interface AuthMessage {
   text: string;
@@ -401,6 +402,10 @@ export default function Auth() {
         });
         if (error) throw error;
         
+        if (signInData?.user?.id) {
+          recordUserSiteAccess(signInData.user.id, true);
+        }
+
         if (rememberMe) {
           localStorage.setItem('finan_ai_saved_email', cleanEmail);
         } else {

@@ -1,10 +1,15 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, FinancialAnalysis, Account, User, RecurringTransaction, Goal, InstallmentGroup } from '../types';
-import { ArrowUpRight, ArrowDownRight, Sparkles, CreditCard, Plus, Camera, Mic, ArrowRight, TrendingUp, Users, ChevronDown, ChevronUp, Calendar, Clock, PiggyBank, Percent, Activity, Trophy, Repeat, AlertTriangle, Heart, Target, Zap, History, Compass, CheckCircle2 } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Sparkles, CreditCard, Plus, Camera, Mic, ArrowRight, TrendingUp, Users, ChevronDown, ChevronUp, Calendar, Clock, PiggyBank, Percent, Activity, Trophy, Repeat, AlertTriangle, Heart, Target, Zap, History, Compass, CheckCircle2, Check } from 'lucide-react';
 import { getFinancialInsights, isLocalModeEnabled } from '../services/geminiService';
 import { startOfMonth, endOfMonth, startOfWeek, isWithinInterval, parseISO, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import {
+  checkIsRecurringPaid,
+  isBankingTextSimilar,
+  saveConfirmedRecurringOccurrence
+} from '../utils/recurringMatching';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -23,6 +28,7 @@ interface DashboardProps {
   goals?: Goal[];
   installmentGroups?: InstallmentGroup[];
   onOpenTour?: () => void;
+  onValidateRecurring?: (transaction: Omit<Transaction, 'id' | 'isTemplate'>) => Promise<any> | void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -41,13 +47,42 @@ const Dashboard: React.FC<DashboardProps> = ({
   allRawTransactions = [],
   goals = [],
   installmentGroups = [],
-  onOpenTour
+  onOpenTour,
+  onValidateRecurring
 }) => {
   const [insights, setInsights] = useState<FinancialAnalysis | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
   const [isWeeklyScheduleOpen, setIsWeeklyScheduleOpen] = useState(true);
   const [localMode, setLocalMode] = useState(() => isLocalModeEnabled());
+  const [recurringUpdateTick, setRecurringUpdateTick] = useState(0);
+
+  // Quick Baixa modal state
+  const [quickBaixaItem, setQuickBaixaItem] = useState<{
+    id: string;
+    description: string;
+    amount: number;
+    type: 'INCOME' | 'EXPENSE' | 'TRANSFER';
+    category: string;
+    date: Date;
+    dateStr: string;
+    isRecurring: boolean;
+    rawRecurring?: RecurringTransaction;
+  } | null>(null);
+  const [quickAccountId, setQuickAccountId] = useState('');
+  const [quickDate, setQuickDate] = useState('');
+  const [quickAmount, setQuickAmount] = useState('');
+  const [isSubmittingBaixa, setIsSubmittingBaixa] = useState(false);
+
+  useEffect(() => {
+    const handleStatusChanged = () => {
+      setRecurringUpdateTick(prev => prev + 1);
+    };
+    window.addEventListener('recurring-status-changed', handleStatusChanged);
+    return () => {
+      window.removeEventListener('recurring-status-changed', handleStatusChanged);
+    };
+  }, []);
 
   useEffect(() => {
     const handleLocalModeChange = () => {
@@ -259,7 +294,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const weeklyReminders = useMemo(() => {
-    const list: { id: string; date: Date; dateStr: string; label: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; description: string; amount: number; isRecurring: boolean; category: string; isTemplate?: boolean; isLate: boolean }[] = [];
+    const list: { id: string; date: Date; dateStr: string; label: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; description: string; amount: number; isRecurring: boolean; category: string; isTemplate?: boolean; isLate: boolean; rawRecurring?: RecurringTransaction }[] = [];
     const today = new Date();
 
     // Helper to check if a recurring rule applies to targetDate
@@ -298,7 +333,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       const targetDate = new Date();
       targetDate.setDate(today.getDate() + i);
       const targetDateStr = format(targetDate, 'yyyy-MM-dd');
-      const targetDay = targetDate.getDate();
       
       const diffDays = Math.abs(i);
       const dayLabel = `Atrasado (${diffDays} ${diffDays === 1 ? 'dia' : 'dias'})`;
@@ -306,20 +340,8 @@ const Dashboard: React.FC<DashboardProps> = ({
       // Check recurring
       recurringTransactions.forEach(rt => {
         if (isRecurringDueOnDate(rt, targetDate)) {
-          // Check if already paid around this date
-          const isPaid = allRawTransactions.some(t => {
-            if (t.isTemplate) return false;
-            if (t.type !== rt.type) return false;
-            const tDate = parseISO(t.date);
-            const isSamePeriod = tDate.getFullYear() === targetDate.getFullYear() && tDate.getMonth() === targetDate.getMonth();
-            if (!isSamePeriod) return false;
-            
-            const tDesc = t.description.toLowerCase().trim();
-            const rtDesc = rt.description.toLowerCase().trim();
-            return tDesc === rtDesc || (tDesc.length > 3 && rtDesc.length > 3 && (tDesc.includes(rtDesc) || rtDesc.includes(tDesc)));
-          });
-
-          if (!isPaid) {
+          const check = checkIsRecurringPaid(rt, targetDate, allRawTransactions);
+          if (!check.isPaid) {
             list.push({
               id: `rec-late-${rt.id}-${targetDateStr}`,
               date: targetDate,
@@ -331,7 +353,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               isRecurring: true,
               category: rt.category,
               isTemplate: true,
-              isLate: true
+              isLate: true,
+              rawRecurring: rt
             });
           }
         }
@@ -355,13 +378,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             const isPaidTemplate = allRawTransactions.some(realT => {
               if (realT.isTemplate) return false;
               if (realT.type !== t.type) return false;
-              const rDesc = realT.description.toLowerCase().trim();
-              const tDesc = t.description.toLowerCase().trim();
-              const isDescMatch = rDesc === tDesc || (rDesc.length > 3 && tDesc.length > 3 && (rDesc.includes(tDesc) || tDesc.includes(rDesc)));
-              if (!isDescMatch) return false;
-
               const rDate = parseISO(realT.date);
-              return rDate.getFullYear() === targetDate.getFullYear() && rDate.getMonth() === targetDate.getMonth();
+              const isSamePeriod = rDate.getFullYear() === targetDate.getFullYear() && rDate.getMonth() === targetDate.getMonth();
+              const diffDays = Math.abs((rDate.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
+              if (!isSamePeriod && diffDays > 15) return false;
+
+              return isBankingTextSimilar(realT.description, t.description);
             });
             if (isPaidTemplate) return; // Skip showing in reminders!
           }
@@ -391,7 +413,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       const targetDate = new Date();
       targetDate.setDate(today.getDate() + i);
       const targetDateStr = format(targetDate, 'yyyy-MM-dd');
-      const targetDay = targetDate.getDate();
       
       let dayLabel = '';
       if (i === 0) dayLabel = 'Hoje';
@@ -404,20 +425,8 @@ const Dashboard: React.FC<DashboardProps> = ({
       // Check recurring
       recurringTransactions.forEach(rt => {
         if (isRecurringDueOnDate(rt, targetDate)) {
-          // Check if already paid in that month (case-insensitive and partial match)
-          const isPaid = allRawTransactions.some(t => {
-            if (t.isTemplate) return false;
-            if (t.type !== rt.type) return false;
-            const tDate = parseISO(t.date);
-            const isSamePeriod = tDate.getFullYear() === targetDate.getFullYear() && tDate.getMonth() === targetDate.getMonth();
-            if (!isSamePeriod) return false;
-            
-            const tDesc = t.description.toLowerCase().trim();
-            const rtDesc = rt.description.toLowerCase().trim();
-            return tDesc === rtDesc || (tDesc.length > 3 && rtDesc.length > 3 && (tDesc.includes(rtDesc) || rtDesc.includes(tDesc)));
-          });
-
-          if (!isPaid) {
+          const check = checkIsRecurringPaid(rt, targetDate, allRawTransactions);
+          if (!check.isPaid) {
             list.push({
               id: `rec-${rt.id}-${targetDateStr}`,
               date: targetDate,
@@ -429,7 +438,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               isRecurring: true,
               category: rt.category,
               isTemplate: true,
-              isLate: false
+              isLate: false,
+              rawRecurring: rt
             });
           }
         }
@@ -453,13 +463,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             const isPaidTemplate = allRawTransactions.some(realT => {
               if (realT.isTemplate) return false;
               if (realT.type !== t.type) return false;
-              const rDesc = realT.description.toLowerCase().trim();
-              const tDesc = t.description.toLowerCase().trim();
-              const isDescMatch = rDesc === tDesc || (rDesc.length > 3 && tDesc.length > 3 && (rDesc.includes(tDesc) || tDesc.includes(rDesc)));
-              if (!isDescMatch) return false;
-
               const rDate = parseISO(realT.date);
-              return rDate.getFullYear() === targetDate.getFullYear() && rDate.getMonth() === targetDate.getMonth();
+              const isSamePeriod = rDate.getFullYear() === targetDate.getFullYear() && rDate.getMonth() === targetDate.getMonth();
+              const diffDays = Math.abs((rDate.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
+              if (!isSamePeriod && diffDays > 15) return false;
+
+              return isBankingTextSimilar(realT.description, t.description);
             });
             if (isPaidTemplate) return; // Skip showing in reminders!
           }
@@ -486,7 +495,65 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     // Sort chronologically
     return list.sort((a, b) => a.dateStr.localeCompare(b.dateStr));
-  }, [allRawTransactions, recurringTransactions]);
+  }, [allRawTransactions, recurringTransactions, recurringUpdateTick]);
+
+  const handleOpenQuickBaixa = (item: any) => {
+    setQuickBaixaItem(item);
+    setQuickAccountId(accounts[0]?.id || '');
+    setQuickDate(format(new Date(), 'yyyy-MM-dd'));
+    setQuickAmount(item.amount.toString());
+  };
+
+  const handleConfirmQuickBaixa = async () => {
+    if (!quickBaixaItem || !quickAccountId) {
+      alert('Selecione uma conta para registrar a baixa.');
+      return;
+    }
+    setIsSubmittingBaixa(true);
+    try {
+      const recId = quickBaixaItem.rawRecurring?.id || quickBaixaItem.id.replace('rec-late-', '').replace('rec-', '').split('-')[0];
+      const numAmount = parseFloat(quickAmount) || quickBaixaItem.amount;
+
+      // Save to confirmed map immediately
+      saveConfirmedRecurringOccurrence(recId, quickBaixaItem.date, {
+        confirmedDate: quickDate,
+        amount: numAmount,
+        description: quickBaixaItem.description
+      });
+
+      if (onValidateRecurring) {
+        const res: any = await onValidateRecurring({
+          userId: currentUserProfile?.id || accounts[0]?.userId || '',
+          accountId: quickAccountId,
+          description: quickBaixaItem.description,
+          amount: numAmount,
+          type: quickBaixaItem.type,
+          category: quickBaixaItem.category,
+          date: quickDate,
+          recurrence: 'NONE',
+          isJoint: quickBaixaItem.rawRecurring?.isJoint ?? true,
+          recurringTransactionId: recId
+        });
+
+        if (res?.id) {
+          saveConfirmedRecurringOccurrence(recId, quickBaixaItem.date, {
+            confirmedDate: quickDate,
+            paidTransactionId: res.id,
+            amount: numAmount,
+            description: quickBaixaItem.description
+          });
+        }
+      }
+
+      setQuickBaixaItem(null);
+      setRecurringUpdateTick(prev => prev + 1);
+    } catch (err) {
+      console.error('Erro ao dar baixa:', err);
+      alert('Erro ao dar baixa.');
+    } finally {
+      setIsSubmittingBaixa(false);
+    }
+  };
 
   return (
     <div className="space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -939,10 +1006,27 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <span className={`text-xs font-black block ${reminder.type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                      {reminder.type === 'INCOME' ? '+' : '-'}{formatCurrency(reminder.amount)}
-                    </span>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <div className="text-right">
+                      <span className={`text-xs font-black block ${reminder.type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {reminder.type === 'INCOME' ? '+' : '-'}{formatCurrency(reminder.amount)}
+                      </span>
+                    </div>
+                    {onValidateRecurring && (
+                      <button
+                        type="button"
+                        id={`dar-baixa-${reminder.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenQuickBaixa(reminder);
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors flex items-center gap-1 border border-emerald-200/60 dark:border-emerald-800/40"
+                        title={reminder.type === 'INCOME' ? 'Confirmar Recebimento' : 'Confirmar Pagamento'}
+                      >
+                        <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        <span>Baixar</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -979,7 +1063,92 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       )}
 
-      {/* AI Insight Card REMOVED */}
+      {/* Modal Rápido de Baixa na Programação da Semana */}
+      {quickBaixaItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${quickBaixaItem.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/50'}`}>
+                  <Check className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-black text-slate-800 dark:text-white">
+                  {quickBaixaItem.type === 'INCOME' ? 'Confirmar Recebimento' : 'Confirmar Pagamento'}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setQuickBaixaItem(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Item</span>
+                <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 truncate">{quickBaixaItem.description}</p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Conta para Movimentação</label>
+                <select
+                  value={quickAccountId}
+                  onChange={(e) => setQuickAccountId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                >
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({formatCurrency(acc.currentBalance)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Data da Baixa</label>
+                  <input
+                    type="date"
+                    value={quickDate}
+                    onChange={(e) => setQuickDate(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Valor (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={quickAmount}
+                    onChange={(e) => setQuickAmount(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setQuickBaixaItem(null)}
+                className="px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                disabled={isSubmittingBaixa}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmQuickBaixa}
+                disabled={isSubmittingBaixa || !quickAccountId}
+                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isSubmittingBaixa ? 'Confirmando...' : 'Confirmar Baixa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

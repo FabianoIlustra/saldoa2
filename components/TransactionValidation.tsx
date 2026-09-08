@@ -1,9 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { RecurringTransaction, Transaction, Category, Account } from '../types';
 import { CheckCircle, XCircle, AlertCircle, Calendar, Edit2, Check, X, ArrowUpDown, ArrowUp, ArrowDown, CreditCard, CalendarCheck, Plus, Trash2, Lock, Repeat, Clock, Sparkles } from 'lucide-react';
 import { format, isSameMonth, isSameYear, parseISO, isBefore, isAfter, addMonths, addDays, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import FilterBar, { FilterState } from './FilterBar';
+import {
+  checkIsRecurringPaid,
+  saveConfirmedRecurringOccurrence,
+  removeConfirmedRecurringOccurrence
+} from '../utils/recurringMatching';
 
 interface ValidationProps {
   recurringTransactions: RecurringTransaction[];
@@ -64,6 +69,17 @@ const TransactionValidation: React.FC<ValidationProps> = ({
 
   // Collapsible section for rules management
   const [isRulesOpen, setIsRulesOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const handleStatusChanged = () => {
+      setRefreshKey(prev => prev + 1);
+    };
+    window.addEventListener('recurring-status-changed', handleStatusChanged);
+    return () => {
+      window.removeEventListener('recurring-status-changed', handleStatusChanged);
+    };
+  }, []);
 
   const openNewRecurringModal = () => {
     setRecDesc('');
@@ -189,67 +205,17 @@ const TransactionValidation: React.FC<ValidationProps> = ({
             const dueDate = new Date(curr);
             const dateStr = format(dueDate, 'yyyy-MM-dd');
 
-            let paidTransactionId: string | undefined;
-            let confirmedDate: Date | null = null;
-            
-            // Occurrence keys for unambiguous tracking
-            const occKeyDate = `${rec.id}-${dateStr}`;
-            const occKeyMonth = `${rec.id}-${format(dueDate, 'yyyy-MM')}`;
-            const occKeyOriginalDate = rec.originalId ? `${rec.originalId}-${dateStr}` : null;
-            const occKeyOriginalMonth = rec.originalId ? `${rec.originalId}-${format(dueDate, 'yyyy-MM')}` : null;
-
-            const confirmedMap = (() => {
-              try {
-                return JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
-              } catch { return {}; }
-            })();
-
-            const hasConfirmedRecord = Boolean(
-              confirmedMap[occKeyDate] || 
-              confirmedMap[occKeyMonth] || 
-              (occKeyOriginalDate && confirmedMap[occKeyOriginalDate]) || 
-              (occKeyOriginalMonth && confirmedMap[occKeyOriginalMonth])
-            );
-
-            const isPaid = transactions.some(t => {
-              if (t.isTemplate) return false;
-              if (t.type !== rec.type) return false;
-
-              const tDate = parseISO(t.date);
-              const closeDate = isSameDay(tDate, dueDate) || Math.abs(Math.floor((tDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))) <= 2;
-              const matchesDate = closeDate || isSameMonth(tDate, dueDate);
-              if (!matchesDate) return false;
-
-              // Check if explicitly linked via recurringTransactionId
-              const isDirectLink = Boolean(t.recurringTransactionId && (
-                t.recurringTransactionId === rec.id ||
-                t.recurringTransactionId === rec.originalId ||
-                t.recurringTransactionId === occKeyDate ||
-                t.recurringTransactionId === occKeyMonth
-              ));
-
-              // Or confirmed via manual validation in the current/previous session
-              const isConfirmedViaRecord = hasConfirmedRecord && (
-                t.description.toLowerCase().trim() === rec.description.toLowerCase().trim() &&
-                Math.abs(t.amount - rec.amount) < 0.01
-              );
-
-              if (isDirectLink || isConfirmedViaRecord) {
-                paidTransactionId = t.id;
-                const dStr = t.createdAt ? t.createdAt.split('T')[0] : t.date;
-                try {
-                  confirmedDate = parseISO(dStr);
-                } catch {
-                  confirmedDate = parseISO(t.date);
-                }
-                return true;
-              }
-              return false;
-            });
+            const check = checkIsRecurringPaid(rec, dueDate, transactions);
+            const isPaid = check.isPaid;
+            const paidTransactionId = check.paidTransactionId || check.transaction?.id;
+            const confirmedDate = check.confirmedDate || null;
 
             let status: 'pending' | 'late' | 'paid' = 'pending';
-            if (isPaid) status = 'paid';
-            else if (isBefore(dueDate, new Date()) && !isSameDay(dueDate, new Date())) status = 'late';
+            if (isPaid) {
+              status = 'paid';
+            } else if (isBefore(dueDate, new Date()) && !isSameDay(dueDate, new Date())) {
+              status = 'late';
+            }
 
             result.push({
               ...rec,
@@ -280,68 +246,18 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         const actualDay = Math.min(rec.dayOfMonth || 1, monthEnd.getDate());
         const dueDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), actualDay);
         const dateStr = format(dueDate, 'yyyy-MM-dd');
-        const monthStr = format(dueDate, 'yyyy-MM');
 
-        let paidTransactionId: string | undefined;
-        let confirmedDate: Date | null = null;
-
-        const occKeyDate = `${rec.id}-${dateStr}`;
-        const occKeyMonth = `${rec.id}-${monthStr}`;
-        const occKeyOriginalDate = rec.originalId ? `${rec.originalId}-${dateStr}` : null;
-        const occKeyOriginalMonth = rec.originalId ? `${rec.originalId}-${monthStr}` : null;
-
-        const confirmedMap = (() => {
-          try {
-            return JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
-          } catch { return {}; }
-        })();
-
-        const hasConfirmedRecord = Boolean(
-          confirmedMap[occKeyDate] || 
-          confirmedMap[occKeyMonth] || 
-          (occKeyOriginalDate && confirmedMap[occKeyOriginalDate]) || 
-          (occKeyOriginalMonth && confirmedMap[occKeyOriginalMonth])
-        );
-
-        const isPaid = transactions.some(t => {
-          if (t.isTemplate) return false;
-          if (t.type !== rec.type) return false;
-
-          const tDate = parseISO(t.date);
-          const matchesDate = isSameMonth(tDate, targetDate) && isSameYear(tDate, targetDate);
-          if (!matchesDate) return false;
-
-          // Check if explicitly linked via recurringTransactionId
-          const isDirectLink = Boolean(t.recurringTransactionId && (
-            t.recurringTransactionId === rec.id ||
-            t.recurringTransactionId === rec.originalId ||
-            t.recurringTransactionId === occKeyDate ||
-            t.recurringTransactionId === occKeyMonth
-          ));
-
-          // Or confirmed via manual validation in this/previous session
-          const isConfirmedViaRecord = hasConfirmedRecord && (
-            t.description.toLowerCase().trim() === rec.description.toLowerCase().trim() &&
-            Math.abs(t.amount - rec.amount) < 0.01
-          );
-
-          if (isDirectLink || isConfirmedViaRecord) {
-            paidTransactionId = t.id;
-            const dStr = t.createdAt ? t.createdAt.split('T')[0] : t.date;
-            try {
-              confirmedDate = parseISO(dStr);
-            } catch {
-              confirmedDate = parseISO(t.date);
-            }
-            return true;
-          }
-          return false;
-        });
+        const check = checkIsRecurringPaid(rec, dueDate, transactions);
+        const isPaid = check.isPaid;
+        const paidTransactionId = check.paidTransactionId || check.transaction?.id;
+        const confirmedDate = check.confirmedDate || null;
 
         let status: 'pending' | 'late' | 'paid' = 'pending';
-        if (isPaid) status = 'paid';
-        else if (isBefore(dueDate, new Date()) && !isSameMonth(dueDate, new Date())) status = 'late'; 
-        else if (isBefore(dueDate, new Date()) && !isPaid) status = 'late';
+        if (isPaid) {
+          status = 'paid';
+        } else if (isBefore(dueDate, new Date()) && !isSameDay(dueDate, new Date())) {
+          status = 'late';
+        }
 
         result.push({
           ...rec,
@@ -407,7 +323,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         }
         return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [recurringTransactions, transactions, currentFilters, initialDate, statusFilters, sortField, sortDirection]);
+  }, [recurringTransactions, transactions, currentFilters, initialDate, statusFilters, sortField, sortDirection, refreshKey]);
 
   const totals = useMemo(() => {
     return expectedTransactions.reduce((acc, item) => {
@@ -440,33 +356,21 @@ const TransactionValidation: React.FC<ValidationProps> = ({
 
     try {
       const recId = selectedItem.originalId || selectedItem.id;
-      const dateStr = format(selectedItem.dueDate, 'yyyy-MM-dd');
-      const monthStr = format(selectedItem.dueDate, 'yyyy-MM');
-      const occKey = `${recId}-${dateStr}`;
-      const occMonthKey = `${recId}-${monthStr}`;
+      const numAmount = parseFloat(editAmount) || selectedItem.amount;
 
       // Save to localStorage immediately so UI updates and stays persistent
-      try {
-        const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
-        confirmedMap[occKey] = {
-          confirmedDate: editDate,
-          recurringId: recId,
-          date: editDate,
-          amount: parseFloat(editAmount),
-          description: selectedItem.description
-        };
-        confirmedMap[occMonthKey] = confirmedMap[occKey];
-        localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
-      } catch (e) {
-        console.warn('Error saving confirmed recurring in localStorage', e);
-      }
+      saveConfirmedRecurringOccurrence(recId, selectedItem.dueDate, {
+        confirmedDate: editDate,
+        amount: numAmount,
+        description: selectedItem.description
+      });
 
-      await onValidate({
+      const res: any = await onValidate({
         userId: selectedItem.userId,
         accountId: editAccountId,
         toAccountId: selectedItem.type === 'TRANSFER' ? editToAccountId : undefined,
         description: selectedItem.description,
-        amount: parseFloat(editAmount),
+        amount: numAmount,
         type: selectedItem.type,
         category: selectedItem.type === 'TRANSFER' ? 'Transferência' : selectedItem.category,
         date: editDate,
@@ -474,29 +378,31 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         isJoint: selectedItem.isJoint,
         recurringTransactionId: recId
       });
+
+      if (res?.id) {
+        saveConfirmedRecurringOccurrence(recId, selectedItem.dueDate, {
+          confirmedDate: editDate,
+          paidTransactionId: res.id,
+          amount: numAmount,
+          description: selectedItem.description
+        });
+      }
+
       setSelectedItem(null);
+      setRefreshKey(prev => prev + 1);
     } catch (error) {
       console.error('Validation error:', error);
     }
   };
 
   const handleEstornar = (item: any) => {
-    if (item.paidTransactionId && confirm(`Deseja estornar este ${item.type === 'INCOME' ? 'recebimento' : 'pagamento'}? O lançamento será removido do extrato.`)) {
-      try {
-        const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
-        const recId = item.originalId || item.id;
-        const dateStr = format(item.dueDate, 'yyyy-MM-dd');
-        const monthStr = format(item.dueDate, 'yyyy-MM');
-        delete confirmedMap[`${recId}-${dateStr}`];
-        delete confirmedMap[`${recId}-${monthStr}`];
-        Object.keys(confirmedMap).forEach(k => {
-          if (k.startsWith(recId) && (k.includes(dateStr) || k.includes(monthStr))) {
-            delete confirmedMap[k];
-          }
-        });
-        localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
-      } catch (e) {}
-      onDelete(item.paidTransactionId);
+    if (confirm(`Deseja estornar este ${item.type === 'INCOME' ? 'recebimento' : 'pagamento'}? O lançamento será removido do extrato.`)) {
+      const recId = item.originalId || item.id;
+      removeConfirmedRecurringOccurrence(recId, item.dueDate, item.paidTransactionId);
+      if (item.paidTransactionId) {
+        onDelete(item.paidTransactionId);
+      }
+      setRefreshKey(prev => prev + 1);
     }
   };
 
@@ -505,13 +411,12 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         try {
             const recId = item.originalId || item.id;
             const dateStr = format(item.dueDate, 'yyyy-MM-dd');
-            const monthStr = format(item.dueDate, 'yyyy-MM');
-            try {
-              const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
-              confirmedMap[`${recId}-${dateStr}`] = { confirmedDate: dateStr, ignored: true };
-              confirmedMap[`${recId}-${monthStr}`] = confirmedMap[`${recId}-${dateStr}`];
-              localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
-            } catch (e) {}
+            saveConfirmedRecurringOccurrence(recId, item.dueDate, {
+              confirmedDate: dateStr,
+              ignored: true,
+              amount: 0,
+              description: item.description
+            });
 
             await onValidate({
               userId: item.userId,
@@ -525,6 +430,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
               isJoint: item.isJoint,
               recurringTransactionId: recId
             });
+            setRefreshKey(prev => prev + 1);
         } catch (error) {
             console.error('Ignore error:', error);
         }

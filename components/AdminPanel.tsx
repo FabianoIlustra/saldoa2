@@ -189,8 +189,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
             is_trial: p.is_trial !== undefined ? p.is_trial : local?.is_trial,
             is_manual_release: p.is_manual_release !== undefined ? p.is_manual_release : (localManualRelease || local?.is_manual_release || (p.is_paid === true || localPaid)),
             trial_ends_at: p.trial_ends_at || local?.trial_ends_at,
-            last_sign_in_at: p.last_sign_in_at || localLastSignIn || local?.last_sign_in_at || p.created_at,
-            login_count: p.login_count || (localLoginCount > 0 ? localLoginCount : local?.login_count) || 1,
+            last_sign_in_at: p.last_sign_in_at || (currentUser.id === p.id ? localLastSignIn : null) || local?.last_sign_in_at || p.created_at,
+            login_count: p.login_count || (currentUser.id === p.id && localLoginCount > 0 ? localLoginCount : local?.login_count) || 1,
           };
         });
       }
