@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
+import { recordUserSiteAccess } from '../services/accessTracker';
 
 interface AuthContextType {
   session: Session | null;
@@ -38,6 +39,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      if (session?.user?.id) {
+        recordUserSiteAccess(session.user.id);
+      }
     });
 
     const {
@@ -50,10 +55,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true);
       }
+
+      if (session?.user?.id && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        recordUserSiteAccess(session.user.id);
+      }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    // Se o usuário alternar de aba e voltar após um tempo, registra novo acesso
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user?.id) {
+        recordUserSiteAccess(user.id);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user?.id]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
