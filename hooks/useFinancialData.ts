@@ -3,6 +3,7 @@ import { supabase } from '../services/supabase';
 import { Transaction, Category, Account, Goal, RecurringTransaction, User, InstallmentGroup } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { DEFAULT_CATEGORIES } from '../constants';
+import { recordUserSiteAccess } from '../services/accessTracker';
 
 const sortCategories = (cats: Category[]): Category[] => {
   return [...cats].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
@@ -186,13 +187,16 @@ export const useFinancialData = () => {
         };
         setCurrentUserProfile(currentUser);
 
-        // Track user login and last access in local cache for instant UI availability
+        // Track user login and last access in local cache and persist to Supabase
         try {
           const nowIso = new Date().toISOString();
           localStorage.setItem(`user_last_sign_in_${user.id}`, profile.last_sign_in_at || nowIso);
           if (profile.login_count) {
             localStorage.setItem(`user_login_count_${user.id}`, String(profile.login_count));
           }
+
+          // Persist user access whenever they access the app
+          recordUserSiteAccess(user.id);
         } catch (e) {
           console.warn('Login cache error:', e);
         }
@@ -321,25 +325,36 @@ export const useFinancialData = () => {
 
       let mappedTransactions: Transaction[] = [];
       if (allTrans.length > 0) {
-        mappedTransactions = allTrans.map(t => ({
-          id: t.id,
-          userId: t.user_id,
-          accountId: t.account_id,
-          description: t.description,
-          amount: Number(t.amount),
-          type: t.type as any,
-          category: t.category,
-          date: t.date,
-          createdAt: t.created_at,
-          recurrence: t.recurrence as any,
-          isJoint: t.is_joint,
-          isTemplate: t.is_template,
-          recurringTransactionId: t.recurring_transaction_id || undefined,
-          installmentGroupId: t.installment_group_id,
-          installmentNumber: t.installment_number,
-          totalInstallments: t.total_installments,
-          toAccountId: t.to_account_id || undefined
-        }));
+        const confirmedMap = (() => {
+          try {
+            return JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
+          } catch {
+            return {};
+          }
+        })();
+
+        mappedTransactions = allTrans.map(t => {
+          const recIdFromLocal = confirmedMap['tx-' + t.id]?.recurringId;
+          return {
+            id: t.id,
+            userId: t.user_id,
+            accountId: t.account_id,
+            description: t.description,
+            amount: Number(t.amount),
+            type: t.type as any,
+            category: t.category,
+            date: t.date,
+            createdAt: t.created_at,
+            recurrence: t.recurrence as any,
+            isJoint: t.is_joint,
+            isTemplate: t.is_template,
+            recurringTransactionId: t.recurring_transaction_id || recIdFromLocal || undefined,
+            installmentGroupId: t.installment_group_id,
+            installmentNumber: t.installment_number,
+            totalInstallments: t.total_installments,
+            toAccountId: t.to_account_id || undefined
+          };
+        });
         setTransactions(mappedTransactions);
       }
 
@@ -544,6 +559,22 @@ export const useFinancialData = () => {
             return acc;
           }));
 
+          if (t.recurringTransactionId) {
+            try {
+              const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
+              confirmedMap['tx-' + fallback.data.id] = {
+                recurringId: t.recurringTransactionId,
+                confirmedDate: t.date,
+                dueDate: t.date,
+                amount: t.amount,
+                description: t.description,
+                paidTransactionId: fallback.data.id
+              };
+              localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
+              window.dispatchEvent(new CustomEvent('recurring-status-changed', { detail: { recurringId: t.recurringTransactionId } }));
+            } catch (e) {}
+          }
+
           return newTrans;
         }
       }
@@ -574,6 +605,22 @@ export const useFinancialData = () => {
         }
         return acc;
       }));
+
+      if (t.recurringTransactionId) {
+        try {
+          const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
+          confirmedMap['tx-' + data.id] = {
+            recurringId: t.recurringTransactionId,
+            confirmedDate: t.date,
+            dueDate: t.date,
+            amount: t.amount,
+            description: t.description,
+            paidTransactionId: data.id
+          };
+          localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
+          window.dispatchEvent(new CustomEvent('recurring-status-changed', { detail: { recurringId: t.recurringTransactionId } }));
+        } catch (e) {}
+      }
 
       return newTrans;
     }
