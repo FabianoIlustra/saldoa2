@@ -28,6 +28,7 @@ import { addMonths, format, parseISO } from 'date-fns';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useFinancialData } from './hooks/useFinancialData';
 import { isLocalModeEnabled } from './services/geminiService';
+import { checkIsRecurringPaid, isBankingTextSimilar } from './utils/recurringMatching';
 
 type TabType = 'dashboard' | 'transactions' | 'cashflow' | 'validation' | 'parcelados' | 'goals' | 'ai' | 'settings' | 'scanner' | 'visuals' | 'admin';
 
@@ -137,6 +138,17 @@ const AppContent: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [lastNotificationCount, setLastNotificationCount] = useState(-1);
   const [localMode, setLocalMode] = useState(() => isLocalModeEnabled());
+  const [recurringUpdateTick, setRecurringUpdateTick] = useState(0);
+
+  useEffect(() => {
+    const handleStatusChanged = () => {
+      setRecurringUpdateTick(prev => prev + 1);
+    };
+    window.addEventListener('recurring-status-changed', handleStatusChanged);
+    return () => {
+      window.removeEventListener('recurring-status-changed', handleStatusChanged);
+    };
+  }, []);
 
   // Automatic onboarding tour for first-time access
   useEffect(() => {
@@ -200,35 +212,56 @@ const AppContent: React.FC = () => {
   const activeReminders = useMemo(() => {
     const today = new Date();
     const todayStr = format(today, 'yyyy-MM-dd');
-    const todayDay = today.getDate();
     const todayMonth = today.getMonth();
     const todayYear = today.getFullYear();
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = format(tomorrow, 'yyyy-MM-dd');
-    const tomorrowDay = tomorrow.getDate();
     const tomorrowMonth = tomorrow.getMonth();
     const tomorrowYear = tomorrow.getFullYear();
 
     const list: { id: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; description: string; amount: number; isRecurring: boolean; category: string; dueLabel: 'Hoje' | 'Amanhã'; dueDate: string }[] = [];
+
+    // Helper to check if a recurring rule applies to targetDate
+    const isRecurringDueOnDate = (rt: any, date: Date): boolean => {
+      if (!rt.active) return false;
+      const isInterval = rt.frequencyType === 'DAYS' || (rt.intervalDays && rt.intervalDays > 0);
+
+      if (isInterval) {
+        const interval = rt.intervalDays || 15;
+        const start = parseISO(rt.startDate || new Date().toISOString().split('T')[0]);
+        const startClean = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const targetClean = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+        if (targetClean < startClean) return false;
+
+        const diffMs = targetClean.getTime() - startClean.getTime();
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        return diffDays >= 0 && diffDays % interval === 0;
+      } else {
+        if (rt.startDate) {
+          const start = parseISO(rt.startDate);
+          const startYear = start.getFullYear();
+          const startMonth = start.getMonth();
+          const targetYear = date.getFullYear();
+          const targetMonth = date.getMonth();
+          if (startYear > targetYear || (startYear === targetYear && startMonth > targetMonth)) {
+            return false;
+          }
+        }
+        return (rt.dayOfMonth || 1) === date.getDate();
+      }
+    };
 
     // 1. Recurring Transactions due Today or Tomorrow
     recurringTransactions.forEach(rt => {
       if (!rt.active) return;
 
       // Check if due TODAY
-      if (rt.dayOfMonth === todayDay) {
-        const isPaid = transactions.some(t => {
-          if (t.isTemplate) return false;
-          if (t.type !== rt.type) return false;
-          const tDate = parseISO(t.date);
-          const isSamePeriod = tDate.getMonth() === todayMonth && tDate.getFullYear() === todayYear;
-          const descMatch = t.description.trim().toLowerCase() === rt.description.trim().toLowerCase();
-          return isSamePeriod && descMatch;
-        });
-
-        if (!isPaid) {
+      if (isRecurringDueOnDate(rt, today)) {
+        const check = checkIsRecurringPaid(rt, today, transactions);
+        if (!check.isPaid) {
           list.push({
             id: `rec-${rt.id}-today`,
             type: rt.type,
@@ -243,17 +276,9 @@ const AppContent: React.FC = () => {
       }
 
       // Check if due TOMORROW
-      if (rt.dayOfMonth === tomorrowDay) {
-        const isPaid = transactions.some(t => {
-          if (t.isTemplate) return false;
-          if (t.type !== rt.type) return false;
-          const tDate = parseISO(t.date);
-          const isSamePeriod = tDate.getMonth() === tomorrowMonth && tDate.getFullYear() === tomorrowYear;
-          const descMatch = t.description.trim().toLowerCase() === rt.description.trim().toLowerCase();
-          return isSamePeriod && descMatch;
-        });
-
-        if (!isPaid) {
+      if (isRecurringDueOnDate(rt, tomorrow)) {
+        const check = checkIsRecurringPaid(rt, tomorrow, transactions);
+        if (!check.isPaid) {
           list.push({
             id: `rec-${rt.id}-tomorrow`,
             type: rt.type,
@@ -282,9 +307,8 @@ const AppContent: React.FC = () => {
                    Number(realT.installmentNumber) === Number(t.installmentNumber);
           }
           const realDate = parseISO(realT.date);
-          return realT.description.trim().toLowerCase() === t.description.trim().toLowerCase() &&
-                 realDate.getMonth() === todayMonth &&
-                 realDate.getFullYear() === todayYear;
+          const isSamePeriod = realDate.getMonth() === todayMonth && realDate.getFullYear() === todayYear;
+          return isBankingTextSimilar(realT.description, t.description) && isSamePeriod;
         });
 
         if (!isPaid) {
@@ -311,9 +335,8 @@ const AppContent: React.FC = () => {
                    Number(realT.installmentNumber) === Number(t.installmentNumber);
           }
           const realDate = parseISO(realT.date);
-          return realT.description.trim().toLowerCase() === t.description.trim().toLowerCase() &&
-                 realDate.getMonth() === tomorrowMonth &&
-                 realDate.getFullYear() === tomorrowYear;
+          const isSamePeriod = realDate.getMonth() === tomorrowMonth && realDate.getFullYear() === tomorrowYear;
+          return isBankingTextSimilar(realT.description, t.description) && isSamePeriod;
         });
 
         if (!isPaid) {
@@ -332,7 +355,7 @@ const AppContent: React.FC = () => {
     });
 
     return list;
-  }, [recurringTransactions, transactions]);
+  }, [recurringTransactions, transactions, recurringUpdateTick]);
 
   useEffect(() => {
     setUnreadCount(activeReminders.length);
@@ -919,6 +942,16 @@ const AppContent: React.FC = () => {
             goals={filteredGoals}
             installmentGroups={filteredInstallmentGroups}
             onOpenTour={() => setIsTourOpen(true)}
+            onValidateRecurring={async (t) => {
+              try {
+                const created = await addTransaction(t);
+                showToast('Lançamento confirmado!');
+                return created;
+              } catch (error: any) {
+                console.error('Erro na validação:', error);
+                showToast(`Erro: ${error.message || 'Falha ao confirmar'}`);
+              }
+            }}
           />
         )}
 
