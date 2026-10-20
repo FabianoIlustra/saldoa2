@@ -355,8 +355,11 @@ const TransactionValidation: React.FC<ValidationProps> = ({
     }
 
     try {
-      const recId = selectedItem.originalId || selectedItem.id;
+      const rawId = selectedItem.originalId || selectedItem.id;
+      const uuidMatch = typeof rawId === 'string' ? rawId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) : null;
+      const recId = uuidMatch ? uuidMatch[0] : (typeof rawId === 'string' && rawId.includes('-') && rawId.length > 20 ? rawId.replace(/-\d{4}-\d{2}-\d{2}$/, '') : rawId);
       const numAmount = parseFloat(editAmount) || selectedItem.amount;
+      const occurrenceDueDateStr = format(selectedItem.dueDate, 'yyyy-MM-dd');
 
       // Save to localStorage immediately so UI updates and stays persistent
       saveConfirmedRecurringOccurrence(recId, selectedItem.dueDate, {
@@ -376,7 +379,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
         date: editDate,
         recurrence: 'NONE', // It becomes a real one-time transaction
         isJoint: selectedItem.isJoint,
-        recurringTransactionId: recId
+        recurringTransactionId: `${recId}-${occurrenceDueDateStr}`
       });
 
       if (res?.id) {
@@ -397,7 +400,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
 
   const handleEstornar = (item: any) => {
     if (confirm(`Deseja estornar este ${item.type === 'INCOME' ? 'recebimento' : 'pagamento'}? O lançamento será removido do extrato.`)) {
-      const recId = item.originalId || item.id;
+      const rawId = item.originalId || item.id;
+      const uuidMatch = typeof rawId === 'string' ? rawId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) : null;
+      const recId = uuidMatch ? uuidMatch[0] : (typeof rawId === 'string' && rawId.includes('-') && rawId.length > 20 ? rawId.replace(/-\d{4}-\d{2}-\d{2}$/, '') : rawId);
       removeConfirmedRecurringOccurrence(recId, item.dueDate, item.paidTransactionId);
       if (item.paidTransactionId) {
         onDelete(item.paidTransactionId);
@@ -409,7 +414,9 @@ const TransactionValidation: React.FC<ValidationProps> = ({
   const handleIgnoreMonth = async (item: any) => {
     if (confirm('Deseja ignorar este lançamento apenas para este mês? A regra recorrente continuará ativa para os próximos meses.')) {
         try {
-            const recId = item.originalId || item.id;
+            const rawId = item.originalId || item.id;
+            const uuidMatch = typeof rawId === 'string' ? rawId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) : null;
+            const recId = uuidMatch ? uuidMatch[0] : (typeof rawId === 'string' && rawId.includes('-') && rawId.length > 20 ? rawId.replace(/-\d{4}-\d{2}-\d{2}$/, '') : rawId);
             const dateStr = format(item.dueDate, 'yyyy-MM-dd');
             saveConfirmedRecurringOccurrence(recId, item.dueDate, {
               confirmedDate: dateStr,
@@ -428,7 +435,7 @@ const TransactionValidation: React.FC<ValidationProps> = ({
               date: format(item.dueDate, 'yyyy-MM-dd'),
               recurrence: 'NONE',
               isJoint: item.isJoint,
-              recurringTransactionId: recId
+              recurringTransactionId: `${recId}-${dateStr}`
             });
             setRefreshKey(prev => prev + 1);
         } catch (error) {

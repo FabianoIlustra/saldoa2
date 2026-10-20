@@ -500,7 +500,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleOpenQuickBaixa = (item: any) => {
     setQuickBaixaItem(item);
     setQuickAccountId(accounts[0]?.id || '');
-    setQuickDate(format(new Date(), 'yyyy-MM-dd'));
+    setQuickDate(item.dateStr || (item.date ? format(item.date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')));
     setQuickAmount(item.amount.toString());
   };
 
@@ -511,10 +511,13 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
     setIsSubmittingBaixa(true);
     try {
-      const recId = quickBaixaItem.rawRecurring?.id || quickBaixaItem.id.replace('rec-late-', '').replace('rec-', '').split('-')[0];
+      const idRaw = quickBaixaItem.rawRecurring?.id || quickBaixaItem.id.replace('rec-late-', '').replace('rec-', '');
+      const uuidMatch = idRaw.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      const recId = uuidMatch ? uuidMatch[0] : idRaw.split('-')[0];
       const numAmount = parseFloat(quickAmount) || quickBaixaItem.amount;
+      const occurrenceDueDateStr = format(quickBaixaItem.date, 'yyyy-MM-dd');
 
-      // Save to confirmed map immediately
+      // Save to confirmed map immediately tied to this specific due date
       saveConfirmedRecurringOccurrence(recId, quickBaixaItem.date, {
         confirmedDate: quickDate,
         amount: numAmount,
@@ -532,7 +535,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           date: quickDate,
           recurrence: 'NONE',
           isJoint: quickBaixaItem.rawRecurring?.isJoint ?? true,
-          recurringTransactionId: recId
+          recurringTransactionId: `${recId}-${occurrenceDueDateStr}`
         });
 
         if (res?.id) {
