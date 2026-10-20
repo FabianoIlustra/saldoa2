@@ -44,7 +44,6 @@ export function cleanBankingTokens(text: string): string[] {
 // Check if two texts have strong financial similarity
 export function isBankingTextSimilar(statementText: string, recurringDesc: string): boolean {
   if (!statementText || !recurringDesc) return false;
-
   const normStmt = normalizeBankingText(statementText);
   const normRec = normalizeBankingText(recurringDesc);
 
@@ -101,8 +100,8 @@ export function saveConfirmedRecurringOccurrence(
     const dueObj = typeof dueDate === 'string' ? parseISO(dueDate) : dueDate;
     const dateStr = format(dueObj, 'yyyy-MM-dd');
     const monthStr = format(dueObj, 'yyyy-MM');
-
     const map = getConfirmedRecurringMap();
+
     const record: ConfirmedOccurrenceRecord = {
       recurringId,
       confirmedDate: details.confirmedDate,
@@ -113,10 +112,9 @@ export function saveConfirmedRecurringOccurrence(
       ignored: details.ignored
     };
 
-    // Save with primary keys
+    // Save with precise keys tied strictly to this occurrence's due date and month
     map[`${recurringId}-${dateStr}`] = record;
     map[`${recurringId}-${monthStr}`] = record;
-
     if (details.paidTransactionId) {
       map[`tx-${details.paidTransactionId}`] = record;
     }
@@ -137,16 +135,15 @@ export function removeConfirmedRecurringOccurrence(
     const dueObj = typeof dueDate === 'string' ? parseISO(dueDate) : dueDate;
     const dateStr = format(dueObj, 'yyyy-MM-dd');
     const monthStr = format(dueObj, 'yyyy-MM');
-
     const map = getConfirmedRecurringMap();
+
     delete map[`${recurringId}-${dateStr}`];
     delete map[`${recurringId}-${monthStr}`];
-
     if (paidTransactionId) {
       delete map[`tx-${paidTransactionId}`];
     }
 
-    // Clean any related key
+    // Clean any related key for this specific occurrence
     Object.keys(map).forEach(key => {
       if (key.startsWith(recurringId) && (key.includes(dateStr) || key.includes(monthStr))) {
         delete map[key];
@@ -176,15 +173,15 @@ export function checkIsRecurringPaid(
   const monthStr = format(dueDate, 'yyyy-MM');
   const recId = recurring.id;
 
-  // 1. Check LocalStorage Confirmed Registry
+  // 1. Check LocalStorage Confirmed Registry for this specific occurrence
   const confirmedMap = getConfirmedRecurringMap();
   const confirmedRecord = 
     confirmedMap[`${recId}-${dateStr}`] ||
     confirmedMap[`${recId}-${monthStr}`] ||
-    (recurring as any).originalId && (
+    ((recurring as any).originalId && (
       confirmedMap[`${(recurring as any).originalId}-${dateStr}`] ||
       confirmedMap[`${(recurring as any).originalId}-${monthStr}`]
-    );
+    ));
 
   if (confirmedRecord) {
     if (confirmedRecord.ignored) {
@@ -197,10 +194,12 @@ export function checkIsRecurringPaid(
       linkedTx = transactions.find(t => t.id === confirmedRecord.paidTransactionId);
     }
     if (!linkedTx) {
-      // Find by matching date/description/type
+      // Find by matching type and description strictly within this occurrence month
       linkedTx = transactions.find(t => {
         if (t.isTemplate) return false;
         if (t.type !== recurring.type) return false;
+        const tDate = parseISO(t.date);
+        if (!isSameMonth(tDate, dueDate) || !isSameYear(tDate, dueDate)) return false;
         return isBankingTextSimilar(t.description, recurring.description);
       });
     }
@@ -225,6 +224,11 @@ export function checkIsRecurringPaid(
   }
 
   // 2. Check Direct Link (recurringTransactionId) in transactions
+  // STRICT RULE: Only consider a transaction if it belongs strictly to this occurrence's month/year,
+  // or if its direct link key includes the exact date/month tag of this occurrence.
+  const isInterval = recurring.frequencyType === 'DAYS' || (recurring.intervalDays && recurring.intervalDays > 0);
+  const maxDayDiff = isInterval ? Math.max(4, Math.floor((recurring.intervalDays || 15) / 2)) : 10;
+
   const directTx = transactions.find(t => {
     if (t.isTemplate) return false;
     if (t.type !== recurring.type) return false;
@@ -233,15 +237,30 @@ export function checkIsRecurringPaid(
       t.recurringTransactionId === recId ||
       t.recurringTransactionId === (recurring as any).originalId ||
       t.recurringTransactionId === `${recId}-${dateStr}` ||
-      t.recurringTransactionId === `${recId}-${monthStr}`
+      t.recurringTransactionId === `${recId}-${monthStr}` ||
+      t.recurringTransactionId.startsWith(`${recId}-`)
     );
 
     if (!hasDirectLink) return false;
 
-    // Check if within reasonable date window (same month OR within 35 days)
+    // If the recurringTransactionId specifically targets this occurrence's date or month
+    if (t.recurringTransactionId === `${recId}-${dateStr}` || t.recurringTransactionId === `${recId}-${monthStr}`) {
+      return true;
+    }
+
+    // If the recurringTransactionId is explicitly tagged for a different occurrence date/month, do NOT match this occurrence
+    if (t.recurringTransactionId.startsWith(`${recId}-`)) {
+      return false;
+    }
+
+    // Otherwise, ensure the payment strictly matches this occurrence's month and year
     const tDate = parseISO(t.date);
-    const diffDays = Math.abs((tDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-    return isSameMonth(tDate, dueDate) || diffDays <= 35;
+    if (isInterval) {
+      const diffDays = Math.abs((tDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      return diffDays <= maxDayDiff;
+    }
+
+    return isSameMonth(tDate, dueDate) && isSameYear(tDate, dueDate);
   });
 
   if (directTx) {
@@ -251,6 +270,7 @@ export function checkIsRecurringPaid(
     } catch {
       confDate = parseISO(directTx.date);
     }
+
     return {
       isPaid: true,
       transaction: directTx,
@@ -260,9 +280,7 @@ export function checkIsRecurringPaid(
   }
 
   // 3. Smart Extrato Auto-Matching (Automatic Identification from Extrato)
-  const isInterval = recurring.frequencyType === 'DAYS' || (recurring.intervalDays && recurring.intervalDays > 0);
-  const maxDayDiff = isInterval ? Math.max(4, Math.floor((recurring.intervalDays || 15) / 2)) : 15;
-
+  // MUST strictly belong to the same month and year as dueDate (or close for interval recurring)
   const matchedTx = transactions.find(t => {
     if (t.isTemplate) return false;
     if (t.type !== recurring.type) return false;
@@ -270,13 +288,13 @@ export function checkIsRecurringPaid(
     const tDate = parseISO(t.date);
     const dayDiff = Math.abs((tDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Date proximity condition
+    // Date proximity condition - strictly bounded to the same month/year
     let dateMatches = false;
     if (isInterval) {
       dateMatches = dayDiff <= maxDayDiff;
     } else {
-      // Monthly: matches same calendar month OR within 15 days of due date (handles cross-month payments)
-      dateMatches = isSameMonth(tDate, dueDate) || dayDiff <= 15;
+      // Monthly recurrence: MUST be in the same calendar month and year!
+      dateMatches = isSameMonth(tDate, dueDate) && isSameYear(tDate, dueDate);
     }
 
     if (!dateMatches) return false;
@@ -290,16 +308,15 @@ export function checkIsRecurringPaid(
       // Exact amount match
       if (Math.abs(t.amount - recurring.amount) < 0.05) return true;
 
-      // Reasonable variance match for bills that fluctuate (e.g. electric, water, credit card)
-      // Allow +/- 50% or within R$ 300
+      // Variance match for bills that fluctuate in the same month (e.g. electric, water)
       const amountDiff = Math.abs(t.amount - recurring.amount);
       const percentDiff = amountDiff / recurring.amount;
-      if (percentDiff <= 0.5 || amountDiff <= 300) {
+      if (percentDiff <= 0.35 || amountDiff <= 150) {
         return true;
       }
     }
 
-    // B. Category + Exact Amount check (for transactions with non-matching banking codes)
+    // B. Category + Exact Amount check (strictly same month and within 5 days)
     if (t.category && recurring.category && t.category === recurring.category) {
       if (recurring.amount > 0 && Math.abs(t.amount - recurring.amount) < 0.05 && dayDiff <= 5) {
         return true;
@@ -316,6 +333,7 @@ export function checkIsRecurringPaid(
     } catch {
       confDate = parseISO(matchedTx.date);
     }
+
     return {
       isPaid: true,
       transaction: matchedTx,
