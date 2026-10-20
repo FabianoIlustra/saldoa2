@@ -523,14 +523,17 @@ export const useFinancialData = () => {
     if (t.installmentGroupId) payload.installment_group_id = t.installmentGroupId;
     if (t.installmentNumber) payload.installment_number = t.installmentNumber;
     if (t.totalInstallments) payload.total_installments = t.totalInstallments;
-    if (t.recurringTransactionId) payload.recurring_transaction_id = t.recurringTransactionId;
+    if (t.recurringTransactionId) {
+      const uuidMatch = t.recurringTransactionId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      payload.recurring_transaction_id = uuidMatch ? uuidMatch[0] : t.recurringTransactionId;
+    }
 
     const { data, error } = await supabase.from('transactions').insert(payload).select().single();
 
     if (error) {
-      if (error.message.includes('recurring_transaction_id') || error.message.includes('to_account_id') || error.code === '42703') {
+      if (error.message.includes('recurring_transaction_id') || error.message.includes('to_account_id') || error.message.includes('invalid input syntax for type uuid') || error.code === '42703' || error.code === '22P02') {
         if (error.message.includes('to_account_id')) delete payload.to_account_id;
-        if (error.message.includes('recurring_transaction_id') || error.code === '42703') delete payload.recurring_transaction_id;
+        if (error.message.includes('recurring_transaction_id') || error.message.includes('invalid input syntax for type uuid') || error.code === '42703' || error.code === '22P02') delete payload.recurring_transaction_id;
 
         const fallback = await supabase.from('transactions').insert(payload).select().single();
         if (fallback.error) throw fallback.error;
@@ -561,9 +564,11 @@ export const useFinancialData = () => {
 
           if (t.recurringTransactionId) {
             try {
+              const uuidMatch = t.recurringTransactionId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+              const cleanRecId = uuidMatch ? uuidMatch[0] : t.recurringTransactionId;
               const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
               confirmedMap['tx-' + fallback.data.id] = {
-                recurringId: t.recurringTransactionId,
+                recurringId: cleanRecId,
                 confirmedDate: t.date,
                 dueDate: t.date,
                 amount: t.amount,
@@ -571,7 +576,7 @@ export const useFinancialData = () => {
                 paidTransactionId: fallback.data.id
               };
               localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
-              window.dispatchEvent(new CustomEvent('recurring-status-changed', { detail: { recurringId: t.recurringTransactionId } }));
+              window.dispatchEvent(new CustomEvent('recurring-status-changed', { detail: { recurringId: cleanRecId, dueDate: t.date } }));
             } catch (e) {}
           }
 
@@ -608,9 +613,11 @@ export const useFinancialData = () => {
 
       if (t.recurringTransactionId) {
         try {
+          const uuidMatch = t.recurringTransactionId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          const cleanRecId = uuidMatch ? uuidMatch[0] : t.recurringTransactionId;
           const confirmedMap = JSON.parse(localStorage.getItem('finan_ai_confirmed_recurring') || '{}');
           confirmedMap['tx-' + data.id] = {
-            recurringId: t.recurringTransactionId,
+            recurringId: cleanRecId,
             confirmedDate: t.date,
             dueDate: t.date,
             amount: t.amount,
@@ -618,7 +625,7 @@ export const useFinancialData = () => {
             paidTransactionId: data.id
           };
           localStorage.setItem('finan_ai_confirmed_recurring', JSON.stringify(confirmedMap));
-          window.dispatchEvent(new CustomEvent('recurring-status-changed', { detail: { recurringId: t.recurringTransactionId } }));
+          window.dispatchEvent(new CustomEvent('recurring-status-changed', { detail: { recurringId: cleanRecId, dueDate: t.date } }));
         } catch (e) {}
       }
 
