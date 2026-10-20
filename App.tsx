@@ -972,8 +972,9 @@ const AppContent: React.FC = () => {
               transactions={filteredTransactions}
               onValidate={async (t) => {
                 try {
-                  await addTransaction(t);
+                  const created = await addTransaction(t);
                   showToast('Lançamento confirmado!');
+                  return created;
                 } catch (error: any) {
                   console.error('Erro na validação:', error);
                   showToast(`Erro: ${error.message || 'Falha ao confirmar'}`);
